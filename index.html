@@ -68,8 +68,101 @@
     .btn-add { padding: 0.75rem 1.5rem; background: #378ADD; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 1rem; }
     @media (max-width: 768px) { .metric-grid { grid-template-columns: 1fr 1fr; } }
   </style>
+
+  <!-- Supabase Auth -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    #auth-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #f5f5f5; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #auth-box {
+      background: white; border-radius: 12px; padding: 2.5rem;
+      width: 100%; max-width: 400px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    #auth-box h2 {
+      font-size: 20px; font-weight: 600; color: #333; margin-bottom: 0.25rem;
+    }
+    #auth-box p {
+      font-size: 13px; color: #999; margin-bottom: 1.5rem;
+    }
+    #auth-box input {
+      width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #e0e0e0;
+      border-radius: 8px; font-size: 14px; margin-bottom: 0.75rem;
+      box-sizing: border-box; outline: none;
+    }
+    #auth-box input:focus { border-color: #378ADD; }
+    #auth-btn {
+      width: 100%; padding: 0.75rem; background: #378ADD; color: white;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 500;
+      cursor: pointer;
+    }
+    #auth-btn:hover { background: #2d6eb5; }
+    #auth-error {
+      font-size: 12px; color: #E24B4A; margin-top: 0.5rem; display: none;
+    }
+    #auth-message {
+      font-size: 12px; color: #3B6D11; margin-top: 0.5rem; display: none;
+    }
+  </style>
 </head>
 <body>
+
+  <!-- Auth Overlay -->
+  <div id="auth-overlay">
+    <div id="auth-box">
+      <h2>ReverSide</h2>
+      <p>Business Model Validator — sign in to continue</p>
+      <input type="email" id="auth-email" placeholder="Email address" />
+      <input type="password" id="auth-password" placeholder="Password" />
+      <button id="auth-btn" onclick="handleSignIn()">Sign in</button>
+      <div id="auth-error"></div>
+      <div id="auth-message"></div>
+    </div>
+  </div>
+
+  <script>
+    const _supa = supabase.createClient('https://sbslmjwfyglahwuhursm.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNic2xtandmeWdsYWh3dWh1cnNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjM2MjgsImV4cCI6MjA5MTU5OTYyOH0.rE5fe4ceCPKvMWKhIVNG4PWXv8MUGpJ2mQYE_0t96LI');
+
+    async function handleSignIn() {
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-password').value;
+      const errEl = document.getElementById('auth-error');
+      const msgEl = document.getElementById('auth-message');
+      const btn = document.getElementById('auth-btn');
+
+      errEl.style.display = 'none';
+      msgEl.style.display = 'none';
+      btn.textContent = 'Signing in...';
+      btn.disabled = true;
+
+      const { error } = await _supa.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        errEl.textContent = 'Invalid email or password. Contact the administrator for access.';
+        errEl.style.display = 'block';
+        btn.textContent = 'Sign in';
+        btn.disabled = false;
+      } else {
+        document.getElementById('auth-overlay').style.display = 'none';
+      }
+    }
+
+    // Allow Enter key to submit
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') handleSignIn();
+    });
+
+    // Check if already logged in
+    _supa.auth.getSession().then(function({ data }) {
+      if (data.session) {
+        document.getElementById('auth-overlay').style.display = 'none';
+      }
+    });
+  </script>
+
 <div class="container">
   <div class="header">
     <div class="header-top">
