@@ -1956,16 +1956,31 @@
     // Back-calculate: existing base × NRR^years must reach (1 - newCustPct%) of target
     // So NRR = (target × existingShare / revenue)^(1/years)
     // expansion = NRR - GRR
-    const newCustPct = (state.newCustomersPercent !== undefined) ? state.newCustomersPercent : 50;
+    // state.newCustomersPercent is stored as 0-1 decimal
+    const newCustFrac = (state.newCustomersPercent !== undefined) ? state.newCustomersPercent : 0.5;
     const churn_ = state.churn || 0.25;
     const grr_ = Math.max(0.001, 1 - churn_);
     const years_ = Math.max(1, Math.round(state.timeframe / 12));
-    const existingShare = (100 - newCustPct) / 100; // fraction of target from existing
-    const targetFromExisting = state.targetRevenue * existingShare;
-    // NRR needed so that revenue × NRR^years = targetFromExisting
-    const nrrNeeded = state.revenue > 0 ? Math.pow(targetFromExisting / state.revenue, 1 / years_) : 1;
-    const impliedExp = Math.max(0, nrrNeeded - grr_);
-    const expPct = Math.min(80, Math.round(impliedExp * 100)); // cap at slider max
+
+    let expPct;
+    if (newCustFrac >= 1.0) {
+      // 100% new customers → expansion just compensates churn (NRR = 100%)
+      expPct = churnPct;
+    } else if (newCustFrac <= 0) {
+      // 0% new customers → back-calculate expansion needed to hit target
+      const nrrNeeded = state.revenue > 0
+        ? Math.pow(state.targetRevenue / state.revenue, 1 / years_)
+        : 1;
+      expPct = Math.min(80, Math.round(Math.max(0, nrrNeeded - grr_) * 100));
+    } else {
+      // Mixed — existing must cover (1 - newCustFrac) of target
+      const existingShare = 1 - newCustFrac;
+      const targetFromExisting = state.targetRevenue * existingShare;
+      const nrrNeeded = state.revenue > 0
+        ? Math.pow(targetFromExisting / state.revenue, 1 / years_)
+        : 1;
+      expPct = Math.min(80, Math.round(Math.max(0, nrrNeeded - grr_) * 100));
+    }
 
     const slC = document.getElementById('plChurnSlider');
     const slE = document.getElementById('plExpansionSlider');
