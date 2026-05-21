@@ -1110,8 +1110,6 @@
     const existingSharePct = state.targetRevenue > 0 ? Math.round((revFromExisting / state.targetRevenue) * 100) : 0;
     const newSharePct = 100 - existingSharePct;
 
-    document.getElementById('nrrPercentDisplay').textContent = existingSharePct + '%';
-    document.getElementById('nrrValue').textContent = Math.round(nrrPct) + '%';
 
     // Expansion needed calculation
     const grr = Math.max(0, 1 - state.churn);
@@ -1144,7 +1142,6 @@
       expansionRateColor = '#999';
       expansionBenchText = `${expansionRatePct}% — low expansion assumption (benchmark: ${eb.label}).`;
     }
-    const grEl = document.getElementById('expansionGRR');
     const erEl = document.getElementById('expansionRate');
     const eaEl = document.getElementById('expansionAmount');
     const ebEl2 = document.getElementById('expansionBenchmark');
@@ -1152,10 +1149,6 @@
     if (erEl) { erEl.textContent = expansionRatePct + '%'; erEl.style.color = expansionRateColor; }
     if (eaEl) eaEl.textContent = fmt(expansionAmountVal);
     if (ebEl2) { ebEl2.innerHTML = expansionBenchText; ebEl2.style.color = expansionRateColor; }
-    document.getElementById('nrrAmount').textContent = fmt(revFromExisting);
-    document.getElementById('newCustomersPercentDisplay2').textContent = newSharePct + '%';
-    document.getElementById('newCustomersPerYearValue').textContent = newCustPerYear.toLocaleString();
-    document.getElementById('newCustomersAmount').textContent = fmt(revFromNew);
 
     // New LTV: based on newACV (NRR-adjusted) × grossMargin / churn
     const newLTV = Math.round((newACV * state.grossMargin) / state.churn);
@@ -1343,16 +1336,11 @@
       ? '✓ <strong style="color:#3B6D11;">Your strategy is realistic for a ' + state.animal + ' over ' + state.timeframe + ' months.</strong> Both NRR and growth mix are within benchmarks. Proceed to Step 3 to plan your budget.'
       : '⚠️ <strong style="color:#BA7517;">One or more inputs are outside typical ' + state.animal + ' benchmarks.</strong> Review the points above before moving to Step 3 — adjusting your timeframe, churn rate or growth mix slider will often bring this into a realistic range.';
 
-    document.getElementById('hybridRealism').innerHTML =
       '<strong style="font-size:13px;color:#333;">Timeframe:</strong> ' + timeframeComment +
       '<br><br><strong style="font-size:13px;color:#333;">NRR (existing customer growth):</strong> ' + nrrAssessment +
       '<br><br><strong style="font-size:13px;color:#333;">Growth mix (new vs existing):</strong> ' + mixAssessment +
       '<br><br><strong style="font-size:13px;color:#333;">Overall:</strong> ' + overallText;
 
-    document.getElementById('animalBenchNRR').textContent = state.animal;
-    document.getElementById('benchmarkNRR').textContent = animalData.nrrBench;
-    document.getElementById('animalBenchNew').textContent = state.animal;
-    document.getElementById('benchmarkNewCustomers').textContent = animalData.newCustBench;
 
     // Step 3 uses newMaxCAC (NRR-adjusted) if available, else falls back to maxCAC
     const budgetCAC = state.newMaxCAC || state.maxCAC;
