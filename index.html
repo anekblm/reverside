@@ -452,6 +452,80 @@
         <div class="form-helper">ⓘ 0% = growth from existing only | 100% = growth from new customers only</div>
       </div>
 
+      <div class="collapsible">
+        <div class="collapsible-header" onclick="toggleCollapsible(this)">
+          <div class="collapsible-header-text">📊 Revenue Growth Distribution — Sanity Check <span style="font-size:10px;font-weight:400;color:#999;">· Step 2 assumptions only. Step 3 models actual year-by-year dynamics.</span></div>
+          <div class="collapsible-arrow">▼</div>
+        </div>
+        <div class="collapsible-content">
+          <div class="collapsible-inner" style="padding:1.5rem;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+              <div>
+                <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+                  <div style="font-size:11px;color:#666;margin-bottom:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.03em;">Existing Customers</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Share of target revenue</div>
+                  <div style="font-size:16px;font-weight:500;color:#555;margin-bottom:1rem;" id="nrrPercentDisplay">-</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Annual NRR</div>
+                  <div style="font-size:20px;font-weight:600;color:#378ADD;margin-bottom:1rem;" id="nrrValue">-</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Revenue amount</div>
+                  <div style="font-size:14px;font-weight:500;color:#555;" id="nrrAmount">-</div>
+                </div>
+                <div class="benchmark-box">
+                  <div style="font-size:11px;font-weight:500;margin-bottom:0.5rem;color:#333;">Benchmark for <span id="animalBenchNRR">-</span></div>
+                  <div style="font-size:10px;line-height:1.5;color:#666;" id="benchmarkNRR">-</div>
+                </div>
+              </div>
+              <div>
+                <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+                  <div style="font-size:11px;color:#666;margin-bottom:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.03em;">New Customers</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Share of target revenue</div>
+                  <div style="font-size:16px;font-weight:500;color:#555;margin-bottom:1rem;" id="newCustomersPercentDisplay2">-</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">New customers / year</div>
+                  <div style="font-size:20px;font-weight:600;color:#3B6D11;margin-bottom:1rem;" id="newCustomersPerYearValue">0</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Revenue amount</div>
+                  <div style="font-size:14px;font-weight:500;color:#555;" id="newCustomersAmount">-</div>
+                </div>
+                <div class="benchmark-box">
+                  <div style="font-size:11px;font-weight:500;margin-bottom:0.5rem;color:#333;">Benchmark for <span id="animalBenchNew">-</span></div>
+                  <div style="font-size:10px;line-height:1.5;color:#666;" id="benchmarkNewCustomers">-</div>
+                </div>
+              </div>
+            </div>
+            <!-- Expansion needed box — full width, below the two panels -->
+            <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:1rem;margin-bottom:1.5rem;">
+              <div style="font-size:11px;color:#666;font-weight:500;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:0.75rem;">Expansion Needed on Retained Customers</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;">
+                <div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Gross retention (GRR)</div>
+                  <div style="font-size:18px;font-weight:600;color:#555;" id="expansionGRR">—</div>
+                  <div style="font-size:10px;color:#bbb;">= 1 − churn rate</div>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Implied expansion rate</div>
+                  <div style="font-size:18px;font-weight:600;" id="expansionRate">—</div>
+                  <div style="font-size:10px;color:#bbb;">= NRR ÷ GRR − 1</div>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Expansion revenue</div>
+                  <div style="font-size:18px;font-weight:600;color:#555;" id="expansionAmount">—</div>
+                  <div style="font-size:10px;color:#bbb;">retained customers × ACV increase</div>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">vs benchmark</div>
+                  <div style="font-size:12px;font-weight:500;line-height:1.5;" id="expansionBenchmark">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="benchmark-box">
+              <div style="font-size:11px;line-height:1.8;color:#666;">
+                <strong style="color:#333;">IS THIS REALISTIC?</strong><br>
+                <span id="hybridRealism">Assessment will appear here once you enter your data.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="card">
         <div class="card-title">📈 Updated Metrics</div>
@@ -1110,6 +1184,8 @@
     const existingSharePct = state.targetRevenue > 0 ? Math.round((revFromExisting / state.targetRevenue) * 100) : 0;
     const newSharePct = 100 - existingSharePct;
 
+    document.getElementById('nrrPercentDisplay').textContent = existingSharePct + '%';
+    document.getElementById('nrrValue').textContent = Math.round(nrrPct) + '%';
 
     // Expansion needed calculation
     const grr = Math.max(0, 1 - state.churn);
@@ -1142,6 +1218,7 @@
       expansionRateColor = '#999';
       expansionBenchText = `${expansionRatePct}% — low expansion assumption (benchmark: ${eb.label}).`;
     }
+    const grEl = document.getElementById('expansionGRR');
     const erEl = document.getElementById('expansionRate');
     const eaEl = document.getElementById('expansionAmount');
     const ebEl2 = document.getElementById('expansionBenchmark');
@@ -1149,6 +1226,10 @@
     if (erEl) { erEl.textContent = expansionRatePct + '%'; erEl.style.color = expansionRateColor; }
     if (eaEl) eaEl.textContent = fmt(expansionAmountVal);
     if (ebEl2) { ebEl2.innerHTML = expansionBenchText; ebEl2.style.color = expansionRateColor; }
+    document.getElementById('nrrAmount').textContent = fmt(revFromExisting);
+    document.getElementById('newCustomersPercentDisplay2').textContent = newSharePct + '%';
+    document.getElementById('newCustomersPerYearValue').textContent = newCustPerYear.toLocaleString();
+    document.getElementById('newCustomersAmount').textContent = fmt(revFromNew);
 
     // New LTV: based on newACV (NRR-adjusted) × grossMargin / churn
     const newLTV = Math.round((newACV * state.grossMargin) / state.churn);
@@ -1336,11 +1417,16 @@
       ? '✓ <strong style="color:#3B6D11;">Your strategy is realistic for a ' + state.animal + ' over ' + state.timeframe + ' months.</strong> Both NRR and growth mix are within benchmarks. Proceed to Step 3 to plan your budget.'
       : '⚠️ <strong style="color:#BA7517;">One or more inputs are outside typical ' + state.animal + ' benchmarks.</strong> Review the points above before moving to Step 3 — adjusting your timeframe, churn rate or growth mix slider will often bring this into a realistic range.';
 
+    document.getElementById('hybridRealism').innerHTML =
       '<strong style="font-size:13px;color:#333;">Timeframe:</strong> ' + timeframeComment +
       '<br><br><strong style="font-size:13px;color:#333;">NRR (existing customer growth):</strong> ' + nrrAssessment +
       '<br><br><strong style="font-size:13px;color:#333;">Growth mix (new vs existing):</strong> ' + mixAssessment +
       '<br><br><strong style="font-size:13px;color:#333;">Overall:</strong> ' + overallText;
 
+    document.getElementById('animalBenchNRR').textContent = state.animal;
+    document.getElementById('benchmarkNRR').textContent = animalData.nrrBench;
+    document.getElementById('animalBenchNew').textContent = state.animal;
+    document.getElementById('benchmarkNewCustomers').textContent = animalData.newCustBench;
 
     // Step 3 uses newMaxCAC (NRR-adjusted) if available, else falls back to maxCAC
     const budgetCAC = state.newMaxCAC || state.maxCAC;
