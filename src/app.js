@@ -636,10 +636,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let yearSplit = [];
   let yearAllocs = {};
   let quarterSMShares = {}; // % of S&M cash out assigned to each quarter (independent of signing)
-  let yearRamp = {};      // % of ACV realised in acquisition year (default 100%)
   let plChurn = null;     // P&L churn override (null = use state.churn)
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
-  let plRamp = 1.0;       // Global revenue phasing factor (1.0 = day 1 default)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
   let plQtrScenario = 'EVEN'; // Quarter signing distribution scenario
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
@@ -1097,14 +1095,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     const slC = document.getElementById('plChurnSlider');
     const slE = document.getElementById('plExpansionSlider');
-    const slR = document.getElementById('plRampSlider');
     if (slC) slC.value = churnPct;
     if (slE) slE.value = expPct;
-    if (slR) slR.value = 100;
     plChurn = churn_;
     plExpansion = expPct / 100;
-    plRamp = 1.0;
-    Object.keys(yearRamp).forEach(k => delete yearRamp[k]);
     updatePLSliderDisplay();
   }
 
@@ -1117,12 +1111,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   function onPLSlider() {
     const slC = document.getElementById('plChurnSlider');
     const slE = document.getElementById('plExpansionSlider');
-    const slR = document.getElementById('plRampSlider');
     plChurn    = (parseInt(slC.value) || 0) / 100;
     plExpansion = (parseInt(slE.value) || 0) / 100;
-    plRamp = 1.0; // Signing pattern, not a second multiplier, controls revenue recognition
-    // Sync global ramp to all years
-    Object.keys(yearRamp).forEach(k => delete yearRamp[k]);
     updatePLSliderDisplay();
     updateStep3Display();
   }
@@ -1130,18 +1120,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   function updatePLSliderDisplay() {
     const cd = document.getElementById('plChurnDisplay');
     const ed = document.getElementById('plExpansionDisplay');
-    const rd = document.getElementById('plRampDisplay');
     const nd = document.getElementById('plNRROutcome');
     const nn = document.getElementById('plNRRNote');
     const rn = document.getElementById('plRampNote');
     if (!cd) return;
     const churnPct = Math.round((plChurn || 0) * 100);
     const expPct   = Math.round((plExpansion || 0) * 100);
-    const rampPct  = Math.round((plRamp || 1) * 100);
     const nrr      = Math.round((1 - (plChurn||0) + (plExpansion||0)) * 100);
     cd.textContent = churnPct + '%';
     ed.textContent = expPct + '%';
-    if (rd) rd.textContent = rampPct + '%';
     if (nd) {
       nd.textContent = nrr + '%';
       nd.style.color = nrr > 100 ? '#3B6D11' : nrr === 100 ? '#555' : '#E24B4A';
@@ -1192,14 +1179,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     rampKeys.forEach(k => delete yearRamp[k]);
     // Reset year split to strategy default
     initYearSplit();
-    updateStep3Display();
-  }
-
-  function onRampChange(yearIdx, val) {
-    const v = parseFloat(val);
-    if (!isNaN(v) && v > 0 && v <= 100) {
-      yearRamp[yearIdx] = v;
-    }
     updateStep3Display();
   }
 
