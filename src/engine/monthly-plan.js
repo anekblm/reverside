@@ -129,3 +129,36 @@ export function forecastSaaS(input) {
     }
     newCustomersNeeded = upper;
   }
+
+  const customerSchedule = apportion(newCustomersNeeded, weights);
+  const arrRows = arrSchedule(scenario, customerSchedule);
+  const yearlyCustomers = Array.from({ length: yearsCount }, (_, y) =>
+    sum(customerSchedule.slice(y * 12, Math.min(months, (y + 1) * 12))));
+  const annualCAC = Array.from({ length: yearsCount }, (_, y) => number(input.cacByYear?.[y] ?? 0, "CAC"));
+  const budgetPercent = Array.from({ length: yearsCount }, (_, y) => number(input.smBudgetPercentByYear?.[y] ?? 100, "S&M allocation"));
+  const annualSM = yearlyCustomers.map((count, y) => count * annualCAC[y] * budgetPercent[y] / 100);
+  const quarterSM = Array.from({ length: yearsCount }, (_, y) => {
+    const active = Math.ceil(Math.min(12, months - y * 12) / 3);
+    const shares = (input.quarterSMSharesByYear?.[y] || Array(active).fill(100 / active)).slice(0, active);
+    if (shares.length !== active || shares.some(v => !Number.isFinite(v) || v < 0) || Math.abs(sum(shares) - 100) > 1e-6) {
+      throw new RangeError("S&M quarter shares for Year " + (y + 1) + " must total 100%");
+    }
+    return shares.map(v => annualSM[y] * v / 100);
+  });
+  let cash = openingCash;
+  const monthly = arrRows.map((r, i) => {
+    const year = r.year, quarter = r.quarter;
+    const firstMonthInQuarter = year * 12 + quarter * 3;
+    const monthsInQuarter = Math.min(3, months - firstMonthInQuarter);
+    const smPaid = quarterSM[year][quarter] / monthsInQuarter;
+    const cashCollected = i >= collectionLagMonths ? arrRows[i - collectionLagMonths].recognizedRevenue : 0;
+    const cogsPaid = r.recognizedRevenue * (1 - grossMargin);
+    const grossProfit = r.recognizedRevenue * grossMargin;
+    const cashNeutralSMCapacity = cashCollected - cogsPaid - otherOpexMonthly;
+    const opCF = cashNeutralSMCapacity - smPaid;
+    const startCash = cash;
+    cash += opCF;
+    return { ...r, smPaid, cashCollected, cogsPaid, grossProfit,
+      operatingContribution: grossProfit - smPaid,
+      otherOpexPaid: otherOpexMonthly, cashNeutralSMCapacity, opCF, startCash, endCash: cash };
+  });
