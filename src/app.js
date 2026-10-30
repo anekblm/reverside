@@ -885,9 +885,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     let allocatedCustSoFar = 0;
     for (let y = 0; y < years; y++) {
       const pct = yearSplit[y] || 0;
-      const cust = y === years - 1
+      const cust = window._latestMonthlyPlan?.annualCustomers?.[y] ?? (y === years - 1
         ? Math.max(0, state.newCustomersNeeded - allocatedCustSoFar)
-        : Math.round(state.newCustomersNeeded * pct / 100);
+        : Math.round(state.newCustomersNeeded * pct / 100));
       allocatedCustSoFar += cust;
       const yearCAC    = getCACForYear(y, years);                  // strategy-aware, ramps for aggressive
       const maxBudget  = cust * (state.newMaxCAC || state.maxCAC); // absolute ceiling from Step 2
