@@ -54,3 +54,32 @@ Extract state, calculations and UI into modules without changing existing output
 - Add deterministic scenario fixtures (zero ARR, 6/12/24 months, churn, expansion, quarterly S&M, cash timing) before porting P&L calculations.
 
 **Note:** This commit is a structural refactor; it does not yet implement quarterly S&M allocations, the cash-flow engine, or TRACK.
+
+## 2026-10-30 — Monthly PLAN engine integrated (experimental)
+
+- `src/engine/monthly-plan.js` now derives closing ARR, new customer cohorts,
+  monthly recognized revenue, quarterly S&M cash out and monthly operating cash.
+- `src/features/plan/cash-panel.js` renders monthly/quarterly cashflow and cash-neutral
+  S&M headroom in PLAN, with separately editable signing pattern and quarterly S&M allocations.
+- Independent revenue phasing slider was removed; customer signing month now determines recognized revenue.
+- The Step 3 summary P&L now derives ARR, revenue, gross profit and S&M from the same monthly series.
+  The table's **Contribution (GP − S&M)** is not OpCF; all other operating cash out is included
+  in the separate monthly cash view.
+- Cash assumptions currently use a same-month COGS cash proxy, collection delay in whole months,
+  no opening receivables and no taxes, capex, financing or working-capital movements.
+- The headroom figure is an **optimistic upper bound** until users enter *all* other operating cash outflows.
+- `tests/monthly-plan.test.mjs` covers 0-ARR startups, FRONT/EVEN/BACK,
+  six-month horizon, S&M quarterly weights, collections delay and rollups.
+
+### Remaining before PLAN release
+
+- Test all scenarios in a real browser (including mobile and every navigation/editing path).
+- Remove remaining dead legacy P&L helpers and gradually split `src/app.js` into
+  STEP 1/2/3 controllers.
+- Replace cash-flow proxies with explicit customer billing/collection schedules,
+  staff cost cash timing, other OPEX and opening receivables.
+- Add a complete baseline & approval flow for future TRACK.
+- Validate sourced SaaS benchmarks and all revenue/acquisition assumptions.
+- Confirm correct monthly recognition for contract activation and multi-year cohort differences.
+
+Do not merge this branch without financial and browser acceptance tests.
