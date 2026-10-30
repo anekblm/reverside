@@ -90,3 +90,42 @@ function aggregate(rows, size) {
   }
   return groups;
 }
+
+/**
+ * Monthly ARR / recognized revenue / operating cash forecast.
+ * Cash assumptions: same-month COGS, no opening receivables or financing.
+ */
+export function forecastSaaS(input) {
+  const months = number(input.months, "months", 1);
+  if (!Number.isInteger(months) || months > 120) throw new RangeError("months must be integer 1-120");
+  const openingARR = number(input.openingARR, "openingARR");
+  const acv = number(input.acv, "acv", Number.EPSILON);
+  const targetARR = number(input.targetARR, "targetARR");
+  const annualChurn = number(input.annualChurn, "annualChurn");
+  const annualExpansionComp = number(input.annualExpansionComp, "annualExpansionComp");
+  const grossMargin = number(input.grossMargin, "grossMargin");
+  if (annualChurn >= 1 || grossMargin > 1) throw new RangeError("Invalid churn or margin");
+  if (1 - annualChurn + annualExpansionComp <= 0) throw new RangeError("NRR must exceed zero");
+  const openingCash = number(input.openingCash ?? 0, "openingCash", -1e15);
+  const otherOpexMonthly = number(input.otherOpexMonthly ?? 0, "otherOpexMonthly");
+  const collectionLagMonths = number(input.collectionLagMonths ?? 0, "collectionLagMonths");
+  if (!Number.isInteger(collectionLagMonths) || collectionLagMonths > 12) throw new RangeError("Collection delay must be 0-12 months");
+  const yearsCount = Math.ceil(months / 12);
+  const weights = weightsFor(months, input.yearShares, input.signingPattern || "EVEN");
+  const scenario = { months, openingARR, acv, annualChurn, annualExpansionComp, priceNewOnExpansion: !!input.priceNewOnExpansion };
+  const endingARR = count => arrSchedule(scenario, apportion(count, weights)).at(-1).endARR;
+  let newCustomersNeeded = 0;
+  if (endingARR(0) < targetARR) {
+    let lower = 0, upper = Math.max(1, Math.ceil(targetARR / acv));
+    while (endingARR(upper) < targetARR) {
+      lower = upper;
+      upper *= 2;
+      if (!Number.isSafeInteger(upper) || upper > 1e8) throw new RangeError("Too many customers needed");
+    }
+    while (lower + 1 < upper) {
+      const mid = Math.floor((lower + upper) / 2);
+      if (endingARR(mid) >= targetARR) upper = mid;
+      else lower = mid;
+    }
+    newCustomersNeeded = upper;
+  }
