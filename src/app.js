@@ -1425,6 +1425,49 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
+  function quarterSharesForYear(year) {
+    const active = Math.ceil(Math.min(12, state.timeframe - year * 12) / 3);
+    if (!quarterSMShares[year] || quarterSMShares[year].length !== active) {
+      const base = Math.floor(100 / active);
+      quarterSMShares[year] = Array.from({ length: active }, (_, q) =>
+        base + (q === active - 1 ? 100 - active * base : 0));
+    }
+    return quarterSMShares[year];
+  }
+
+  function updateCashAssumptions() { updateStep3Display(); }
+
+  function updateQuarterSM(year, quarter, value) {
+    quarterSharesForYear(year)[quarter] = Number(value);
+    const shares = quarterSharesForYear(year);
+    const total = shares.reduce((a, b) => a + b, 0);
+    const warning = document.getElementById('cashQuarterWarning');
+    const valid = shares.every(n => Number.isFinite(n) && n >= 0) && Math.abs(total - 100) < 0.000001;
+    if (warning) {
+      warning.style.display = valid ? 'none' : 'block';
+      warning.textContent = valid ? '' : 'Year ' + (year+1) + ': quarterly S&M shares must total 100% (currently ' + total + '%). Adjust another quarter to continue.';
+    }
+    if (valid) updateStep3Display();
+  }
+
+  function renderMonthlyCashControls(model, fmt) {
+    const control = document.getElementById('quarterSMControls');
+    const cashPanel = document.getElementById('cashFlowPanel');
+    if (!control || !cashPanel) return;
+    const select = document.getElementById('signingPattern');
+    if (select) select.value = plQtrScenario;
+    control.innerHTML = model.years.map((year, y) => {
+      const shares = quarterSharesForYear(y);
+      return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0;">'
+        + '<strong style="font-size:11px;">Year ' + (y + 1) + ' · S&M ' + fmt(model.annualSM[y]) + '</strong>'
+        + shares.map((pct, q) => '<label style="font-size:11px;">Q' + (q+1)
+          + ' <input type="number" min="0" max="100" step="1" value="' + pct
+          + '" onchange="updateQuarterSM(' + y + ',' + q + ',this.value)" style="width:58px;padding:5px;border:1px solid #ddd;border-radius:5px;">%</label>').join('')
+        + '</div>';
+    }).join('');
+    cashPanel.innerHTML = renderCashPanel(model, fmt);
+  }
+
   function buildPL(years, budgetCAC, fmt) {
     const el = document.getElementById('plTable');
     if (!el) return;
