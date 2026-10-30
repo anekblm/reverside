@@ -108,6 +108,21 @@
         <div class="form-helper">💡 All values will be shown in selected currency</div>
       </div>
       <div class="form-group">
+        <label class="form-label">COMPANY STAGE</label>
+        <div class="currency-group" style="flex-wrap:wrap;">
+          <label class="radio-label"><input type="radio" name="companyStage" value="pre" onchange="onStageChange()"> Pre-revenue / pilots</label>
+          <label class="radio-label"><input type="radio" name="companyStage" value="early" checked onchange="onStageChange()"> Early revenue</label>
+          <label class="radio-label"><input type="radio" name="companyStage" value="scale" onchange="onStageChange()"> Scaling</label>
+        </div>
+        <div class="form-helper">Stage defines whether inputs are observed data or forward-looking assumptions. VC-focused scenario planning.</div>
+      </div>
+      <div class="form-group" id="expectedACVGroup" style="display:none;">
+        <label class="form-label" for="expectedACV">EXPECTED ANNUAL CONTRACT VALUE (assumption)</label>
+        <input type="number" min="1" step="1" id="expectedACV" class="form-input" value="10000">
+        <div class="form-helper">For pre-revenue startups, enter the assumed annual revenue per customer. No historical ACV or retention data exists yet.</div>
+      </div>
+      <div id="stageInputNote" class="form-helper" style="display:none;margin-bottom:1rem;">Current customers and revenue are set to zero in pre-revenue mode.</div>
+      <div class="form-group">
         <label class="form-label">2. PRODUCT/SERVICE NAME</label>
         <input type="text" id="productName" class="form-input" placeholder="e.g., Analytics Dashboard Pro">
         <div class="form-helper">What are you selling?</div>
@@ -125,6 +140,7 @@
         </div>
         <div class="form-helper">Annual recurring revenue or total revenue in last 12 months</div>
       </div>
+      <div id="step1Error" role="alert" style="display:none;color:#A32D2D;font-size:12px;margin-top:1rem;"></div>
       <div class="button-group">
         <button class="primary" onclick="goToStep2()">Continue to Step 2 →</button>
       </div>
@@ -134,8 +150,11 @@
     <div class="step" id="step2">
       <h2>Verify & Adjust Targets</h2>
 
+      <div id="preRevenueNotice" class="alert alert-warning" style="display:none;">
+        <strong>Pre-revenue scenario:</strong> ACV is your assumption, not an observed metric. Churn, LTV, CAC and GTM benchmarks below are planning estimates — not measured performance. All growth must come from acquiring new customers.
+      </div>
       <div class="card">
-        <div class="card-title">📊 Your Current Situation (from Step 1)</div>
+        <div class="card-title" id="s2SituationTitle">📊 Your Current Situation (from Step 1)</div>
         <div class="metric-grid">
           <div class="metric-box"><div class="metric-label">Your Animal</div><div class="metric-value" id="s2Animal">-</div></div>
           <div class="metric-box"><div class="metric-label">Customers</div><div class="metric-value" id="s2Customers">-</div></div>
@@ -325,8 +344,10 @@
           <label class="radio-label"><input type="radio" name="timeframe" value="12" checked onchange="updateMetrics()"> 12 months</label>
           <label class="radio-label"><input type="radio" name="timeframe" value="24" onchange="updateMetrics()"> 24 months</label>
           <label class="radio-label"><input type="radio" name="timeframe" value="36" onchange="updateMetrics()"> 36 months</label>
+          <label class="radio-label"><input type="radio" name="timeframe" value="48" onchange="updateMetrics()"> 48 months</label>
+          <label class="radio-label"><input type="radio" name="timeframe" value="60" onchange="updateMetrics()"> 60 months</label>
         </div>
-        <div class="form-helper">ⓘ How long do you plan to reach your target?</div>
+        <div class="form-helper">ⓘ How long do you plan to reach your target? The 6-month selection currently uses an annual forecast bucket in Step 3; half-year precision is not yet implemented.</div>
       </div>
 
       <div class="slider-group">
@@ -425,7 +446,7 @@
           <div></div>
           <div style="font-size:10px;font-weight:500;color:#888;text-align:center;text-transform:uppercase;letter-spacing:0.04em;">Current</div>
           <div style="font-size:10px;font-weight:500;color:#888;text-align:center;text-transform:uppercase;letter-spacing:0.04em;">Change</div>
-          <div style="font-size:10px;font-weight:500;color:#185FA5;text-align:center;text-transform:uppercase;letter-spacing:0.04em;">New</div>
+          <div style="font-size:10px;font-weight:500;color:#185FA5;text-align:center;text-transform:uppercase;letter-spacing:0.04em;">Target State</div>
         </div>
 
         <!-- ACV row -->
@@ -501,9 +522,11 @@
           </div>
           <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.6rem;text-align:center;">
             <div style="font-size:12px;font-weight:500;color:#555;" id="metricsNewCustomersNeeded">-</div>
+            <div style="font-size:9px;color:#bbb;margin-top:2px;">new customers needed</div>
           </div>
           <div style="background:#E6F1FB;border:0.5px solid #b5d4f4;border-radius:6px;padding:0.6rem;text-align:center;">
             <div style="font-size:12px;font-weight:500;color:#185FA5;" id="metricsCustomersTarget">-</div>
+            <div style="font-size:9px;color:#888;margin-top:2px;">total at target</div>
           </div>
         </div>
       </div>
@@ -523,11 +546,11 @@
       <!-- P&L OVERVIEW -->
         <div class="card" style="margin-top:0;">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>1. P&L Overview</span>
+            <span>1. ARR and contribution forecast (not a full P&amp;L)</span>
             <button onclick="resetPL()" style="flex:none;padding:0.3rem 0.75rem;font-size:11px;font-weight:500;color:#555;background:white;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;">↺ Reset</button>
           </div>
           <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
-            Adjust the three parameters below to model your growth scenario. New customers needed updates automatically to hit your target ARR.
+            Adjust the three parameters below to model your growth scenario. New customers needed updates automatically to hit your target ARR. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
             <div style="margin-top:0.5rem;font-size:11px;color:#666;line-height:1.6;">
               Expansion Compensation is a 1:1 percentage point offset to churn — setting both to 25% results in NRR 100% (flat base). The actual expansion required per retained customer is always higher than the compensation rate, because expansion is spread across fewer customers after churn. Example: 25% churn + 25% expansion compensation → 33% expansion per retained customer.
             </div>
@@ -636,7 +659,7 @@
             </label>
           </div>
 
-          <div style="overflow-x:auto;">
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <div id="plTable"></div>
           </div>
         </div>
@@ -806,7 +829,7 @@
     SEK: n => Math.round(n).toLocaleString() + ' kr'
   };
 
-  let state = { currency: 'EUR', productName: '', customers: 50, revenue: 500000, churn: 0.40, grossMargin: 0.80, targetRevenue: 100000, timeframe: 12, newCustomersPercent: 0, animal: null, acv: 0, ltv: 0, maxCAC: 0, totalBudget: 0, newCustomersNeeded: 0 };
+  let state = { stage: 'early', expectedACV: 10000, currency: 'EUR', productName: '', customers: 50, revenue: 500000, churn: 0.40, grossMargin: 0.80, targetRevenue: 100000, timeframe: 12, newCustomersPercent: 0, animal: null, acv: 0, ltv: 0, maxCAC: 0, totalBudget: 0, newCustomersNeeded: 0 };
 
   function updateCurrency() {
     state.currency = document.querySelector('input[name="currency"]:checked').value;
@@ -817,11 +840,40 @@
     document.getElementById('targetDisplay').textContent = currencyFormats[state.currency](state.targetRevenue);
   }
 
+  function onStageChange() {
+    state.stage = document.querySelector('input[name="companyStage"]:checked').value;
+    const pre = state.stage === 'pre';
+    document.getElementById('expectedACVGroup').style.display = pre ? 'block' : 'none';
+    document.getElementById('stageInputNote').style.display = pre ? 'block' : 'none';
+    for (const id of ['customers', 'revenue']) {
+      const input = document.getElementById(id);
+      if (pre && !input.disabled) input.dataset.previousValue = input.value;
+      input.disabled = pre;
+      input.value = pre ? '0' : (input.dataset.previousValue ?? input.value);
+    }
+    document.getElementById('step1Error').style.display = 'none';
+  }
+
   function classifyAnimal() {
-    state.customers = parseInt(document.getElementById('customers').value) || 1;
-    state.revenue = parseInt(document.getElementById('revenue').value) || 1;
-    state.acv = state.revenue / state.customers;
-    // Classify based on EUR-normalised ACV so currency doesn't affect the animal
+    const errorEl = document.getElementById('step1Error');
+    const pre = state.stage === 'pre';
+    const customers = Number(document.getElementById('customers').value);
+    const revenue = Number(document.getElementById('revenue').value);
+    const expected = Number(document.getElementById('expectedACV').value);
+    const invalid = pre
+      ? !(Number.isFinite(expected) && expected > 0)
+      : !(Number.isInteger(customers) && customers > 0 && Number.isFinite(revenue) && revenue > 0);
+    if (invalid) {
+      errorEl.textContent = pre ? 'Enter a positive expected annual contract value.' : 'Enter positive annual revenue and a positive whole number of customers. For zero customers or zero revenue, choose Pre-revenue / pilots.';
+      errorEl.style.display = 'block';
+      return false;
+    }
+    errorEl.style.display = 'none';
+    state.customers = pre ? 0 : customers;
+    state.revenue = pre ? 0 : revenue;
+    state.expectedACV = expected;
+    state.acv = pre ? expected : revenue / customers;
+    // Classify using assumed ACV for pre-revenue startups; otherwise observed ACV.
     const acvEUR = acvToEUR(state.acv);
     let closest = null, minDist = Infinity;
     for (let [name, data] of Object.entries(animals)) {
@@ -829,11 +881,12 @@
       if (d < minDist) { minDist = d; closest = name; }
     }
     state.animal = closest;
+    return true;
   }
 
   function goToStep2() {
     state.productName = document.getElementById('productName').value || 'My Product';
-    classifyAnimal();
+    if (!classifyAnimal()) return;
     document.getElementById('headerAnimal').textContent = state.productName;
     document.getElementById('headerAnimalEmoji').textContent = animals[state.animal].emoji + ' ' + state.animal;
     updateStep2Display();
@@ -843,6 +896,11 @@
   function updateStep2Display() {
     const bench = animals[state.animal];
     const fmt = currencyFormats[state.currency];
+    const pre = state.stage === 'pre';
+    document.getElementById('preRevenueNotice').style.display = pre ? 'block' : 'none';
+    document.getElementById('s2SituationTitle').textContent = pre ? '📊 Pre-revenue scenario assumptions' : '📊 Your Current Situation (from Step 1)';
+    document.getElementById('newCustomersPercentSlider').value = pre ? '100' : document.getElementById('newCustomersPercentSlider').value;
+    document.getElementById('newCustomersPercentSlider').disabled = pre;
     document.getElementById('s2Animal').textContent = bench.emoji + ' ' + state.animal;
     document.getElementById('s2ACV').textContent = fmt(state.acv);
     document.getElementById('s2Customers').textContent = state.customers.toLocaleString();
@@ -925,7 +983,7 @@
 
     // Why this animal — ACV explanation
     document.getElementById('classificationACVReason').textContent =
-      'Your ACV of ' + fmt(state.acv) + ' places you in the ' + a + ' range (' + rangeLabel + ' ACV).';
+      (state.stage === 'pre' ? 'Your assumed ACV of ' : 'Your ACV of ') + fmt(state.acv) + ' places you in the ' + a + ' range (' + rangeLabel + ' ACV).';
 
     // Classification logic narrative
     const logicMap = {
@@ -982,7 +1040,7 @@
 
     // Check 2: Very few customers for this ACV tier
     const expectedMinCustomers = { Mice: 500, Rabbits: 50, Deer: 10, Elephants: 3, Whales: 1 };
-    if (state.customers < expectedMinCustomers[a]) {
+    if (state.stage !== 'pre' && state.customers < expectedMinCustomers[a]) {
       warnings.push('You have only ' + state.customers.toLocaleString() + ' customers — unusually few for a ' + a + ' business. ' + a + 's typically need ' + expectedMinCustomers[a] + '+ customers to build a viable recurring revenue base.');
     }
 
@@ -1019,9 +1077,9 @@
 
     state.churn = parseFloat(churnEl.value) / 100;
     state.grossMargin = parseFloat(cogsEl.value) / 100;
-    state.targetRevenue = parseInt(targetEl.value) || 100000;
+    state.targetRevenue = Math.max(1, Number(targetEl.value) || 0);
     state.timeframe = parseInt(timeframeEl.value) || 12;
-    state.newCustomersPercent = parseFloat(newCustEl.value) / 100;
+    state.newCustomersPercent = state.stage === 'pre' ? 1 : parseFloat(newCustEl.value) / 100;
     const fmt = currencyFormats[state.currency];
 
     document.getElementById('churnDisplay').textContent = Math.round(state.churn * 100) + '%';
@@ -1062,19 +1120,46 @@
       nrrPct = (1 - state.churn) * 100;
     }
 
-    // New ACV derived from NRR: NRR > 100% = existing customers pay more = ACV increase.
-    // newACV = currentACV * (nrrPct / 100)
-    const newACV = state.acv * (nrrPct / 100);
+    // ── TARGET STATE CALCULATION ──
+    // Slider = % of ARR GROWTH from new customers (not % of total ARR)
+    // Existing customers always contribute their ARR — it doesn't disappear
+    const grr_step2 = Math.max(0.001, 1 - state.churn);
+    const newCustFrac = state.newCustomersPercent || 0; // 0-1 decimal
 
-    // New customers sign at the NEW price (newACV) — more conservative & realistic.
-    const newCustCount = revFromNew > 0 && newACV > 0 ? Math.ceil(revFromNew / newACV) : 0;
+    // Split growth between existing (via NRR/expansion) and new customers
+    const growth = Math.max(0, state.targetRevenue - state.revenue);
+    const arrGrowthFromNew      = growth * newCustFrac;
+    const arrFromExisting       = state.revenue + growth * (1 - newCustFrac); // existing base + their growth
+
+    // Annual NRR needed for existing base to reach arrFromExisting
+    let annualNRR = grr_step2; // minimum = GRR (no expansion = flat)
+    if (state.revenue > 0) {
+      annualNRR = Math.pow(arrFromExisting / state.revenue, 1 / years);
+    }
+
+    // ACV growth per year for retained customers = NRR/GRR
+    const acvGrowthPerYear = annualNRR / grr_step2;
+
+    // Target ACV = current ACV compounded over full period
+    const newACV = Math.round(state.acv * Math.pow(acvGrowthPerYear, years));
+
+    // Surviving existing customers at end of period
+    const survivingExisting = Math.round(state.customers * Math.pow(grr_step2, years));
+
+    // New customers sign at CURRENT (entry) ACV
+    const newCustCount = arrGrowthFromNew > 0 && state.acv > 0
+      ? Math.ceil(arrGrowthFromNew / state.acv)
+      : 0;
+
+    // Total customers at target
+    const totalCustAtTarget = survivingExisting + newCustCount;
     const newCustPerYear = years > 0 ? Math.ceil(newCustCount / years) : newCustCount;
 
     const existingSharePct = state.targetRevenue > 0 ? Math.round((revFromExisting / state.targetRevenue) * 100) : 0;
     const newSharePct = 100 - existingSharePct;
 
     document.getElementById('nrrPercentDisplay').textContent = existingSharePct + '%';
-    document.getElementById('nrrValue').textContent = Math.round(nrrPct) + '%';
+    document.getElementById('nrrValue').textContent = state.stage === 'pre' ? 'N/A' : Math.round(nrrPct) + '%';
 
     // Expansion needed calculation
     const grr = Math.max(0, 1 - state.churn);
@@ -1209,17 +1294,17 @@
       }
     }
 
-    // Customers row
+    // Customers row — TARGET STATE = total at target, CHANGE = new customers needed
     document.getElementById('metricsCurrentCustomers').textContent = state.customers.toLocaleString();
-    document.getElementById('metricsNewCustomersNeeded').textContent = '+' + newCustCount.toLocaleString();
-    document.getElementById('metricsCustomersTarget').textContent = (state.customers + newCustCount).toLocaleString();
+    document.getElementById('metricsNewCustomersNeeded').textContent = newCustCount > 0 ? '+' + newCustCount.toLocaleString() : '0';
+    document.getElementById('metricsCustomersTarget').textContent = totalCustAtTarget.toLocaleString();
 
     // Store for Step 3
     state.newACV = newACV;
     state.newMaxCAC = newMaxCAC;
     state.newRecCAC = newRecCAC;
     state.benchPayback = benchPayback;
-    state.newCustCount = newCustCount;  // customers needed from new revenue (NRR-adjusted)
+    state.newCustCount = newCustCount;  // new customers needed (= target total - surviving existing)
 
     const animalData = animals[state.animal];
 
@@ -1257,6 +1342,10 @@
       timeframeComment = '24 months gives room for compounding NRR. Existing customers can carry a larger share of growth, reducing pressure on new acquisition.';
     } else if (state.timeframe === 36) {
       timeframeComment = '36 months strongly favours NRR compounding. High-NRR businesses (Deer, Elephants, Whales) can reach targets mostly through expansion at this horizon.';
+    } else if (state.timeframe === 48) {
+      timeframeComment = '48 months (4 years) is a long-range strategic plan. Compounding NRR effects become significant — even moderate expansion rates drive meaningful ARR growth on the existing base.';
+    } else if (state.timeframe === 60) {
+      timeframeComment = '60 months (5 years) is a full strategic horizon, used for investor decks and exit planning. NRR compounding dominates — existing customers become the primary growth engine at this scale.';
     }
 
     // NRR assessment vs animal benchmark
@@ -1300,9 +1389,16 @@
       mixOk = false;
     }
 
+    // No historic retention or existing base means expansion/NRR cannot be measured.
+    if (state.stage === 'pre') {
+      nrrAssessment = 'Not applicable: there are no existing customers. Churn and expansion are hypothetical assumptions for future cohorts.';
+      mixAssessment = 'All ARR must come from new customers. Customer acquisition targets are modelled using your expected contract value.';
+    }
     // Overall verdict
     const overallOk = nrrOk && mixOk;
-    const overallText = overallOk
+    const overallText = state.stage === 'pre'
+      ? 'Pre-revenue planning scenario: these numbers are hypotheses to validate through pilots and initial signed contracts.'
+      : overallOk
       ? '✓ <strong style="color:#3B6D11;">Your strategy is realistic for a ' + state.animal + ' over ' + state.timeframe + ' months.</strong> Both NRR and growth mix are within benchmarks. Proceed to Step 3 to plan your budget.'
       : '⚠️ <strong style="color:#BA7517;">One or more inputs are outside typical ' + state.animal + ' benchmarks.</strong> Review the points above before moving to Step 3 — adjusting your timeframe, churn rate or growth mix slider will often bring this into a realistic range.';
 
@@ -1355,6 +1451,7 @@
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
   let plRamp = 1.0;       // Global revenue phasing factor (1.0 = day 1 default)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
+  let plQtrScenario = 'EVEN'; // Quarter signing distribution scenario
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -2118,7 +2215,9 @@
     const colW = Math.floor(70 / years);
     const labelW = 30;
 
-    let html = `<div style="display:grid;grid-template-columns:${labelW}% ${Array(years).fill(colW+'%').join(' ')};gap:6px;min-width:400px;">`;
+    const hcLabelW = 140;
+    const hcColW = 90;
+    let html = `<div style="display:grid;grid-template-columns:${hcLabelW}px ${Array(years).fill(hcColW+'px').join(' ')} ${hcColW}px;gap:6px;">`;
 
     // Year headers
     html += `<div></div>`;
@@ -2159,6 +2258,51 @@
     document.getElementById('waterfallContent').innerHTML = html;
   }
 
+  // Quarter signing distribution scenarios
+  const QTR_SCENARIOS = {
+    EVEN:  [0.25, 0.25, 0.25, 0.25],
+    FRONT: [0.35, 0.30, 0.20, 0.15],
+    BACK:  [0.15, 0.20, 0.25, 0.40]
+  };
+
+  // Compute quarterly new customer revenue using cohort logic
+  // Each cohort signs mid-quarter → 50% revenue in signing Q, 100% in subsequent Qs
+  // Scale so total = newRevTarget (annual phased amount)
+  function getQtrNewRevenue(newARR, newRevTarget, scenario) {
+    const dist = QTR_SCENARIOS[scenario] || QTR_SCENARIOS.EVEN;
+    const raw = [0, 0, 0, 0];
+    for (let s = 0; s < 4; s++) {
+      const unit = newARR * dist[s] / 4; // quarterly ARR unit for this cohort
+      for (let q = s; q < 4; q++) {
+        raw[q] += (q === s) ? unit * 0.5 : unit;
+      }
+    }
+    const rawSum = raw.reduce((a,b) => a+b, 0);
+    const scale = rawSum > 0 ? newRevTarget / rawSum : 0;
+    return raw.map(v => Math.round(v * scale));
+  }
+
+  // Compute quarterly ARR stock (churn + expansion + new each quarter)
+  function getQtrARRstock(row, churnRate, expRate, scenario) {
+    const dist = QTR_SCENARIOS[scenario] || QTR_SCENARIOS.EVEN;
+    let arrQ = row.arrStart;
+    const quarters = [];
+    for (let q = 0; q < 4; q++) {
+      const churnQ     = Math.round(arrQ * churnRate / 4);
+      const expansionQ = Math.round(arrQ * expRate / 4);
+      const newQ       = Math.round(row.newCustARR * dist[q]);
+      const arrEnd     = arrQ - churnQ + expansionQ + newQ;
+      quarters.push({ arrStart: arrQ, churn: churnQ, expansion: expansionQ, newARR: newQ, arrEnd });
+      arrQ = arrEnd;
+    }
+    return quarters;
+  }
+
+  function setQtrScenario(s) {
+    plQtrScenario = s;
+    updateStep3Display();
+  }
+
   function buildPL(years, budgetCAC, fmt) {
     const el = document.getElementById('plTable');
     if (!el) return;
@@ -2171,21 +2315,6 @@
 
     // Per-year ramp factor — uses global plRamp slider (default 100% = day 1)
     const getArrPhase = (y) => yearRamp[y] !== undefined ? yearRamp[y] / 100 : (plRamp !== null ? plRamp : 1.0);
-
-    // S&M spend per year from annual plan
-    const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
-    const smPerYear = Array.from({length: years}, (_, y) => {
-      const pct = yearSplit[y] || 0;
-      let allocSoFar = 0;
-      for (let yy = 0; yy < y; yy++) allocSoFar += Math.round(state.newCustomersNeeded * (yearSplit[yy]||0) / 100);
-      const cust = y === years-1 ? Math.max(0, state.newCustomersNeeded - allocSoFar) : Math.round(state.newCustomersNeeded * pct / 100);
-      const alloc = yearAllocs[y] || { sales: defs.sales, salesact: defs.salesact, mkt: defs.mkt };
-      const yearCAC = getCACForYear(y, years);
-      const allocBudget = cust * yearCAC;
-      const allKeys = ['sales','salesact','mkt'];
-      const totalPct = allKeys.filter(k => !yearAllocs['disabled_'+k]).reduce((s,k) => s+(alloc[k]||0), 0);
-      return totalPct === 0 ? allocBudget : allKeys.reduce((s,k) => yearAllocs['disabled_'+k] ? s : s + Math.round(allocBudget*(alloc[k]||0)/100), 0);
-    });
 
     // Dynamic new customers needed per year
     // Target ARR must be hit at end of last year
@@ -2248,6 +2377,18 @@
       }
       state.newCustomersNeeded = totalNewCustNeeded;
     }
+
+    // S&M spend per year from annual plan
+    const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
+    const smPerYear = Array.from({length: years}, (_, y) => {
+      const cust = newCustPerYear[y];
+      const alloc = yearAllocs[y] || { sales: defs.sales, salesact: defs.salesact, mkt: defs.mkt };
+      const yearCAC = getCACForYear(y, years);
+      const allocBudget = cust * yearCAC;
+      const allKeys = ['sales','salesact','mkt'];
+      const totalPct = allKeys.filter(k => !yearAllocs['disabled_'+k]).reduce((s,k) => s+(alloc[k]||0), 0);
+      return totalPct === 0 ? allocBudget : allKeys.reduce((s,k) => yearAllocs['disabled_'+k] ? s : s + Math.round(allocBudget*(alloc[k]||0)/100), 0);
+    });
 
     // ── KOHORT-LOGIK ──────────────────────────────────────────────────────────
     // Kohort 0: befintliga kunder (state.customers × acv = state.revenue)
@@ -2322,31 +2463,149 @@
     const totalSM = rows.reduce((s,r) => s + r.smSpend, 0);
 
     // ── BUILD TABLE ───────────────────────────────────────────────────────────
-    const colW = Math.floor(68 / years);
-    const labelW = 32;
+    // Quarter expand state persists across renders
+    if (!window._qtr) window._qtr = {};
+
+    // Desktop layout — fixed px widths, no global total column
+    const LBL  = 160; // label px
+    const YCOL = 110; // year column px (collapsed)
+    const QCOL = 72;  // quarter column px
+    const YTOT = 88;  // year-total px (when expanded)
+    const GAP  = 5;
+
+    // Build column template dynamically based on expansion state
+    const colDefs = [LBL + 'px'];
+    for (let y = 0; y < years; y++) {
+      if (window._qtr[y]) {
+        colDefs.push(QCOL+'px', QCOL+'px', QCOL+'px', QCOL+'px', YTOT+'px');
+      } else {
+        colDefs.push(YCOL+'px');
+      }
+    }
+    const colTemplate = colDefs.join(' ');
+    const totalGridW = colDefs.reduce((s,c) => s + parseInt(c), 0) + (colDefs.length - 1) * GAP;
+
     const empty = `<div></div>`;
 
     const cell = (val, bold=false, color='#333', bg='white', note='') =>
-      `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:11px;font-weight:${bold?'600':'400'};color:${color};">
-        ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#bbb;">${note}</div>` : ''}
+      `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:${bold?'600':'400'};color:${color};">
+        ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#bbb;margin-top:1px;">${note}</div>` : ''}
       </div>`;
+
+    // Year-total cell — blue tint, only shown when year is expanded
+    const ycell = (val, bold=true, color='#185FA5', bg='#EDF4FB', note='') =>
+      `<div style="background:${bg};border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:${bold?'700':'500'};color:${color};">
+        ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#888;margin-top:1px;">${note}</div>` : ''}
+      </div>`;
+
+    // Quarter cells for a year — linear distribution, returns array of 4 cells
+    const qcells = (yearVal, color='#333', bg='white', bold=false) =>
+      [0,1,2,3].map(() => `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(yearVal/4))}</div>`).join('');
+
+    // Render cells for one year (either 1 collapsed cell, or 4 quarters + year total)
+    // Pre-compute quarterly stock and revenue for each year (used by row renderers)
+    const _qtrStock = rows.map((r,y) => getQtrARRstock(r, churnRate, expRate, plQtrScenario));
+    const _qtrNewRev = rows.map((r,y) => {
+      const newRevTarget = r.newRevenue; // already phased by plRamp
+      return getQtrNewRevenue(r.newCustARR, newRevTarget, plQtrScenario);
+    });
+
+    // Quarterly total revenue per year = existing + new per quarter
+    const _qtrTotalRev = rows.map((r,y) => {
+      const existingPerQ = Math.round(r.existingRevenue / 4);
+      return _qtrNewRev[y].map(v => v + existingPerQ);
+    });
+
+    const yearCells = (y, val, bold=false, color='#333', bg='white', note='') => {
+      if (window._qtr && window._qtr[y]) {
+        return qcells(val, color, bg, bold) + ycell(val, bold, color==='#333'?'#185FA5':color, bg==='white'?'#EDF4FB':bg, note);
+      }
+      return cell(val, bold, color, bg, note);
+    };
+
+    // Quarterly cells using pre-computed stock data
+    const yearArrStartCells = (y, note='') => {
+      if (!window._qtr || !window._qtr[y]) return cell(rows[y].arrStart, false, '#555', '#fafafa', note);
+      const qs = _qtrStock[y];
+      return qs.map(q => `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(q.arrStart)}</div>`).join('')
+        + ycell(rows[y].arrStart, false, '#555', '#fafafa', note);
+    };
+
+    const yearChurnCells = (y, note='') => {
+      if (!window._qtr || !window._qtr[y]) return cell(-rows[y].churnAmt, false, '#E24B4A', 'white', note);
+      const qs = _qtrStock[y];
+      return qs.map(q => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#E24B4A;">${fmt(-q.churn)}</div>`).join('')
+        + ycell(-rows[y].churnAmt, false, '#E24B4A', 'white', note);
+    };
+
+    const yearExpansionCells = (y, note='') => {
+      if (!window._qtr || !window._qtr[y]) return cell(rows[y].expansionAmt, false, '#3B6D11', 'white', note);
+      const qs = _qtrStock[y];
+      return qs.map(q => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#3B6D11;">${fmt(q.expansion)}</div>`).join('')
+        + ycell(rows[y].expansionAmt, false, '#3B6D11', 'white', note);
+    };
+
+    const yearNewARRcells = (y, note='') => {
+      if (!window._qtr || !window._qtr[y]) return cell(rows[y].newCustARR, false, '#555', 'white', note);
+      const qs = _qtrStock[y];
+      return qs.map(q => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(q.newARR)}</div>`).join('')
+        + ycell(rows[y].newCustARR, false, '#555', 'white', note);
+    };
+
+    const yearRevenueCells = (y) => {
+      if (!window._qtr || !window._qtr[y]) return cell(rows[y].totalRevenue, false, '#555', '#fafafa');
+      return _qtrTotalRev[y].map(v => `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(v)}</div>`).join('')
+        + ycell(rows[y].totalRevenue, false, '#555', '#fafafa');
+    };
+
+    const yearGPcells = (y) => {
+      if (!window._qtr || !window._qtr[y]) return cell(rows[y].grossProfit, false, '#555');
+      return _qtrTotalRev[y].map(v => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(Math.round(v * grossMargin))}</div>`).join('')
+        + ycell(rows[y].grossProfit, false, '#555');
+    };
 
     const label = (text, indent=false, bold=false, color='') =>
       `<div style="font-size:11px;color:${color||(bold?'#333':'#666')};font-weight:${bold?'600':'400'};display:flex;align-items:center;padding:${indent?'0 0 0 0.75rem':'0'};min-height:28px;">${text}</div>`;
 
-    const divider = () => `<div style="grid-column:1/-1;border-top:0.5px solid #e0e0e0;margin:3px 0;"></div>`;
+    const divider = () => `<div style="grid-column:1/-1;border-top:0.5px solid #e0e0e0;margin:2px 0;"></div>`;
 
-    const totalColW = Math.max(14, Math.floor((100 - labelW - years*colW) + 8));
-    let html = `<div style="display:grid;grid-template-columns:${labelW}% ${Array(years).fill(colW+'%').join(' ')} ${totalColW}%;gap:5px;min-width:420px;">`;
+    let html = `<div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
 
-    // Headers
+    // ── HEADERS ──
+    // Check if any year is expanded — show scenario selector if so
+    const anyQtrExpanded = Object.values(window._qtr || {}).some(v => v);
+    if (anyQtrExpanded) {
+      html += `<div></div>`;
+      // Scenario buttons spanning all columns
+      const scenBtns = ['EVEN','FRONT','BACK'].map(s =>
+        `<span onclick="setQtrScenario('${s}')" style="cursor:pointer;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:${plQtrScenario===s?'700':'400'};
+         background:${plQtrScenario===s?'#378ADD':'#f0f0f0'};color:${plQtrScenario===s?'white':'#666'};
+         border:0.5px solid ${plQtrScenario===s?'#378ADD':'#ddd'};margin-right:4px;">${s}</span>`
+      ).join('');
+      const totalQtrCols = Object.values(window._qtr||{}).filter(v=>v).length * 4 + years;
+      html += `<div style="grid-column: span ${totalQtrCols};padding:4px 0;font-size:10px;color:#999;">
+        Signing pattern: ${scenBtns}
+      </div>`;
+      html += `</div><div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
+    }
+
     html += `<div></div>`;
     for (let y = 0; y < years; y++) {
-      html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">
-        Year ${y+1}${breakEvenYear === y+1 ? ' ✓' : ''}
-      </div>`;
+      const exp = window._qtr && window._qtr[y];
+      if (exp) {
+        ['Q1','Q2','Q3','Q4'].forEach(q => {
+          html += `<div style="font-size:10px;font-weight:500;color:#666;text-align:center;padding:0.25rem;background:#f5f5f5;border-radius:5px;">Y${y+1} ${q}</div>`;
+        });
+        html += `<div style="font-size:11px;font-weight:700;color:#185FA5;text-align:center;padding:0.25rem 0.4rem;background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:5px;cursor:pointer;" onclick="togglePlQtr(${y})" title="Collapse">
+          Year ${y+1}${breakEvenYear===y+1?' ✓':''} ▲
+        </div>`;
+      } else {
+        html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem 0.4rem;background:#f0f0f0;border-radius:6px;cursor:pointer;position:relative;" onclick="togglePlQtr(${y})" title="Expand quarters">
+          Year ${y+1}${breakEvenYear===y+1?' ✓':''}
+          <span style="font-size:9px;color:#aaa;margin-left:3px;">▼Q</span>
+        </div>`;
+      }
     }
-    html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">Total / End</div>`;
 
     // ── ARR SECTION ──
     // Pre-calculate cumulative customer counts per year
@@ -2371,54 +2630,47 @@
     html += label('ARR (start of year)', false, true);
     for (let y = 0; y < years; y++) {
       const acvStr = fmt(Math.round(acvAtStart[y]));
-      html += cell(rows[y].arrStart, false, '#555', '#fafafa', custAtStart[y] + ' cust. · ACV ' + acvStr);
+      html += yearArrStartCells(y, custAtStart[y] + ' cust. · ACV ' + acvStr);
     }
-    html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#999;">yr 1 start</div>`;
 
     html += label('− Churn', true);
-    let totalChurnedCust = 0;
     for (let y = 0; y < years; y++) {
       const churnedCust = Math.round(custAtStart[y] * (plChurn || 0));
-      totalChurnedCust += churnedCust;
-      html += cell(-rows[y].churnAmt, false, '#E24B4A', 'white', '−' + churnedCust + ' cust.');
+      html += yearChurnCells(y, '−' + churnedCust + ' cust.');
     }
-    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:400;color:#E24B4A;">${fmt(-rows.reduce((s,r)=>s+r.churnAmt,0))}</div>
-      <div style="font-size:9px;color:#bbb;">−${totalChurnedCust} cust.</div>
-    </div>`;
 
     html += label('+ Expansion', true);
     for (let y = 0; y < years; y++) {
       const retainedARR = rows[y].arrStart - rows[y].churnAmt;
-      const expRate = retainedARR > 0 ? Math.round((rows[y].expansionAmt / retainedARR) * 100) : 0;
+      const expRatePct = retainedARR > 0 ? Math.round((rows[y].expansionAmt / retainedARR) * 100) : 0;
       const expACVstr = fmt(Math.round(acvExpanded[y]));
-      html += cell(rows[y].expansionAmt, false, '#3B6D11', 'white', expRate + '% per ret. cust. · exp ACV ' + expACVstr);
+      html += yearExpansionCells(y, expRatePct + '% per ret. · exp ACV ' + expACVstr);
     }
-    html += cell(rows.reduce((s,r)=>s+r.expansionAmt,0), false, '#3B6D11');
 
     html += label('+ New ARR', true);
     for (let y = 0; y < years; y++) {
       const rampPct = Math.round(getArrPhase(y) * 100);
       const newACVstr = fmt(Math.round(rows[y].displayACV));
-      const phasedNewARR = Math.round(rows[y].newCustARR * getArrPhase(y));
-      const phasedLine = rampPct < 100
-        ? `<div style="font-size:11px;font-weight:500;color:#185FA5;margin-top:3px;">${fmt(phasedNewARR)} phased</div>`
-        : '';
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:400;color:#555;">${fmt(Math.round(rows[y].newCustARR))}</div>
-        <div style="font-size:9px;color:#bbb;">${rows[y].newCust} cust. · ACV ${newACVstr}${rampPct < 100 ? ' · ' + rampPct + '% phased' : ''}</div>
-        ${phasedLine}
-      </div>`;
+      const note = rows[y].newCust + ' cust. · ACV ' + newACVstr + (rampPct < 100 ? ' · ' + rampPct + '% phased' : '');
+      html += yearNewARRcells(y, note);
     }
-    html += cell(rows.reduce((s,r)=>s+r.newCustARR,0));
 
     html += label('ARR (end of year)', false, true);
     for (let y = 0; y < years; y++) {
       const isTarget = y === years-1;
-      html += cell(rows[y].arrEnd, true, '#185FA5', '#E6F1FB',
-        custAtEnd[y] + ' cust.' + (isTarget ? ' · target' : ''));
+      const note = custAtEnd[y] + ' cust.' + (isTarget ? ' · target' : '');
+      // ARR end uses ycell directly (always blue) — yearCells handles Q distribution
+      if (window._qtr[y]) {
+        // Quarter ARR grows linearly through the year
+        [1,2,3,4].forEach(q => {
+          const qArr = Math.round(rows[y].arrStart + q * (rows[y].arrEnd - rows[y].arrStart) / 4);
+          html += `<div style="background:#E6F1FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;font-weight:500;color:#185FA5;">${fmt(qArr)}</div>`;
+        });
+        html += `<div style="background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:11px;font-weight:700;color:#185FA5;">${fmt(Math.round(rows[y].arrEnd))}</div><div style="font-size:9px;color:#888;">${note}</div></div>`;
+      } else {
+        html += `<div style="background:#E6F1FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:12px;font-weight:700;color:#185FA5;">${fmt(Math.round(rows[y].arrEnd))}</div><div style="font-size:9px;color:#888;">${note}</div></div>`;
+      }
     }
-    html += cell(rows[rows.length-1].arrEnd, true, '#185FA5', '#E6F1FB', custAtEnd[years-1] + ' cust. · end ARR');
 
     html += divider();
 
@@ -2426,9 +2678,14 @@
     html += label('New ARR phasing', true);
     for (let y = 0; y < years; y++) {
       const rp = Math.round(getArrPhase(y) * 100);
-      html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:11px;color:#999;">${rp}%</div>`;
+      const rpCell = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;color:#999;">${rp}%</div>`;
+      if (window._qtr[y]) {
+        html += rpCell + rpCell + rpCell + rpCell;
+        html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:600;color:#777;">${rp}%</div>`;
+      } else {
+        html += rpCell;
+      }
     }
-    html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">global</div>`;
 
     html += divider();
 
@@ -2438,46 +2695,38 @@
     const totSM2 = rows.reduce((s,r)=>s+r.smSpend,0);
     const totOP  = rows.reduce((s,r)=>s+r.opResult,0);
 
-    html += label('ARR (end of year) — phased <span style="font-size:9px;font-weight:400;color:#bbb;" title="ARR (start of year) = contracted ARR = ARR end of previous year (full contract value). Phased = revenue actually recognised this year. These differ when ramp < 100%.">ⓘ</span>', false, true);
-    for (let y = 0; y < years; y++) html += cell(rows[y].totalRevenue, false, '#555', '#fafafa');
-    html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:500;color:#555;">${fmt(Math.round(incrementalRevenue))}</div>
-      <div style="font-size:9px;color:#999;">incremental</div>
-    </div>`;
+    html += label('Revenue — phased <span style="font-size:9px;font-weight:400;color:#bbb;" title="Phased revenue per quarter uses cohort logic: 50% in signing Q, 100% in subsequent Qs.">ⓘ</span>', false, true);
+    for (let y = 0; y < years; y++) {
+      html += yearRevenueCells(y);
+    }
 
-    // Realized ACV = phased revenue / customers at year end
     html += label('Realized ACV', false, true);
     for (let y = 0; y < years; y++) {
       const contractedACV = custAtEnd[y] > 0 ? Math.round(rows[y].arrEnd / custAtEnd[y]) : 0;
       const rACV = realizedACV[y];
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:500;color:#333;">${fmt(rACV)}</div>
-        <div style="font-size:9px;color:#bbb;">standard: ${fmt(contractedACV)}</div>
-        ${rACV < contractedACV - 1 ? `<div style="font-size:9px;color:#BA7517;">${fmt(rACV - contractedACV)} phasing gap</div>` : ''}
-      </div>`;
+      const acvCell = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:11px;font-weight:500;color:#333;">${fmt(rACV)}</div><div style="font-size:9px;color:#bbb;">std: ${fmt(contractedACV)}</div></div>`;
+      const emptyCell = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#ccc;">—</div>`;
+      if (window._qtr[y]) {
+        html += emptyCell + emptyCell + emptyCell + emptyCell + acvCell;
+      } else {
+        html += acvCell;
+      }
     }
-    const avgRealizedACV = Math.round(realizedACV.reduce((s,v)=>s+v,0) / years);
-    const avgContractedACV = Math.round(rows.reduce((s,r,y)=> s + (custAtEnd[y]>0 ? r.arrEnd/custAtEnd[y] : 0), 0) / years);
-    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#999;">avg ${fmt(avgRealizedACV)}</div>`;
 
     html += divider();
 
     html += label('Gross profit', true);
-    for (let y = 0; y < years; y++) html += cell(rows[y].grossProfit, false, '#555');
-    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:500;color:#555;">${fmt(Math.round(incrementalGP))}</div>
-      <div style="font-size:9px;color:#999;">incremental</div>
-    </div>`;
+    for (let y = 0; y < years; y++) html += yearGPcells(y);
 
     html += label('S&M spend <span style="font-size:9px;font-weight:400;color:#999;">← from annual plan</span>', true);
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
-        html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">select strategy ↓</div>`;
+        const ph = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">select strategy ↓</div>`;
+        if (window._qtr[y]) html += ph + ph + ph + ph + ph;
+        else html += ph;
       }
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
     } else {
-      for (let y = 0; y < years; y++) html += cell(-rows[y].smSpend, false, '#E24B4A');
-      html += cell(-totSM2, false, '#E24B4A');
+      for (let y = 0; y < years; y++) html += yearCells(y, -rows[y].smSpend, false, '#E24B4A');
     }
 
     html += divider();
@@ -2485,26 +2734,30 @@
     html += label('Operating result', false, true);
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
-        html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">= Gross profit</div>`;
+        const ph = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
+        if (window._qtr[y]) html += ph + ph + ph + ph + ph;
+        else html += ph;
       }
-      html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
-      html += label('Cumulative', true);
-      for (let y = 0; y < years; y++) {
-        html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
-      }
-      html += `<div></div>`;
     } else {
       for (let y = 0; y < years; y++) {
         const v = rows[y].opResult;
-        html += cell(v, true, v>=0?'#3B6D11':'#E24B4A', v>=0?'#EAF3DE':'#FCEBEB');
+        html += yearCells(y, v, true, v>=0?'#3B6D11':'#E24B4A', v>=0?'#EAF3DE':'#FCEBEB');
       }
-      html += cell(totOP, true, totOP>=0?'#3B6D11':'#E24B4A', totOP>=0?'#EAF3DE':'#FCEBEB');
       html += label('Cumulative', true);
       for (let y = 0; y < years; y++) {
         const v = rows[y].cumResult;
-        html += cell(v, false, v>=0?'#3B6D11':'#E24B4A');
+        const ph = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:${v>=0?'#3B6D11':'#E24B4A'};">${fmt(Math.round(v))}</div>`;
+        if (window._qtr[y]) {
+          // Cumulative grows through quarters
+          [1,2,3,4].forEach(q => {
+            const qv = Math.round(y > 0 ? rows[y-1].cumResult + q * rows[y].opResult/4 : q * rows[y].opResult/4);
+            html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;color:${qv>=0?'#3B6D11':'#E24B4A'};">${fmt(qv)}</div>`;
+          });
+          html += ph;
+        } else {
+          html += ph;
+        }
       }
-      html += cell(rows[rows.length-1].cumResult, false, rows[rows.length-1].cumResult>=0?'#3B6D11':'#E24B4A');
     }
 
     html += `<div style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
@@ -2552,7 +2805,10 @@
     // Per-year metrics based on actual P&L
     html += `<div style="margin-top:1.5rem;">`;
     html += `<div style="font-size:12px;font-weight:500;color:#333;margin-bottom:0.25rem;">Unit Economics — per year</div><div style="font-size:10px;color:#999;margin-bottom:0.75rem;">All metrics based on Realized ACV</div>`;
-    html += `<div style="display:grid;grid-template-columns:${labelW}% ${Array(years).fill(colW+'%').join(' ')} ${totalColW}%;gap:5px;min-width:420px;">`;
+    const ueColW = 90;
+    const ueLabelW = 140;
+    const ueTotW = 90;
+    html += `<div style="display:grid;grid-template-columns:${ueLabelW}px ${Array(years).fill(ueColW+'px').join(' ')} ${ueTotW}px;gap:5px;">`;
 
     // Headers
     html += `<div></div>`;
@@ -2673,7 +2929,9 @@
       if (i <= step) { circle.classList.add('active'); circle.classList.remove('inactive'); circle.textContent = '●'; }
       else           { circle.classList.add('inactive'); circle.classList.remove('active'); circle.textContent = '○'; }
     }
-    // Always scroll to top when switching steps
+    // Step 3 gets full desktop width, steps 1-2 stay narrow
+    const container = document.querySelector('.container');
+    if (container) container.style.maxWidth = step === 3 ? '1400px' : '900px';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -2681,6 +2939,12 @@
 
 
   updateCurrency();
+
+  function togglePlQtr(y) {
+    if (!window._qtr) window._qtr = {};
+    window._qtr[y] = !window._qtr[y];
+    updateStep3Display();
+  }
 </script>
 </body>
 </html>
