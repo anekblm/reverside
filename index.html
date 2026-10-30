@@ -487,17 +487,17 @@
             <button onclick="resetPL()" style="flex:none;padding:0.3rem 0.75rem;font-size:11px;font-weight:500;color:#555;background:white;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;">↺ Reset</button>
           </div>
           <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
-            Adjust the three parameters below to model your growth scenario. New customers needed updates automatically to hit your target ARR. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
+            Adjust churn and expansion to model your growth scenario. Signing pattern controls when new ARR becomes recognized revenue; no separate phasing multiplier is applied. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
             <div style="margin-top:0.5rem;font-size:11px;color:#666;line-height:1.6;">
               Expansion Compensation is a 1:1 percentage point offset to churn — setting both to 25% results in NRR 100% (flat base). The actual expansion required per retained customer is always higher than the compensation rate, because expansion is spread across fewer customers after churn. Example: 25% churn + 25% expansion compensation → 33% expansion per retained customer.
             </div>
             <div style="margin-top:0.4rem;padding:0.25rem 0.6rem;display:inline-block;background:#fafafa;border:0.5px solid #e0e0e0;border-radius:4px;font-size:11px;color:#999;">
-              S&M spend row = Annual Plan below
+              S&M spending is independently scheduled by quarter below
             </div>
           </div>
 
-          <!-- 3 sliders -->
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+          <!-- Churn and expansion controls; signing cadence determines revenue timing -->
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-bottom:1.25rem;">
             <div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
                 <div>
@@ -517,16 +517,6 @@
                 <div style="font-size:20px;font-weight:600;color:#3B6D11;" id="plExpansionDisplay">—</div>
               </div>
               <input type="range" id="plExpansionSlider" min="0" max="80" step="1" value="25" style="width:100%;" oninput="onPLSlider()">
-            </div>
-            <div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-                <div>
-                  <div style="font-size:11px;font-weight:500;color:#333;">Revenue phasing</div>
-                  <div style="font-size:10px;color:#999;">% of new ARR recognised in signing year</div>
-                </div>
-                <div style="font-size:20px;font-weight:600;color:#185FA5;" id="plRampDisplay">—</div>
-              </div>
-              <input type="range" id="plRampSlider" min="10" max="100" step="5" value="100" style="width:100%;" oninput="onPLSlider()">
             </div>
           </div>
 
@@ -577,9 +567,9 @@
                 </div>
 
                 <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.6rem 0.75rem;font-size:11px;color:#666;line-height:1.6;">
-                  <strong style="color:#333;">The phasing gap</strong> = Standard ACV − Realized ACV. Revenue that is contractually owed but recognised in a later period. At 100% phasing there is no gap — all revenue is recognised day 1.
+                  <strong style="color:#333;">Revenue timing:</strong> ARR is a point-in-time annualized rate. Recognized revenue reflects service provided during each calendar month. They are different measures and must not be subtracted as though they were the same cash flow.
                   <br><br>
-                  <strong style="color:#333;">Most companies report Standard ACV</strong> in investor decks. Controllers reconcile to Realized ACV. This model shows both — and makes the gap visible.
+                  <strong style="color:#333;">Contracted ARR and recognized revenue</strong> are both shown. Cash collections are tracked separately in the Cash Flow panel.
                   <br><br>
                   <span style="font-size:10px;color:#bbb;">Note: churn is applied as a % of ARR, not as whole customers. This creates small rounding differences in per-customer ACV (~1–2%) when customer counts are low.</span>
                 </div>
@@ -723,6 +713,35 @@
           </div>
         </div>
 
+        <!-- MONTHLY CASH ENGINE -->
+        <div class="card" id="monthlyCashCard">
+          <div class="card-title">5. Cash flow & quarterly S&M timing <span style="font-size:11px;color:#999;font-weight:400;">— monthly engine</span></div>
+          <div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:1rem;">Schedule customer signings and S&M cash payments independently. The model calculates monthly recognized revenue, collections, cash-neutral S&M capacity and possible liquidity shortfalls.</div>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end;">
+            <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Customer signing pattern
+              <select id="signingPattern" class="form-input" onchange="setQtrScenario(this.value)">
+                <option value="EVEN">Even</option><option value="FRONT">Front-loaded</option><option value="BACK">Back-loaded</option>
+              </select>
+            </label>
+            <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Opening cash
+              <input id="cashOpening" class="form-input" type="number" min="0" value="0" onchange="updateCashAssumptions()">
+            </label>
+            <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Other operating cash out / month
+              <input id="cashOtherOpex" class="form-input" type="number" min="0" value="0" onchange="updateCashAssumptions()">
+            </label>
+            <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Collection delay
+              <select id="cashCollectionLag" class="form-input" onchange="updateCashAssumptions()">
+                <option value="0">Same month</option><option value="1">1 month</option><option value="2">2 months</option><option value="3">3 months</option>
+              </select>
+            </label>
+          </div>
+          <div style="font-size:12px;font-weight:500;margin:1rem 0 0.5rem;">Quarterly S&M cash allocation</div>
+          <div style="font-size:11px;color:#777;margin-bottom:0.75rem;">Each year must total 100%. Allocation of cash out is independent of customer signing pattern.</div>
+          <div id="quarterSMControls"></div>
+          <div id="cashQuarterWarning" class="form-helper" style="display:none;color:#BA7517;"></div>
+          <div id="cashFlowPanel" style="margin-top:1rem;"></div>
+        </div>
+
         <!-- CONVERSION WATERFALL -->
         <div class="card">
           <div class="card-title" id="waterfallTitle">🔽 Conversion Waterfall</div>
@@ -730,9 +749,6 @@
           <div id="waterfallContent"></div>
         </div>
 
-        <div id="recommendationsBox"></div>
-
-        <!-- RECOMMENDATIONS -->
         <div id="recommendationsBox"></div>
 
       </div><!-- end cards wrapper -->
