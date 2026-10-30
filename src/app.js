@@ -1165,8 +1165,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function resetPL() {
-    const keys = Object.keys(yearRamp);
-    keys.forEach(k => delete yearRamp[k]);
     initPLSliders();
     updateStep3Display();
   }
@@ -1175,8 +1173,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Clear all manual overrides — locks, disabled rows, custom allocations, ramp
     const keys = Object.keys(yearAllocs);
     keys.forEach(k => delete yearAllocs[k]);
-    const rampKeys = Object.keys(yearRamp);
-    rampKeys.forEach(k => delete yearRamp[k]);
     // Reset year split to strategy default
     initYearSplit();
     updateStep3Display();
