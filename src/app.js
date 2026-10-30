@@ -1978,6 +1978,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
     el.innerHTML = html;
+    renderMonthlyCashControls(model, fmt);
   }
 
 
