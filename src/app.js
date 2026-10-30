@@ -1,5 +1,7 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
+import { forecastSaaS } from "./engine/monthly-plan.js";
+import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
 
@@ -633,6 +635,7 @@ import { annualGrossProfitLtv } from "./engine/unit-economics.js";
   // ── STEP 3 STATE ──────────────────────────────────────────────
   let yearSplit = [];
   let yearAllocs = {};
+  let quarterSMShares = {}; // % of S&M cash out assigned to each quarter (independent of signing)
   let yearRamp = {};      // % of ACV realised in acquisition year (default 100%)
   let plChurn = null;     // P&L churn override (null = use state.churn)
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
@@ -649,6 +652,7 @@ import { annualGrossProfitLtv } from "./engine/unit-economics.js";
   function goToStep3() {
     selectedStrategy = null;
     yearAllocs = {};
+    quarterSMShares = {};
     document.getElementById('budgetSummarySection').style.display = 'none';
     populateStrategyCards();
     initPLSliders();
@@ -1113,7 +1117,7 @@ import { annualGrossProfitLtv } from "./engine/unit-economics.js";
     const slR = document.getElementById('plRampSlider');
     plChurn    = (parseInt(slC.value) || 0) / 100;
     plExpansion = (parseInt(slE.value) || 0) / 100;
-    plRamp     = (parseInt(slR.value) || 100) / 100;
+    plRamp = 1.0; // Signing pattern, not a second multiplier, controls revenue recognition
     // Sync global ramp to all years
     Object.keys(yearRamp).forEach(k => delete yearRamp[k]);
     updatePLSliderDisplay();
@@ -1142,11 +1146,7 @@ import { annualGrossProfitLtv } from "./engine/unit-economics.js";
     if (nn) {
       nn.textContent = nrr > 100 ? '— existing base grows' : nrr === 100 ? '— existing base flat (default)' : '— existing base shrinks';
     }
-    if (rn) {
-      rn.textContent = rampPct === 100 ? 'Day 1 — no phasing (default)' :
-                       rampPct >= 75   ? 'Fast close — most revenue early' :
-                       rampPct >= 55   ? 'Quarterly phasing' : 'Slow ramp';
-    }
+    if (rn) rn.textContent = 'Revenue timing follows monthly customer signings';
 
     // Expansion rate per retained customer note under NRR
     const expNoteEl = document.getElementById('plExpansionRateNote');
@@ -1420,6 +1420,8 @@ import { annualGrossProfitLtv } from "./engine/unit-economics.js";
 
   function setQtrScenario(s) {
     plQtrScenario = s;
+    const select = document.getElementById('signingPattern');
+    if (select) select.value = s;
     updateStep3Display();
   }
 
@@ -2087,5 +2089,7 @@ Object.assign(window, {
   onAllocInput,
   toggleLock,
   setQtrScenario,
-  togglePlQtr
+  togglePlQtr,
+  updateCashAssumptions,
+  updateQuarterSM
 });
