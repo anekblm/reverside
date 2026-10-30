@@ -162,3 +162,29 @@ export function forecastSaaS(input) {
       operatingContribution: grossProfit - smPaid,
       otherOpexPaid: otherOpexMonthly, cashNeutralSMCapacity, opCF, startCash, endCash: cash };
   });
+
+  const total = key => sum(monthly.map(m => m[key]));
+  const minimumCash = Math.min(openingCash, ...monthly.map(m => m.endCash));
+  const summary = {
+    newCustomersNeeded, endingARR: monthly.at(-1).endARR,
+    endingCash: cash, minimumCash,
+    additionalLiquidityRequired: Math.max(0, -minimumCash),
+    totalRecognizedRevenue: total("recognizedRevenue"),
+    totalCashCollected: total("cashCollected"),
+    totalSM: total("smPaid"), totalOpCF: total("opCF"),
+    cashNeutralSMCapacity: total("cashNeutralSMCapacity"),
+    monthsWithNegativeOpCF: monthly.filter(m => m.opCF < 0).length,
+  };
+  return {
+    months: monthly, quarters: aggregate(monthly, 3), years: aggregate(monthly, 12),
+    summary, annualCustomers: yearlyCustomers, annualSM, quarterSM,
+    signingPattern: input.signingPattern || "EVEN",
+    assumptions: {
+      signing: "Contracts sign mid-month; first month recognizes 50% of new ARR / 12.",
+      cash: "Cash excludes financing, tax, capex and non-operating movements.",
+      costs: "COGS paid in revenue month; other operating outflows set by user.",
+      collections: "Collection lag shifts recognized revenue; opening receivables not modeled.",
+      metrics: "ARR is an annualized stock; revenue and cash are period flows.",
+    },
+  };
+}
