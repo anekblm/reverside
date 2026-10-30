@@ -48,6 +48,7 @@ function arrSchedule(settings, monthlyCustomers) {
   const nrr = Math.pow(nrrAnnual, 1 / 12);
   const acvFactor = nrrAnnual / (1 - annualChurn);
   let arr = openingARR;
+  let yearNewARRStock = 0;
   return Array.from({ length: months }, (_, i) => {
     const year = Math.floor(i / 12), quarter = Math.floor((i % 12) / 3);
     const startARR = arr;
@@ -56,12 +57,16 @@ function arrSchedule(settings, monthlyCustomers) {
     const retainedARR = startARR - churnARR + expansionARR;
     const newACV = acv * Math.pow(acvFactor, year + (priceNewOnExpansion ? 1 : 0));
     const newARR = monthlyCustomers[i] * newACV;
+    if (i % 12 === 0) yearNewARRStock = 0;
+    const retainedNewCohorts = yearNewARRStock * nrr;
+    const revenueNewInYear = (yearNewARRStock + retainedNewCohorts + newARR) / 24;
+    yearNewARRStock = retainedNewCohorts + newARR;
     arr = retainedARR + newARR;
     return {
       index: i, month: i + 1, year, quarter, startARR, churnARR, expansionARR,
       newCustomers: monthlyCustomers[i], newACV, newARR, endARR: arr,
-      existingRevenue: (startARR + retainedARR) / 24,
-      newRevenue: newARR / 24,
+      existingRevenue: (startARR + retainedARR + newARR) / 24 - revenueNewInYear,
+      newRevenue: revenueNewInYear,
       recognizedRevenue: (startARR + retainedARR + newARR) / 24,
     };
   });
