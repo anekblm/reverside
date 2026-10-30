@@ -1573,24 +1573,37 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       [0,1,2,3].map(() => `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(yearVal/4))}</div>`).join('');
 
     // Render cells for one year (either 1 collapsed cell, or 4 quarters + year total)
-    // Pre-compute quarterly stock and revenue for each year (used by row renderers)
-    const _qtrStock = rows.map((r,y) => getQtrARRstock(r, churnRate, expRate, plQtrScenario));
-    const _qtrNewRev = rows.map((r,y) => {
-      const newRevTarget = r.newRevenue; // already phased by plRamp
-      return getQtrNewRevenue(r.newCustARR, newRevTarget, plQtrScenario);
+    // Quarterly P&L values are aggregated from exactly the same monthly rows.
+    const modelQuarterByYear = rows.map((_, y) => {
+      const found = model.quarters.filter(q => q.year === y);
+      const endARR = found.length ? found[found.length-1].endARR : rows[y].arrEnd;
+      while (found.length < 4) found.push({
+        startARR: endARR, endARR, churnARR: 0, expansionARR: 0,
+        newARR: 0, recognizedRevenue: 0, grossProfit: 0,
+        smPaid: 0, operatingContribution: 0
+      });
+      return found;
     });
-
-    // Quarterly total revenue per year = existing + new per quarter
-    const _qtrTotalRev = rows.map((r,y) => {
-      const existingPerQ = Math.round(r.existingRevenue / 4);
-      return _qtrNewRev[y].map(v => v + existingPerQ);
-    });
+    const _qtrStock = modelQuarterByYear.map(qs => qs.map(q => ({
+      arrStart: q.startARR, churn: q.churnARR, expansion: q.expansionARR,
+      newARR: q.newARR, arrEnd: q.endARR
+    })));
+    const _qtrTotalRev = modelQuarterByYear.map(qs => qs.map(q => q.recognizedRevenue));
 
     const yearCells = (y, val, bold=false, color='#333', bg='white', note='') => {
       if (window._qtr && window._qtr[y]) {
         return qcells(val, color, bg, bold) + ycell(val, bold, color==='#333'?'#185FA5':color, bg==='white'?'#EDF4FB':bg, note);
       }
       return cell(val, bold, color, bg, note);
+    };
+
+    const yearQuarterCells = (y, key, sign=1, bold=false, color='#333', bg='white') => {
+      const value = model.years[y][key] * sign;
+      if (!window._qtr || !window._qtr[y]) return cell(value, bold, color, bg);
+      return modelQuarterByYear[y].map(q =>
+        '<div style="background:' + bg + ';border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:' + color + ';">'
+        + fmt(Math.round(q[key] * sign)) + '</div>').join('')
+        + ycell(value, bold, color, bg);
     };
 
     // Quarterly cells using pre-computed stock data
@@ -1733,7 +1746,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       if (window._qtr[y]) {
         // Quarter ARR grows linearly through the year
         [1,2,3,4].forEach(q => {
-          const qArr = Math.round(rows[y].arrStart + q * (rows[y].arrEnd - rows[y].arrStart) / 4);
+          const qArr = Math.round(_qtrStock[y][q-1].arrEnd);
           html += `<div style="background:#E6F1FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;font-weight:500;color:#185FA5;">${fmt(qArr)}</div>`;
         });
         html += `<div style="background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:11px;font-weight:700;color:#185FA5;">${fmt(Math.round(rows[y].arrEnd))}</div><div style="font-size:9px;color:#888;">${note}</div></div>`;
@@ -1745,7 +1758,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += divider();
 
     // New ARR phasing row — shows ramp factor between ARR end and phased ARR
-    html += label('New ARR phasing', true);
+    html += label('New-logo revenue / ARR', true);
     for (let y = 0; y < years; y++) {
       const rp = Math.round(getArrPhase(y) * 100);
       const rpCell = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;color:#999;">${rp}%</div>`;
@@ -1796,12 +1809,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         else html += ph;
       }
     } else {
-      for (let y = 0; y < years; y++) html += yearCells(y, -rows[y].smSpend, false, '#E24B4A');
+      for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'smPaid', -1, false, '#E24B4A');
     }
 
     html += divider();
 
-    html += label('Operating result', false, true);
+    html += label('Contribution (GP − S&M)', false, true);
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
         const ph = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
@@ -1811,7 +1824,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     } else {
       for (let y = 0; y < years; y++) {
         const v = rows[y].opResult;
-        html += yearCells(y, v, true, v>=0?'#3B6D11':'#E24B4A', v>=0?'#EAF3DE':'#FCEBEB');
+        html += yearQuarterCells(y, 'operatingContribution', 1, true, v>=0?'#3B6D11':'#E24B4A', v>=0?'#EAF3DE':'#FCEBEB');
       }
       html += label('Cumulative', true);
       for (let y = 0; y < years; y++) {
@@ -1849,18 +1862,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       </div>`;
     }
 
-    // ── PHASING NOTE ──
-    const globalRampPct = Math.round((plRamp || 1) * 100);
-    if (globalRampPct < 100) {
-      const phasedGap = rows.reduce((s,r) => s + r.newCustARR * (1 - (plRamp||1)), 0);
-      html += `<div style="margin-top:0.75rem;padding:0.6rem 0.75rem;background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 6px 6px 0;font-size:11px;color:#BA7517;line-height:1.6;">
-        <strong>Note on phasing:</strong> ARR (start of year) = contracted ARR = full contract value from previous year end.
-        ARR (end of year) — phased = revenue actually recognised this year at ${globalRampPct}% phasing.
-        The difference (${fmt(Math.round(phasedGap))}) is deferred to future periods — it does not disappear, it shifts forward.
-      </div>`;
-    } else {
-      html += `<div style="margin-top:0.5rem;font-size:11px;color:#999;">ⓘ No phasing applied — new customers assumed to sign day 1. Reduce Revenue phasing % to model more realistic signing timing.</div>`;
-    }
+    html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
+      + 'ⓘ Signing pattern alone controls revenue timing; newly signed customer revenue starts mid-month. '
+      + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
 
     // ── BREAK-EVEN ──
     if (selectedStrategy) {
