@@ -66,3 +66,27 @@ function arrSchedule(settings, monthlyCustomers) {
     };
   });
 }
+
+function aggregate(rows, size) {
+  const groups = [];
+  for (let start = 0; start < rows.length; start += size) {
+    const group = rows.slice(start, start + size);
+    const first = group[0], last = group.at(-1);
+    const total = key => sum(group.map(r => r[key]));
+    groups.push({
+      year: Math.floor(start / 12), quarter: Math.floor((start % 12) / 3),
+      startMonth: start + 1, endMonth: start + group.length,
+      startARR: first.startARR, endARR: last.endARR,
+      startCash: first.startCash, endCash: last.endCash,
+      newCustomers: total("newCustomers"), churnARR: total("churnARR"),
+      expansionARR: total("expansionARR"), newARR: total("newARR"),
+      existingRevenue: total("existingRevenue"), newRevenue: total("newRevenue"),
+      recognizedRevenue: total("recognizedRevenue"),
+      cashCollected: total("cashCollected"), cogsPaid: total("cogsPaid"),
+      smPaid: total("smPaid"), otherOpexPaid: total("otherOpexPaid"),
+      grossProfit: total("grossProfit"), operatingContribution: total("operatingContribution"),
+      opCF: total("opCF"), cashNeutralSMCapacity: total("cashNeutralSMCapacity"),
+    });
+  }
+  return groups;
+}
