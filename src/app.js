@@ -1381,46 +1381,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('waterfallContent').innerHTML = html;
   }
 
-  // Quarter signing distribution scenarios
-  const QTR_SCENARIOS = {
-    EVEN:  [0.25, 0.25, 0.25, 0.25],
-    FRONT: [0.35, 0.30, 0.20, 0.15],
-    BACK:  [0.15, 0.20, 0.25, 0.40]
-  };
-
-  // Compute quarterly new customer revenue using cohort logic
-  // Each cohort signs mid-quarter → 50% revenue in signing Q, 100% in subsequent Qs
-  // Scale so total = newRevTarget (annual phased amount)
-  function getQtrNewRevenue(newARR, newRevTarget, scenario) {
-    const dist = QTR_SCENARIOS[scenario] || QTR_SCENARIOS.EVEN;
-    const raw = [0, 0, 0, 0];
-    for (let s = 0; s < 4; s++) {
-      const unit = newARR * dist[s] / 4; // quarterly ARR unit for this cohort
-      for (let q = s; q < 4; q++) {
-        raw[q] += (q === s) ? unit * 0.5 : unit;
-      }
-    }
-    const rawSum = raw.reduce((a,b) => a+b, 0);
-    const scale = rawSum > 0 ? newRevTarget / rawSum : 0;
-    return raw.map(v => Math.round(v * scale));
-  }
-
-  // Compute quarterly ARR stock (churn + expansion + new each quarter)
-  function getQtrARRstock(row, churnRate, expRate, scenario) {
-    const dist = QTR_SCENARIOS[scenario] || QTR_SCENARIOS.EVEN;
-    let arrQ = row.arrStart;
-    const quarters = [];
-    for (let q = 0; q < 4; q++) {
-      const churnQ     = Math.round(arrQ * churnRate / 4);
-      const expansionQ = Math.round(arrQ * expRate / 4);
-      const newQ       = Math.round(row.newCustARR * dist[q]);
-      const arrEnd     = arrQ - churnQ + expansionQ + newQ;
-      quarters.push({ arrStart: arrQ, churn: churnQ, expansion: expansionQ, newARR: newQ, arrEnd });
-      arrQ = arrEnd;
-    }
-    return quarters;
-  }
-
+  // Revenue timing lives in engine/monthly-plan.js (no second phasing model).
   function setQtrScenario(s) {
     plQtrScenario = s;
     const select = document.getElementById('signingPattern');
@@ -1571,11 +1532,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#888;margin-top:1px;">${note}</div>` : ''}
       </div>`;
 
-    // Quarter cells for a year — linear distribution, returns array of 4 cells
-    const qcells = (yearVal, color='#333', bg='white', bold=false) =>
-      [0,1,2,3].map(() => `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(yearVal/4))}</div>`).join('');
-
-    // Render cells for one year (either 1 collapsed cell, or 4 quarters + year total)
     // Quarterly P&L values are aggregated from exactly the same monthly rows.
     const modelQuarterByYear = rows.map((_, y) => {
       const found = model.quarters.filter(q => q.year === y);
@@ -1592,13 +1548,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       newARR: q.newARR, arrEnd: q.endARR
     })));
     const _qtrTotalRev = modelQuarterByYear.map(qs => qs.map(q => q.recognizedRevenue));
-
-    const yearCells = (y, val, bold=false, color='#333', bg='white', note='') => {
-      if (window._qtr && window._qtr[y]) {
-        return qcells(val, color, bg, bold) + ycell(val, bold, color==='#333'?'#185FA5':color, bg==='white'?'#EDF4FB':bg, note);
-      }
-      return cell(val, bold, color, bg, note);
-    };
 
     const yearQuarterCells = (y, key, sign=1, bold=false, color='#333', bg='white') => {
       const value = model.years[y][key] * sign;
