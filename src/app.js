@@ -1833,7 +1833,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         if (window._qtr[y]) {
           // Cumulative grows through quarters
           [1,2,3,4].forEach(q => {
-            const qv = Math.round(y > 0 ? rows[y-1].cumResult + q * rows[y].opResult/4 : q * rows[y].opResult/4);
+            const qv = Math.round((y > 0 ? rows[y-1].cumResult : 0) + modelQuarterByYear[y].slice(0,q).reduce((sum,part) => sum + part.operatingContribution, 0));
             html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;color:${qv>=0?'#3B6D11':'#E24B4A'};">${fmt(qv)}</div>`;
           });
           html += ph;
