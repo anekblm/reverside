@@ -853,6 +853,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       paybackMonths = monthlyGP > 0 ? Math.round(budgetCAC / monthlyGP) : 0;
     }
 
+    // Use the same spending totals as the monthly cash and P&L model.
+    if (window._latestMonthlyPlan) state.totalBudget = window._latestMonthlyPlan.summary.totalSM;
+
     // Labels
     const stratLabels = { efficient: 'Efficient growth', growth: 'Aggressive growth', custom: 'Custom' };
     document.getElementById('s3StrategyLabel').textContent = stratLabels[selectedStrategy] || '-';
