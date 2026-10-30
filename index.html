@@ -887,6 +887,14 @@
   function goToStep2() {
     state.productName = document.getElementById('productName').value || 'My Product';
     if (!classifyAnimal()) return;
+    // Keep the initial target above the company's ARR when moving from Step 1.
+    // A user-selected target in Step 2 is not overwritten on subsequent visits.
+    const targetField = document.getElementById('targetRevenue');
+    if (state.revenue >= targetDefaults[state.currency] && Number(targetField.value) === targetDefaults[state.currency]) {
+      const unit = targetDefaults[state.currency];
+      state.targetRevenue = Math.ceil((state.revenue * 2) / unit) * unit;
+      targetField.value = state.targetRevenue;
+    }
     document.getElementById('headerAnimal').textContent = state.productName;
     document.getElementById('headerAnimalEmoji').textContent = animals[state.animal].emoji + ' ' + state.animal;
     updateStep2Display();
