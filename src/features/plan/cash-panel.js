@@ -28,7 +28,9 @@ export function renderCashPanel(forecast, format) {
       ${amountCell(m.opCF,format,true)}
       ${amountCell(m.endCash,format,true)}
     </tr>`).join('');
+  const missingOpex = forecast.months.every(m => m.otherOpexPaid === 0);
   return `
+    ${missingOpex ? '<div style="background:#FAEEDA;border-left:3px solid #BA7517;padding:10px;margin-bottom:12px;font-size:12px;">Other operating cash out is set to zero. Cash-neutral S&M headroom is therefore an optimistic upper bound, not a verified spending limit.</div>' : ''}
     <div class="metric-grid" style="margin-bottom:1.25rem;">
       ${metric('S&M cash out · plan', s.totalSM, 'Total across selected horizon')}
       ${metric('Cash-neutral S&M capacity', s.cashNeutralSMCapacity, 'Period total, BEFORE S&M')}
