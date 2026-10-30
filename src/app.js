@@ -1478,154 +1478,59 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const expRate     = plExpansion !== null ? plExpansion : churnRate; // default NRR=100%
     const nrr         = 1 - churnRate + expRate; // resulting NRR
 
-    // Per-year ramp factor — uses global plRamp slider (default 100% = day 1)
-    const getArrPhase = (y) => yearRamp[y] !== undefined ? yearRamp[y] / 100 : (plRamp !== null ? plRamp : 1.0);
-
-    // Dynamic new customers needed per year
-    // Target ARR must be hit at end of last year
-    // Existing base compounds via NRR each year
-    // New customers per year fill the gap — proportional to yearSplit %
-
-    // Compute new customers needed per year iteratively
-    // Each year: gap = target contribution - existing cohorts contribution
-    // ACV for new customers: entry ACV or expanded ACV based on checkbox
-    const newCustPerYear = [];
-    let runningCusts = state.customers;
-    let runningARR   = state.revenue;
-    let runningACV   = acv;
-
-    // We need total new customers such that ARR end of last year = target
-    // Build year by year: existing compounds via NRR, new customers fill gap
-    // ACV calculations
-    // Entry ACV = ACV at start of year (what retained customers are on)
-    // Expanded ACV = ACV after expansion compensation applied to retained customers
-    //              = entryACV × NRR / GRR  (mathematically clean, no drift)
-    // When expRate = 0: expACV = entryACV × (1-churn)/(1-churn) = entryACV ✓
+    // One authoritative monthly model for ARR, recognized revenue and cash.
+    // Quarterly S&M cash timing is independent of quarterly signing timing.
     const grr = Math.max(0.001, 1 - churnRate);
-    const acvGrowthFactor = nrr / grr; // how much ACV grows per retained customer per year
-
-    const yearACVentry    = [acv];
-    const yearACVexpanded = [];
+    const acvGrowthFactor = nrr / grr;
+    const yearACVentry = [acv], yearACVexpanded = [];
     for (let y = 0; y < years; y++) {
-      const entryACV = yearACVentry[y] || acv;
-      const expACV   = entryACV * acvGrowthFactor;
-      yearACVexpanded.push(expACV);
-      yearACVentry.push(expACV); // next year's entry ACV = this year's expanded ACV
+      const expanded = yearACVentry[y] * acvGrowthFactor;
+      yearACVexpanded.push(expanded);
+      yearACVentry.push(expanded);
     }
-
-    // Pass 2: compute new customers needed per year
-    {
-      let arr_ = state.revenue;
-      let custs_ = state.customers;
-      let allocSoFar = 0;
-
-      // Compute total needed first via weights
-      const existingARRend = state.revenue * Math.pow(nrr, years);
-      const gapFromNew = Math.max(0, state.targetRevenue - existingARRend);
-      const pricingACVs = Array.from({length: years}, (_, y) =>
-        plUseExpACV ? yearACVexpanded[y] : (yearACVentry[y] || acv)
-      );
-      const weights = pricingACVs.map((a, y) => {
-        const pct = yearSplit[y] || Math.floor(100/years);
-        return (pct/100) * a * Math.pow(nrr, years-y-1);
-      });
-      const totalWeight = weights.reduce((s,w) => s+w, 0);
-      const totalNewCustNeeded = totalWeight > 0 ? Math.ceil(gapFromNew / totalWeight) : 0;
-
-      for (let y = 0; y < years; y++) {
-        const pct = yearSplit[y] || Math.floor(100/years);
-        const nc = y === years-1
-          ? Math.max(0, totalNewCustNeeded - allocSoFar)
-          : Math.round(totalNewCustNeeded * pct / 100);
-        newCustPerYear.push(nc);
-        allocSoFar += nc;
-      }
-      state.newCustomersNeeded = totalNewCustNeeded;
-    }
-
-    // S&M spend per year from annual plan
     const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
-    const smPerYear = Array.from({length: years}, (_, y) => {
-      const cust = newCustPerYear[y];
-      const alloc = yearAllocs[y] || { sales: defs.sales, salesact: defs.salesact, mkt: defs.mkt };
-      const yearCAC = getCACForYear(y, years);
-      const allocBudget = cust * yearCAC;
-      const allKeys = ['sales','salesact','mkt'];
-      const totalPct = allKeys.filter(k => !yearAllocs['disabled_'+k]).reduce((s,k) => s+(alloc[k]||0), 0);
-      return totalPct === 0 ? allocBudget : allKeys.reduce((s,k) => yearAllocs['disabled_'+k] ? s : s + Math.round(allocBudget*(alloc[k]||0)/100), 0);
+    const smBudgetPercentByYear = Array.from({ length: years }, (_, y) => {
+      const alloc = yearAllocs[y] || defs;
+      return ['sales', 'salesact', 'mkt'].reduce((total, key) =>
+        total + (yearAllocs['disabled_' + key] ? 0 : (alloc[key] || 0)), 0);
     });
-
-    // ── KOHORT-LOGIK ──────────────────────────────────────────────────────────
-    // Kohort 0: befintliga kunder (state.customers × acv = state.revenue)
-    // Kohort y: nya kunder som signar år y, på acv
-    // NRR appliceras från och med nästa år på varje kohort
-    // ARR end of last year = target (ankaret)
-    // Revenue = befintliga ARR (full år) + nya kunder × fasning
-
-    // Build rows year by year
-    const rows = [];
-    let cumulativeResult = 0;
-    let breakEvenYear = null;
-
-    // Track each cohort's ARR contribution per year
-    // cohortARR[k] = ARR from cohort k (0 = befintliga, 1..years = nya)
-    // At start of year y: cohort k has been around for (y-k) NRR cycles if k>0, or y cycles if k=0
-    const getCohortARR = (cohortIdx, yearIdx) => {
-      const baseARR = cohortIdx === 0
-        ? state.revenue                          // befintliga
-        : newCustPerYear[cohortIdx-1] * acv;     // nya kunder kohort cohortIdx
-
-      if (yearIdx < cohortIdx) return 0;         // cohort not yet acquired
-      const cycles = yearIdx - cohortIdx;        // how many full NRR cycles
-      return baseARR * Math.pow(nrr, cycles);
-    };
-
-    let arrStart = state.revenue; // Year 1 start = current revenue
-    for (let y = 0; y < years; y++) {
-      // arrStart = arrEnd from previous year (or state.revenue for year 1)
-      // This ensures ARR end of year N = ARR start of year N+1
-
-      // New customers this year
-      // ARR from new customers = count × chosen ACV (consistent with how count was calculated)
-      const existingARRend = arrStart * nrr;
-      const pricingACV = plUseExpACV ? yearACVexpanded[y] : (yearACVentry[y] || acv);
-      const newCustARRfixed = newCustPerYear[y] * pricingACV;
-      const arrEnd = existingARRend + newCustARRfixed;
-
-      // Gross flows on existing base
-      const churnAmt     = arrStart * churnRate;
-      const expansionAmt = arrStart * expRate;
-
-      // Revenue: existing full year + new customers phased
-      // Existing revenue = retained ARR after churn + expansion (what they actually pay this year)
-      const existingRevenue = existingARRend; // = arrStart × NRR
-      const smSpend = smPerYear[y];
-
-      // Display — customer count is always newCustPerYear[y], ACV is the pricing ACV used
-      const displayACV = pricingACV;
-      const displayNewCust = newCustPerYear[y];
-
-      // At ramp=100%: totalRevenue = existingARRend + newCustARR = arrEnd ✓
-      const totalRevenue = existingRevenue + newCustARRfixed * getArrPhase(y);
-      const grossProfit  = totalRevenue * grossMargin;
-      const opResult     = grossProfit - smSpend;
-      cumulativeResult  += opResult;
+    const model = forecastSaaS({
+      months: state.timeframe,
+      openingARR: state.revenue, acv, targetARR: state.targetRevenue,
+      annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
+      yearShares: yearSplit, signingPattern: plQtrScenario,
+      priceNewOnExpansion: plUseExpACV,
+      cacByYear: Array.from({ length: years }, (_, y) => selectedStrategy ? getCACForYear(y, years) : 0),
+      smBudgetPercentByYear,
+      quarterSMSharesByYear: Array.from({ length: years }, (_, y) => quarterSharesForYear(y)),
+      openingCash: Number(document.getElementById('cashOpening')?.value || 0),
+      otherOpexMonthly: Number(document.getElementById('cashOtherOpex')?.value || 0),
+      collectionLagMonths: Number(document.getElementById('cashCollectionLag')?.value || 0),
+    });
+    window._latestMonthlyPlan = model;
+    const newCustPerYear = model.annualCustomers;
+    state.newCustomersNeeded = model.summary.newCustomersNeeded;
+    let cumulativeResult = 0, breakEvenYear = null;
+    const rows = model.years.map((r, y) => {
+      const opResult = r.operatingContribution;
+      cumulativeResult += opResult;
       if (breakEvenYear === null && cumulativeResult >= 0) breakEvenYear = y + 1;
-
-      rows.push({ arrStart, churnAmt, expansionAmt, newCustARR: newCustARRfixed, arrEnd,
-                  existingRevenue, newRevenue: newCustARRfixed * getArrPhase(y),
-                  totalRevenue, grossProfit, smSpend, opResult,
-                  cumResult: cumulativeResult,
-                  newCust: displayNewCust, displayACV,
-                  rampPct: Math.round(getArrPhase(y) * 100) });
-      arrStart = arrEnd; // carry forward — next year starts where this year ends
-    }
-
-    // Incremental revenue vs doing nothing
-    const baselineRevenue = state.revenue * years;
-    const incrementalRevenue = rows.reduce((s,r) => s + r.totalRevenue, 0) - baselineRevenue;
+      return {
+        arrStart: r.startARR, churnAmt: r.churnARR,
+        expansionAmt: r.expansionARR, newCustARR: r.newARR,
+        arrEnd: r.endARR, existingRevenue: r.existingRevenue,
+        newRevenue: r.newRevenue, totalRevenue: r.recognizedRevenue,
+        grossProfit: r.grossProfit, smSpend: r.smPaid, opResult,
+        cumResult: cumulativeResult, newCust: r.newCustomers,
+        displayACV: model.months[Math.min(y*12, model.months.length-1)].newACV,
+        rampPct: r.newARR > 0 ? Math.round(r.newRevenue / r.newARR * 100) : 0,
+      };
+    });
+    const getArrPhase = y => rows[y].newCustARR > 0 ? rows[y].newRevenue / rows[y].newCustARR : 0;
+    const baselineRevenue = state.revenue * state.timeframe / 12;
+    const incrementalRevenue = model.summary.totalRecognizedRevenue - baselineRevenue;
     const incrementalGP = incrementalRevenue * grossMargin;
-    const totalSM = rows.reduce((s,r) => s + r.smSpend, 0);
+    const totalSM = model.summary.totalSM;
 
     // ── BUILD TABLE ───────────────────────────────────────────────────────────
     // Quarter expand state persists across renders
