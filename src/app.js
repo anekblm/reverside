@@ -1687,16 +1687,22 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     html += divider();
 
-    // New ARR phasing row — shows ramp factor between ARR end and phased ARR
-    html += label('New-logo revenue / ARR', true);
+    // Effective phasing is the current-period cohort revenue relative to full
+    // possible period revenue from the same new ARR. Do not repeat annual
+    // percentages in quarter cells: each quarter has its own phasing.
+    html += label('New customer revenue realization', true);
+    const realization = period => period.newARR > 0
+      ? Math.round(100 * period.currentNewNetRevenue /
+          (period.newARR * period.monthsInPeriod / 12)) + '%'
+      : '—';
+    const phaseCell = (value, total = false) =>
+      `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;color:#777;font-weight:${total?'600':'400'};">${value}</div>`;
     for (let y = 0; y < years; y++) {
-      const rp = Math.round(getArrPhase(y) * 100);
-      const rpCell = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;color:#999;">${rp}%</div>`;
       if (window._qtr[y]) {
-        html += rpCell + rpCell + rpCell + rpCell;
-        html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:600;color:#777;">${rp}%</div>`;
+        modelQuarterByYear[y].forEach(q => html += phaseCell(realization(q)));
+        html += phaseCell(realization(model.years[y]), true);
       } else {
-        html += rpCell;
+        html += phaseCell(realization(model.years[y]));
       }
     }
 
