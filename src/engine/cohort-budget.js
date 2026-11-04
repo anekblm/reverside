@@ -68,3 +68,91 @@ function tiltToPhasing(baseline, percent, name) {
   }
   return weighted((lo + hi) / 2).map(v => v * all);
 }
+
+function monthlyTemplateWeights(months, yearShares = [], pattern = "EVEN") {
+  const quarterPattern = SIGNING_PATTERNS[pattern];
+  if (!quarterPattern) throw new RangeError("Unknown signing pattern: " + pattern);
+  const years = Math.ceil(months / 12);
+  const shares = Array.from({length:years},(_,y)=>yearShares[y] ?? 100 / years);
+  if (shares.some(v=>!Number.isFinite(v)||v<0)||sum(shares)<=0) throw new RangeError("Invalid yearly distribution");
+  const result = [];
+  for (let y=0;y<years;y++) {
+    const yMonths = Math.min(12,months-12*y);
+    const qs = Math.ceil(yMonths/3);
+    const activeQWeight = sum(quarterPattern.slice(0,qs));
+    for (let m=0;m<yMonths;m++) {
+      const q = Math.floor(m/3), qMonths=Math.min(3,yMonths-3*q);
+      result.push((shares[y]/sum(shares))*(quarterPattern[q]/activeQWeight)/qMonths);
+    }
+  }
+  return result;
+}
+function firstInvoiceWeights(input) {
+  const {months,granularity,phasePercent,phaseByPeriod,newARRByPeriod}=input;
+  const width = periodMonths(granularity);
+  const count = Math.ceil(months/width);
+  const template = monthlyTemplateWeights(months,input.yearShares,input.signingPattern);
+  const total = sum(template);
+  const periodTotals = Array.from({length:count},(_,p)=>sum(template.slice(p*width,Math.min(months,(p+1)*width)))/total);
+  if (newARRByPeriod != null) {
+    if (newARRByPeriod.length !== count) throw new RangeError("Manual ARR needs one amount per budget period");
+    newARRByPeriod.forEach(v=>finite(v,"period New ARR"));
+  }
+  const weights = [];
+  const phase = [];
+  for(let p=0;p<count;p++) {
+    const begin=p*width;
+    const within=template.slice(begin,Math.min(months,begin+width));
+    const withinSum=sum(within);
+    const normalized=withinSum>0?within.map(v=>v/withinSum):Array(within.length).fill(1/within.length);
+    const requested=granularity==="month"?null:(phaseByPeriod?.[p] ?? phasePercent ?? null);
+    const adjusted=tiltToPhasing(normalized,requested,"Revenue phasing for period "+(p+1));
+    phase.push(phaseFraction(adjusted)*100);
+    weights.push(...adjusted.map(v=>v*periodTotals[p]));
+  }
+  return {weights,phase,periodTotals};
+}
+/** Different acquisition cohorts are never collapsed before churn / expansion. */
+function makeARRRows(input, monthlySignedARR) {
+  const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv}=input;
+  const grr=Math.pow(1-annualChurn,1/12);
+  const nrr=Math.pow(1-annualChurn+annualExpansionComp,1/12);
+  const holdMonths=periodMonths(granularity);
+  const cohorts=[{firstInvoiceMonth:-1,arr:openingARR}];
+  const rows=[];
+  for(let m=0;m<months;m++) {
+    if(monthlySignedARR[m]>0) cohorts.push({firstInvoiceMonth:m,arr:monthlySignedARR[m]});
+    const vintageRows=[];
+    let startARR=0,churnARR=0,expansionARR=0,endARR=0;
+    for(const c of cohorts) {
+      const newlyAdded=c.firstInvoiceMonth===m;
+      const isEligible=c.firstInvoiceMonth<0 || m>= (Math.floor(c.firstInvoiceMonth/holdMonths)+1)*holdMonths;
+      const before=newlyAdded?0:c.arr;
+      const churn=(!newlyAdded&&isEligible)?before*(1-grr):0;
+      const expansion=(!newlyAdded&&isEligible)?before*(nrr-grr):0;
+      if(!newlyAdded)c.arr=before-churn+expansion;
+      const newlySigned=newlyAdded?c.arr:0;
+      startARR+=before;
+      churnARR+=churn;
+      expansionARR+=expansion;
+      endARR+=c.arr;
+      vintageRows.push({
+        firstInvoiceMonth:c.firstInvoiceMonth,
+        startARR:before,churnARR:churn,expansionARR:expansion,
+        newARR:newlySigned,endARR:c.arr,recognizedRevenue:c.arr/12,
+      });
+    }
+    const newARR=monthlySignedARR[m];
+    const recognizedRevenue=endARR/12;
+    rows.push({
+      index:m,month:m+1,year:Math.floor(m/12),quarter:Math.floor((m%12)/3),
+      startARR,churnARR,expansionARR,newARR,endARR,
+      newCustomers:newARR/acv, newACV:acv,
+      recognizedRevenue,
+      existingRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth<0).map(c=>c.recognizedRevenue)),
+      newRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth>=0).map(c=>c.recognizedRevenue)),
+      cohortFlows:vintageRows,
+    });
+  }
+  return rows;
+}
