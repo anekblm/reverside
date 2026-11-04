@@ -213,6 +213,9 @@ export function buildRevenueBridge(monthly, view = "quarter") {
     const earlierNet=metrics.earlierNewBaseRevenue+
       metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact;
     const currentNet=metrics.currentNewRevenue;
+    const retainedOpeningCohorts=last.cohortFlows.filter(c=>c.firstInvoiceMonth<start);
+    const retainedBaseARR=sum(retainedOpeningCohorts.map(c=>c.endARR));
+    const retainedBaseCustomers=sum(retainedOpeningCohorts.map(c=>c.endCustomers));
     const flow=k=>sum(slice.map(m=>m[k]));
     const result={
       startMonth:start+1,endMonth:start+slice.length,
@@ -226,6 +229,7 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       endCustomers:last.endCustomers,
       startACV:first.startCustomers>0?first.startARR/first.startCustomers:0,
       endACV:last.endCustomers>0?last.endARR/last.endCustomers:0,
+      retainedBaseACV:retainedBaseCustomers>0?retainedBaseARR/retainedBaseCustomers:0,
       recognizedRevenue:flow("recognizedRevenue"),
       existingRevenue:originalNet,newRevenue:earlierNet+currentNet,
       originalNetRevenue:originalNet,earlierNewNetRevenue:earlierNet,currentNewNetRevenue:currentNet,
