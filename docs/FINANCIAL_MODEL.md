@@ -1,7 +1,7 @@
 # ReverSide PLAN – Cohort Financial Model (working specification)
 
 This document specifies the **experimental, isolated calculation engine** in `src/engine/cohort-budget.js`.
-**It is NOT wired into the currently displayed PLAN interface.** The approved layout and its original `src/engine/monthly-plan.js` behavior remain unchanged while we validate this model independently.
+**It now supplies the existing ARR & contribution forecast matrix at quarterly budget granularity**, without changing the approved page structure. The historical `src/engine/monthly-plan.js` remains available for comparison, but the UI's primary forecast imports `src/engine/cohort-budget.js`. Annual and monthly input modes are not yet exposed in the current UI.
 
 **PLAN is a financial matrix, not a dashboard.** One reconciled monthly ledger
 supports input at three levels and read-only aggregation into three view levels.
@@ -126,7 +126,7 @@ outflows are incomplete; the interface warns when other OPEX is set to zero.
   source cohorts, phasing feasibility, all three budget levels, front/even/back,
   6/12/24 month plans, cash lag, and S&M timing.
 
-**Not yet complete:** integration into the existing approved collapsible year/quarter interface (including customer counts, lost customers, ACV changes), production-level billing calendar, annual prepaid cash
+**Not yet complete:** full year/quarter/month input controls and monthly collapse/expand in the original interface, production-level billing calendar, annual prepaid cash
 logic, mixed billing, accurate contract-level churn constraints, storing a
 frozen approved baseline for TRACK, and a real-browser end-to-end acceptance
 suite. These are separate from the now-reconciled first-invoice monthly model.
