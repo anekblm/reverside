@@ -1575,55 +1575,37 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     };
     const eachPeriod = (y,fn) => visiblePeriods(y).map(col=>fn(col.period,col.kind,col)).join('');
 
-    const yearQuarterCells = (y, key, sign=1, bold=false, color='#333', bg='white') => {
-      const value = model.years[y][key] * sign;
-      if (!window._qtr || !window._qtr[y]) return cell(value, bold, color, bg);
-      return modelQuarterByYear[y].map(q =>
-        '<div style="background:' + bg + ';border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:' + color + ';">'
-        + fmt(Math.round(q[key] * sign)) + '</div>').join('')
-        + ycell(value, bold, color, bg);
-    };
+    // Every row renders the same visible period columns, whether year, quarter or month.
+    const yearQuarterCells = (y,key,sign=1,bold=false,color='#333',bg='white') =>
+      eachPeriod(y,(period,kind)=>periodCell((period[key]||0)*sign,kind,{bold,color,bg}));
 
-    // Quarterly cells using pre-computed stock data
-    const yearArrStartCells = (y, note='') => {
-      if (!window._qtr || !window._qtr[y]) return cell(rows[y].arrStart, false, '#555', '#fafafa', note);
-      const qs = _qtrStock[y];
-      return qs.map(q => `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(q.arrStart)}</div>`).join('')
-        + ycell(rows[y].arrStart, false, '#555', '#fafafa', note);
-    };
+    const yearArrStartCells = (y,note='') => eachPeriod(y,(period,kind)=>
+      periodCell(period.startARR??0,kind,{color:'#555',bg:'#fafafa',
+        note:kind==='year'||kind==='yearTotal'?note:
+          ((period.startCustomers??0)>0?Math.round(period.startCustomers)+' cust.':'')}));
 
-    const yearChurnCells = (y, note='') => {
-      if (!window._qtr || !window._qtr[y]) return cell(-rows[y].churnAmt, false, '#E24B4A', 'white', note);
-      const qs = _qtrStock[y];
-      return qs.map((q,i) => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#E24B4A;">${fmt(-q.churn)}<div style="font-size:9px;color:#aaa;">−${Math.round(modelQuarterByYear[y][i].churnCustomers || 0)} cust.</div></div>`).join('')
-        + ycell(-rows[y].churnAmt, false, '#E24B4A', 'white', note);
-    };
+    const yearChurnCells = (y,note='') => eachPeriod(y,(period,kind)=>
+      periodCell(-(period.churnARR??0),kind,{color:'#E24B4A',
+        note:kind==='year'||kind==='yearTotal'?note:
+          '−'+Math.round(period.churnCustomers??0)+' cust.'}));
 
-    const yearExpansionCells = (y, note='') => {
-      if (!window._qtr || !window._qtr[y]) return cell(rows[y].expansionAmt, false, '#3B6D11', 'white', note);
-      const qs = _qtrStock[y];
-      return qs.map(q => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#3B6D11;">${fmt(q.expansion)}</div>`).join('')
-        + ycell(rows[y].expansionAmt, false, '#3B6D11', 'white', note);
-    };
+    const yearExpansionCells = (y,note='') => eachPeriod(y,(period,kind)=>
+      periodCell(period.expansionARR??0,kind,{color:'#3B6D11',
+        note:kind==='year'||kind==='yearTotal'?note:
+          (period.retainedBaseACV>0?'ACV '+fmt(Math.round(period.retainedBaseACV)):'')}));
 
-    const yearNewARRcells = (y, note='') => {
-      if (!window._qtr || !window._qtr[y]) return cell(rows[y].newCustARR, false, '#555', 'white', note);
-      const qs = _qtrStock[y];
-      return qs.map((q,i) => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(q.newARR)}<div style="font-size:9px;color:#aaa;">${Math.round(modelQuarterByYear[y][i].newCustomers || 0)} cust.</div></div>`).join('')
-        + ycell(rows[y].newCustARR, false, '#555', 'white', note);
-    };
+    const yearNewARRcells = (y,note='') => eachPeriod(y,(period,kind)=>{
+      const newACV=period.newCustomers>0?period.newARR/period.newCustomers:0;
+      return periodCell(period.newARR??0,kind,{color:'#555',
+        note:kind==='year'||kind==='yearTotal'?note:
+          Math.round(period.newCustomers??0)+' cust.'+(newACV?' · ACV '+fmt(Math.round(newACV)):'')});
+    });
 
-    const yearRevenueCells = (y) => {
-      if (!window._qtr || !window._qtr[y]) return cell(rows[y].totalRevenue, false, '#555', '#fafafa');
-      return _qtrTotalRev[y].map(v => `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(v)}</div>`).join('')
-        + ycell(rows[y].totalRevenue, false, '#555', '#fafafa');
-    };
+    const yearRevenueCells = y => eachPeriod(y,(period,kind)=>
+      periodCell(period.recognizedRevenue??0,kind,{color:'#555',bg:'#fafafa'}));
 
-    const yearGPcells = (y) => {
-      if (!window._qtr || !window._qtr[y]) return cell(rows[y].grossProfit, false, '#555');
-      return _qtrTotalRev[y].map(v => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(Math.round(v * grossMargin))}</div>`).join('')
-        + ycell(rows[y].grossProfit, false, '#555');
-    };
+    const yearGPcells = y => eachPeriod(y,(period,kind)=>
+      periodCell(period.grossProfit??0,kind,{color:'#555'}));
 
     const label = (text, indent=false, bold=false, color='') =>
       `<div style="font-size:11px;color:${color||(bold?'#333':'#666')};font-weight:${bold?'600':'400'};display:flex;align-items:center;padding:${indent?'0 0 0 0.75rem':'0'};min-height:28px;">${text}</div>`;
