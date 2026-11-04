@@ -58,7 +58,7 @@ export function renderCashPanel(forecast, format) {
       </div>
     </details>
     <div class="form-helper" style="margin-top:12px;line-height:1.6;">
-      Assumptions: contracts sign mid-month; collections lag by the selected number of months;
+      Assumptions: new subscriptions earn full MRR from their first invoice month; collections lag by the selected number of months;
       COGS are paid in the month of revenue. Opening receivables, financing, taxes and capex
       are not included. ARR is an annualized stock and is <strong>not cash in</strong>.
       Operating cash flow is an estimate until all operating payments are included.
