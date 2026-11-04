@@ -83,3 +83,12 @@ Extract state, calculations and UI into modules without changing existing output
 - Confirm correct monthly recognition for contract activation and multi-year cohort differences.
 
 Do not merge this branch without financial and browser acceptance tests.
+
+## Current PLAN rules (November 2026)
+
+The earlier mid-month revenue implementation was replaced by
+`src/engine/cohort-budget.js` (re-exported by `src/engine/monthly-plan.js`).
+**See [`FINANCIAL_MODEL.md`](FINANCIAL_MODEL.md) for the authoritative specification.**
+The current rule is full MRR recognition in each customer's first invoice month;
+annual and quarterly phasing only reshapes estimated first-invoice months.
+The new ARR/MRR/Revenue Bridge is the primary matrix; legacy analysis is collapsed.
