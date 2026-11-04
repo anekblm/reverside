@@ -1625,7 +1625,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
          background:${plQtrScenario===s?'#378ADD':'#f0f0f0'};color:${plQtrScenario===s?'white':'#666'};
          border:0.5px solid ${plQtrScenario===s?'#378ADD':'#ddd'};margin-right:4px;">${s}</span>`
       ).join('');
-      const totalQtrCols = Object.values(window._qtr||{}).filter(v=>v).length * 4 + years;
+      const totalQtrCols = colDefs.length - 1;
       html += `<div style="grid-column: span ${totalQtrCols};padding:4px 0;font-size:10px;color:#999;">
         Signing pattern: ${scenBtns}
       </div>`;
@@ -1636,9 +1636,17 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     for (let y = 0; y < years; y++) {
       const exp = window._qtr && window._qtr[y];
       if (exp) {
-        ['Q1','Q2','Q3','Q4'].forEach(q => {
-          html += `<div style="font-size:10px;font-weight:500;color:#666;text-align:center;padding:0.25rem;background:#f5f5f5;border-radius:5px;">Y${y+1} ${q}</div>`;
-        });
+        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        for(let q=0;q<4;q++) {
+          const opened=!!window._plMonths[y]?.[q];
+          if(opened) for(let m=0;m<3;m++) {
+            const absolute=y*12+q*3+m;
+            if(absolute<model.months.length) {
+              html += `<div style="font-size:10px;font-weight:500;color:#777;text-align:center;padding:0.25rem;background:#f9f9f9;border-radius:5px;">${monthNames[q*3+m]}</div>`;
+            }
+          }
+          html += `<div style="font-size:10px;font-weight:600;color:${opened?'#185FA5':'#666'};text-align:center;padding:0.25rem;background:${opened?'#EDF4FB':'#f5f5f5'};border-radius:5px;cursor:pointer;" role="button" tabindex="0" onclick="togglePlMonth(${y},${q})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePlMonth(${y},${q});}" title="${opened?'Collapse months':'Expand months'}">Y${y+1} Q${q+1} ${opened?'▲':'▼M'}</div>`;
+        }
         html += `<div style="font-size:11px;font-weight:700;color:#185FA5;text-align:center;padding:0.25rem 0.4rem;background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:5px;cursor:pointer;" onclick="togglePlQtr(${y})" title="Collapse">
           Year ${y+1}${breakEvenYear===y+1?' ✓':''} ▲
         </div>`;
@@ -1989,6 +1997,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   updateCurrency();
 
+  function togglePlMonth(y,q) {
+    if (!window._plMonths) window._plMonths = {};
+    if (!window._plMonths[y]) window._plMonths[y] = {};
+    window._plMonths[y][q] = !window._plMonths[y][q];
+    updateStep3Display();
+  }
+
   function togglePlQtr(y) {
     if (!window._qtr) window._qtr = {};
     window._qtr[y] = !window._qtr[y];
@@ -2018,6 +2033,7 @@ Object.assign(window, {
   toggleLock,
   setQtrScenario,
   togglePlQtr,
+  togglePlMonth,
   updateCashAssumptions,
   updateQuarterSM
 });
