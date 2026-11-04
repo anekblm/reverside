@@ -1702,17 +1702,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     for (let y = 0; y < years; y++) {
       const isTarget = y === years-1;
       const note = Math.round(custAtEnd[y]) + ' cust.' + (isTarget ? ' · target' : '');
-      // ARR end uses ycell directly (always blue) — yearCells handles Q distribution
-      if (window._qtr[y]) {
-        // Quarter ARR grows linearly through the year
-        [1,2,3,4].forEach(q => {
-          const qArr = Math.round(_qtrStock[y][q-1].arrEnd);
-          html += `<div style="background:#E6F1FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;font-weight:500;color:#185FA5;">${fmt(qArr)}</div>`;
-        });
-        html += `<div style="background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:11px;font-weight:700;color:#185FA5;">${fmt(Math.round(rows[y].arrEnd))}</div><div style="font-size:9px;color:#888;">${note}</div></div>`;
-      } else {
-        html += `<div style="background:#E6F1FB;border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:12px;font-weight:700;color:#185FA5;">${fmt(Math.round(rows[y].arrEnd))}</div><div style="font-size:9px;color:#888;">${note}</div></div>`;
-      }
+      // ARR remains an end-of-period stock, including for expanded months.
+      html += eachPeriod(y,(period,kind)=>periodCell(period.endARR??0,kind,{
+        bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
+        note:kind==='year'||kind==='yearTotal'?note:
+          Math.round(period.endCustomers??0)+' cust.'
+      }));
     }
 
     // New subscription MRR is the annualized new ARR divided by 12. It is an
@@ -1728,19 +1723,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // possible period revenue from the same new ARR. Do not repeat annual
     // percentages in quarter cells: each quarter has its own phasing.
     html += label('New customer revenue realization', true);
-    const realization = period => period.newARR > 0
+    const realization = period => period?.newARR > 0 && period.monthsInPeriod > 0
       ? Math.round(100 * period.currentNewNetRevenue /
           (period.newARR * period.monthsInPeriod / 12)) + '%'
       : '—';
     const phaseCell = (value, total = false) =>
       `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;color:#777;font-weight:${total?'600':'400'};">${value}</div>`;
     for (let y = 0; y < years; y++) {
-      if (window._qtr[y]) {
-        modelQuarterByYear[y].forEach(q => html += phaseCell(realization(q)));
-        html += phaseCell(realization(model.years[y]), true);
-      } else {
-        html += phaseCell(realization(model.years[y]));
-      }
+      html += eachPeriod(y,(period,kind)=>phaseCell(realization(period),kind==='yearTotal'));
     }
 
     html += divider();
@@ -1771,11 +1761,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       const rACV = realizedACV[y];
       const acvCell = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:11px;font-weight:500;color:#333;">${fmt(rACV)}</div><div style="font-size:9px;color:#bbb;">std: ${fmt(contractedACV)}</div></div>`;
       const emptyCell = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#ccc;">—</div>`;
-      if (window._qtr[y]) {
-        html += emptyCell + emptyCell + emptyCell + emptyCell + acvCell;
-      } else {
-        html += acvCell;
-      }
+      html += eachPeriod(y,(_,kind)=>kind==='year'||kind==='yearTotal'?acvCell:emptyCell);
     }
 
     html += divider();
