@@ -1670,7 +1670,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       custAtEnd[y] > 0 ? Math.round(r.totalRevenue / custAtEnd[y]) : 0
     );
 
-    html += label('ARR (start of year)', false, true);
+    html += label('ARR (start of period)', false, true);
     for (let y = 0; y < years; y++) {
       const acvStr = fmt(Math.round(acvAtStart[y]));
       html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
