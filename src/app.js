@@ -1,6 +1,6 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
-import { forecastSaaS } from "./engine/cohort-budget.js";
+import { forecastSaaS, buildRevenueBridge } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
@@ -1491,11 +1491,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // ── BUILD TABLE ───────────────────────────────────────────────────────────
     // Quarter expand state persists across renders
     if (!window._qtr) window._qtr = {};
+    if (!window._plMonths) window._plMonths = {};
 
     // Desktop layout — fixed px widths, no global total column
     const LBL  = 160; // label px
     const YCOL = 110; // year column px (collapsed)
     const QCOL = 72;  // quarter column px
+    const MCOL = 70;  // month column px
     const YTOT = 88;  // year-total px (when expanded)
     const GAP  = 5;
 
@@ -1503,7 +1505,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const colDefs = [LBL + 'px'];
     for (let y = 0; y < years; y++) {
       if (window._qtr[y]) {
-        colDefs.push(QCOL+'px', QCOL+'px', QCOL+'px', QCOL+'px', YTOT+'px');
+        for (let q = 0; q < 4; q++) {
+          if (window._plMonths[y]?.[q]) {
+            for (let m = 0; m < 3 && y*12+q*3+m<state.timeframe; m++) colDefs.push(MCOL+'px');
+          }
+          colDefs.push(QCOL+'px');
+        }
+        colDefs.push(YTOT+'px');
       } else {
         colDefs.push(YCOL+'px');
       }
@@ -1543,6 +1551,29 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       newARR: q.newARR, arrEnd: q.endARR
     })));
     const _qtrTotalRev = modelQuarterByYear.map(qs => qs.map(q => q.recognizedRevenue));
+    const monthlyRevenueBridge = buildRevenueBridge(model.months, 'month');
+    // Column definitions describe one displayed period; all monetary rows reuse them.
+    const visiblePeriods = y => {
+      if (!window._qtr[y]) return [{kind:'year', period:model.years[y]}];
+      const cols=[];
+      for(let q=0;q<4;q++) {
+        if(window._plMonths[y]?.[q]) {
+          for(let m=0;m<3;m++) {
+            const index=y*12+q*3+m;
+            if(index<model.months.length) cols.push({kind:'month',period:monthlyRevenueBridge[index],monthIndex:index,q});
+          }
+        }
+        cols.push({kind:'quarter',period:modelQuarterByYear[y][q],q});
+      }
+      cols.push({kind:'yearTotal',period:model.years[y]});
+      return cols;
+    };
+    const periodCell = (value,kind,{bold=false,color='#555',bg='white',note=''}={}) => {
+      if(kind==='yearTotal') return ycell(value,bold,color,bg,note);
+      if(kind==='year') return cell(value,bold,color,bg,note);
+      return `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(value))}${note?`<div style="font-size:9px;color:#aaa;">${note}</div>`:''}</div>`;
+    };
+    const eachPeriod = (y,fn) => visiblePeriods(y).map(col=>fn(col.period,col.kind,col)).join('');
 
     const yearQuarterCells = (y, key, sign=1, bold=false, color='#333', bg='white') => {
       const value = model.years[y][key] * sign;
