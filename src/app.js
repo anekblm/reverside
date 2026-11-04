@@ -1516,6 +1516,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         startARR: endARR, endARR, churnARR: 0, expansionARR: 0,
         newARR: 0, recognizedRevenue: 0, grossProfit: 0,
         originalNetRevenue: 0, earlierNewNetRevenue: 0, currentNewNetRevenue: 0,
+        signedMRR: 0,
         newCustomers: 0, churnCustomers: 0,
         smPaid: 0, operatingContribution: 0
       });
@@ -1677,6 +1678,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     }
 
+    // New subscription MRR is the annualized new ARR divided by 12. It is an
+    // incremental monthly run-rate, not the recognized revenue for the whole period.
+    html += label('New MRR · first invoice', true);
+    for (let y = 0; y < years; y++) {
+      html += yearQuarterCells(y, 'signedMRR', 1, false, '#555');
+    }
+
     html += divider();
 
     // New ARR phasing row — shows ramp factor between ARR end and phased ARR
@@ -1700,10 +1708,19 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const totSM2 = rows.reduce((s,r)=>s+r.smSpend,0);
     const totOP  = rows.reduce((s,r)=>s+r.opResult,0);
 
-    html += label('Revenue — phased <span style="font-size:9px;font-weight:400;color:#bbb;" title="Phased revenue per quarter uses cohort logic: 50% in signing Q, 100% in subsequent Qs.">ⓘ</span>', false, true);
-    for (let y = 0; y < years; y++) {
-      html += yearRevenueCells(y);
-    }
+    // Revenue Bridge: three additive lines, classified against the currently
+    // displayed period boundaries, never by blindly summing month-level labels.
+    html += label('Revenue · existing base (start of year)', true);
+    for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'originalNetRevenue', 1, false, '#555');
+
+    html += label('Revenue · new, earlier periods', true);
+    for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'earlierNewNetRevenue', 1, false, '#555');
+
+    html += label('Revenue · new, current period', true);
+    for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'currentNewNetRevenue', 1, false, '#555');
+
+    html += label('Total recognized revenue', false, true);
+    for (let y = 0; y < years; y++) html += yearRevenueCells(y);
 
     html += label('Realized ACV', false, true);
     for (let y = 0; y < years; y++) {
