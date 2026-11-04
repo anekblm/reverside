@@ -4,6 +4,12 @@ const amountCell = (n, format, strong = false) =>
   (strong ? 'font-weight:600;' : '') + '">' + format(Math.round(n)) + '</td>';
 export function renderCashPanel(forecast, format) {
   const s = forecast.summary;
+  const metric = (label, value, note) => `
+    <div class="metric-box">
+      <div class="metric-label">${label}</div>
+      <div class="metric-value">${format(Math.round(value))}</div>
+      <div class="form-helper">${note}</div>
+    </div>`;
   const quarterRows = forecast.quarters.map(q => `
     <tr>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb;">Y${q.year + 1} Q${q.quarter + 1}</td>
@@ -25,19 +31,11 @@ export function renderCashPanel(forecast, format) {
   const missingOpex = forecast.months.every(m => m.otherOpexPaid === 0);
   return `
     ${missingOpex ? '<div style="background:#FAEEDA;border-left:3px solid #BA7517;padding:10px;margin-bottom:12px;font-size:12px;">Other operating cash out is set to zero. Cash-neutral S&M headroom is therefore an optimistic upper bound, not a verified spending limit.</div>' : ''}
-    <div style="overflow-x:auto;margin-bottom:1.25rem;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <tbody>
-          <tr><td style="padding:7px;border-bottom:1px solid #eee;">S&amp;M cash out · planned</td>
-            <td style="padding:7px;text-align:right;border-bottom:1px solid #eee;">${format(Math.round(s.totalSM))}</td></tr>
-          <tr><td style="padding:7px;border-bottom:1px solid #eee;">Cash-neutral S&amp;M capacity · before S&amp;M</td>
-            <td style="padding:7px;text-align:right;border-bottom:1px solid #eee;">${format(Math.round(s.cashNeutralSMCapacity))}</td></tr>
-          <tr><td style="padding:7px;border-bottom:1px solid #eee;font-weight:600;">Operating cash flow · plan horizon</td>
-            <td style="padding:7px;text-align:right;border-bottom:1px solid #eee;font-weight:600;">${format(Math.round(s.totalOpCF))}</td></tr>
-          <tr><td style="padding:7px;border-bottom:1px solid #eee;font-weight:600;">Additional liquidity required · minimum</td>
-            <td style="padding:7px;text-align:right;border-bottom:1px solid #eee;font-weight:600;">${format(Math.round(s.additionalLiquidityRequired))}</td></tr>
-        </tbody>
-      </table>
+    <div class="metric-grid" style="margin-bottom:1.25rem;">
+      ${metric('S&M cash out · plan', s.totalSM, 'Total across selected horizon')}
+      ${metric('Cash-neutral S&M capacity', s.cashNeutralSMCapacity, 'Period total, BEFORE S&M')}
+      ${metric('Operating cash flow', s.totalOpCF, 'Cash in less cash operating out')}
+      ${metric('Additional liquidity needed', s.additionalLiquidityRequired, 'To avoid a negative cash balance')}
     </div>
     <div class="form-helper" style="margin-bottom:12px;">
       Target closing ARR: <strong>${format(s.endingARR)}</strong> ·
@@ -60,7 +58,7 @@ export function renderCashPanel(forecast, format) {
       </div>
     </details>
     <div class="form-helper" style="margin-top:12px;line-height:1.6;">
-      Assumptions: the first invoice month earns full MRR; collections lag by the selected number of months;
+      Assumptions: contracts sign mid-month; collections lag by the selected number of months;
       COGS are paid in the month of revenue. Opening receivables, financing, taxes and capex
       are not included. ARR is an annualized stock and is <strong>not cash in</strong>.
       Operating cash flow is an estimate until all operating payments are included.
