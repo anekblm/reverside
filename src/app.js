@@ -1436,6 +1436,61 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     updateStep3Display();
   }
 
+  function renderPlanningControls(model) {
+    const budget = document.getElementById('budgetGranularity');
+    const view = document.getElementById('viewGranularity');
+    const pattern = document.getElementById('signingPattern');
+    const phaseControl = document.getElementById('phasingControl');
+    const phaseInput = document.getElementById('revenuePhasingPct');
+    const phaseNote = document.getElementById('budgetPhasingNote');
+    const periodControls = document.getElementById('periodARRControls');
+    const table = document.getElementById('revenueMatrix');
+    if (!budget || !view || !periodControls || !table) return;
+    budget.value = planBudgetGranularity;
+    view.value = planViewGranularity;
+    if (pattern) pattern.value = plQtrScenario;
+    if (phaseControl) phaseControl.style.display = planBudgetGranularity === 'month' ? 'none' : 'flex';
+    const width = planBudgetGranularity === 'year' ? 12 : planBudgetGranularity === 'quarter' ? 3 : 1;
+    if (phaseInput) {
+      const shortest = (state.timeframe % width) || width;
+      phaseInput.min = (100 / shortest).toFixed(6);
+      phaseInput.max = 100;
+      phaseInput.value = planPhasePercent ?? '';
+      phaseInput.placeholder = 'Auto';
+    }
+    if (phaseNote) {
+      const actual = model.periodPhasing.map(n => n.toFixed(1) + '%').join(' · ');
+      phaseNote.textContent = planBudgetGranularity === 'month'
+        ? 'Monthly budget: the first invoice month earns the full signed MRR. No monthly phasing multiplier.'
+        : 'Phasing is applied to ' + planBudgetGranularity + ' budget periods only. Effective realization: '
+          + actual + '. Monthly figures are generated to reconcile with the budget periods. '
+          + 'A value below the earliest possible full-month invoice timing is rejected.';
+    }
+    const cc=state.currency || 'EUR';
+    const format=n=>new Intl.NumberFormat('sv-SE',{style:'currency',currency:cc,maximumFractionDigits:2}).format(n);
+    const periodCount=Math.ceil(state.timeframe / width);
+    const totals=Array.from({length:periodCount},(_,p)=>model.months
+      .slice(p*width,Math.min(state.timeframe,(p+1)*width)).reduce((s,m)=>s+m.newARR,0));
+    const label=p=>planBudgetGranularity === 'year'?'Year '+(p+1)
+      :planBudgetGranularity === 'quarter'?'Y'+(Math.floor(p/4)+1)+' Q'+(p%4+1):'M'+(p+1);
+    periodControls.innerHTML = totals.map((n,p)=>'<label style="display:flex;flex-direction:column;gap:4px;min-width:95px;">'
+      + '<span style="font-size:11px;color:#666;">'+label(p)+'</span>'
+      + '<input aria-label="New ARR '+label(p)+'" type="number" min="0" step="any" value="'+n.toFixed(2)
+      + '" onchange="onManualNewARRPeriodChange('+p+',this.value)" '
+      + 'style="width:110px;border:1px solid #ddd;border-radius:5px;padding:7px;font-size:12px;" />'
+      + '</label>').join('');
+    const warning = document.getElementById('budgetModelWarning');
+    if (warning) {
+      warning.style.display = manualPeriodARR ? 'block' : 'none';
+      warning.style.color = '#785d27';
+      warning.textContent = manualPeriodARR
+        ? 'Custom New ARR amounts: closing ARR is now an output, not forced to the Step 2 target. '
+          + 'Closing ARR: '+format(model.summary.endingARR)+' · Step 2 target: '+format(state.targetRevenue)+'.'
+        : '';
+    }
+    table.innerHTML = renderRevenueMatrix(model,cc,planViewGranularity);
+  }
+
   function quarterSharesForYear(year) {
     const active = Math.ceil(Math.min(12, state.timeframe - year * 12) / 3);
     if (!quarterSMShares[year] || quarterSMShares[year].length !== active) {
