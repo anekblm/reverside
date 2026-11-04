@@ -122,23 +122,31 @@ function firstInvoiceWeights(input) {
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
   const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv}=input;
+  const openingCustomers = input.openingCustomers ?? (openingARR / acv);
+  const newACVByMonth = input.newACVByMonth ?? Array(months).fill(acv);
   const grr=Math.pow(1-annualChurn,1/12);
   const nrr=Math.pow(1-annualChurn+annualExpansionComp,1/12);
   const holdMonths=periodMonths(granularity);
-  const cohorts=[{firstInvoiceMonth:-1,arr:openingARR}];
+  const cohorts=[{firstInvoiceMonth:-1,arr:openingARR,count:openingCustomers}];
   const rows=[];
   for(let m=0;m<months;m++) {
-    if(monthlySignedARR[m]>0) cohorts.push({firstInvoiceMonth:m,arr:monthlySignedARR[m]});
+    if(monthlySignedARR[m]>0) cohorts.push({firstInvoiceMonth:m,arr:monthlySignedARR[m],count:monthlySignedARR[m]/newACVByMonth[m]});
     const vintageRows=[];
     let startARR=0,churnARR=0,expansionARR=0,endARR=0;
+    let startCustomers=0,churnCustomers=0,endCustomers=0;
     for(const c of cohorts) {
       const newlyAdded=c.firstInvoiceMonth===m;
       const isEligible=c.firstInvoiceMonth<0 || m>= (Math.floor(c.firstInvoiceMonth/holdMonths)+1)*holdMonths;
       const before=newlyAdded?0:c.arr;
       const churn=(!newlyAdded&&isEligible)?before*(1-grr):0;
       const expansion=(!newlyAdded&&isEligible)?before*(nrr-grr):0;
-      if(!newlyAdded)c.arr=before-churn+expansion;
+      const beforeCustomers=newlyAdded?0:c.count;
+      const lostCustomers=(!newlyAdded&&isEligible)?beforeCustomers*(1-grr):0;
+      if(!newlyAdded){c.arr=before-churn+expansion;c.count=beforeCustomers-lostCustomers;}
       const newlySigned=newlyAdded?c.arr:0;
+      startCustomers+=beforeCustomers;
+      churnCustomers+=lostCustomers;
+      endCustomers+=c.count;
       startARR+=before;
       churnARR+=churn;
       expansionARR+=expansion;
@@ -146,6 +154,8 @@ function makeARRRows(input, monthlySignedARR) {
       vintageRows.push({
         firstInvoiceMonth:c.firstInvoiceMonth,
         startARR:before,churnARR:churn,expansionARR:expansion,
+        startCustomers:beforeCustomers,churnCustomers:lostCustomers,
+        newCustomers:newlyAdded?c.count:0,endCustomers:c.count,
         newARR:newlySigned,endARR:c.arr,recognizedRevenue:c.arr/12,
       });
     }
@@ -154,7 +164,8 @@ function makeARRRows(input, monthlySignedARR) {
     rows.push({
       index:m,month:m+1,year:Math.floor(m/12),quarter:Math.floor((m%12)/3),
       startARR,churnARR,expansionARR,newARR,endARR,
-      newCustomers:newARR/acv, newACV:acv,
+      startCustomers,churnCustomers,endCustomers,
+      newCustomers:newARR/newACVByMonth[m], newACV:newACVByMonth[m],
       recognizedRevenue,
       existingRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth<0).map(c=>c.recognizedRevenue)),
       newRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth>=0).map(c=>c.recognizedRevenue)),
@@ -209,7 +220,12 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       monthsInPeriod:slice.length,startARR:first.startARR,endARR:last.endARR,
       startCash:first.startCash,endCash:last.endCash,
       newARR:flow("newARR"),churnARR:flow("churnARR"),expansionARR:flow("expansionARR"),
+      startCustomers:first.startCustomers,
+      churnCustomers:flow("churnCustomers"),
       newCustomers:flow("newCustomers"),
+      endCustomers:last.endCustomers,
+      startACV:first.startCustomers>0?first.startARR/first.startCustomers:0,
+      endACV:last.endCustomers>0?last.endARR/last.endCustomers:0,
       recognizedRevenue:flow("recognizedRevenue"),
       existingRevenue:originalNet,newRevenue:earlierNet+currentNet,
       originalNetRevenue:originalNet,earlierNewNetRevenue:earlierNet,currentNewNetRevenue:currentNet,
@@ -223,6 +239,9 @@ export function buildRevenueBridge(monthly, view = "quarter") {
     };
     if(!near(originalNet+earlierNet+currentNet,result.recognizedRevenue)) {
       throw new Error("Revenue bridge does not reconcile for months "+(start+1)+"-"+(start+slice.length));
+    }
+    if(!near(result.startCustomers-result.churnCustomers+result.newCustomers,result.endCustomers)) {
+      throw new Error("Customer bridge does not reconcile for months "+(start+1)+"-"+(start+slice.length));
     }
     if(!near(result.startARR-result.churnARR+result.expansionARR+result.newARR,result.endARR)) {
       throw new Error("ARR bridge does not reconcile for months "+(start+1)+"-"+(start+slice.length));
@@ -248,6 +267,11 @@ export function forecastSaaS(input) {
   const width=periodMonths(granularity);
   const acv=finite(input.acv,"acv",Number.EPSILON);
   const openingARR=finite(input.openingARR,"openingARR");
+  if(input.openingCustomers != null){
+    finite(input.openingCustomers,"openingCustomers");
+    if((input.openingCustomers===0)!==(openingARR===0))
+      throw new RangeError("Opening customers and opening ARR must both be zero, or both be positive");
+  }
   const targetARR=finite(input.targetARR,"targetARR");
   const annualChurn=finite(input.annualChurn,"annualChurn");
   const annualExpansionComp=finite(input.annualExpansionComp,"annualExpansionComp");
@@ -272,16 +296,16 @@ export function forecastSaaS(input) {
     newCustomersNeeded=sum(monthNewARR.map((arr,m)=>arr/newACV[m]));
   } else {
     const zeros=Array(months).fill(0);
-    const baseline=makeARRRows({months,openingARR,acv,annualChurn,annualExpansionComp,granularity},zeros).at(-1).endARR;
+    const baseline=makeARRRows({months,openingARR,openingCustomers:input.openingCustomers,acv,annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV},zeros).at(-1).endARR;
     const unitARR=weights.map((w,m)=>w*newACV[m]);
-    const withOne=makeARRRows({months,openingARR,acv,annualChurn,annualExpansionComp,granularity},unitARR).at(-1).endARR;
+    const withOne=makeARRRows({months,openingARR,openingCustomers:input.openingCustomers,acv,annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV},unitARR).at(-1).endARR;
     const endingContribution=withOne-baseline;
     newCustomersNeeded=targetARR>baseline?
       Math.ceil((targetARR-baseline)/endingContribution-1e-10):0;
     if(!Number.isSafeInteger(newCustomersNeeded)||newCustomersNeeded>1e8)throw new RangeError("Target requires too many customers");
     monthNewARR=unitARR.map(v=>v*newCustomersNeeded);
   }
-  const monthly=makeARRRows({months,openingARR,acv,annualChurn,annualExpansionComp,granularity},monthNewARR);
+  const monthly=makeARRRows({months,openingARR,openingCustomers:input.openingCustomers,acv,annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV},monthNewARR);
   monthly.forEach((m,i)=>{
     m.newACV=newACV[i];
     m.newCustomers=m.newARR/newACV[i];
