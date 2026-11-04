@@ -92,7 +92,7 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   app.togglePlMonth(0,0);
   app.selectStrategy('efficient');
   assert.match(node('cashFlowPanel').innerHTML,/Operating cash flow/);
-  assert.match(node('plTable').innerHTML,/Revenue · new, earlier periods/);
+  assert.match(node('plTable').innerHTML,/B\. New Customers – Earlier Periods/);
   assert.equal(win._latestMonthlyPlan.months.length,12);
 });
 
