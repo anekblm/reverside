@@ -2,6 +2,7 @@ import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cac
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
 import { forecastSaaS } from "./engine/monthly-plan.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
+import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
 
 
@@ -640,6 +641,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
   let plQtrScenario = 'EVEN'; // Quarter signing distribution scenario
+  let planBudgetGranularity = 'quarter';
+  let planViewGranularity = 'quarter';
+  let planPhasePercent = null; // null means implied by first-invoice month distribution
+  let manualPeriodARR = null; // null = solve to target; otherwise explicit ARR by budget period
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -655,7 +660,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     populateStrategyCards();
     initPLSliders();
     // Init yearSplit with linear distribution so S&M is spread evenly from the start
-    const years = Math.max(1, Math.round(state.timeframe / 12));
+    const years = Math.max(1, Math.ceil(state.timeframe / 12));
     yearSplit = [];
     const base = Math.floor(100 / years);
     for (let y = 0; y < years; y++) {
@@ -717,7 +722,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
 
     // Timeframe warning
-    const years = Math.max(1, Math.round(state.timeframe / 12));
+    const years = Math.max(1, Math.ceil(state.timeframe / 12));
     const minMonths = growthMaxMonths[state.animal] || 18;
     const warningEl = document.getElementById('strategyWarning');
 
@@ -780,7 +785,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function initYearSplit() {
-    const years = Math.max(1, Math.round(state.timeframe / 12));
+    const years = Math.max(1, Math.ceil(state.timeframe / 12));
     yearSplit = [];
 
     if (selectedStrategy === 'growth' && years > 1) {
@@ -813,10 +818,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   function updateStep3Display() {
     // P&L always renders. Strategy-dependent sections check selectedStrategy themselves.
     const fmt = currencyFormats[state.currency];
-    const years = Math.max(1, Math.round(state.timeframe / 12));
+    const years = Math.max(1, Math.ceil(state.timeframe / 12));
     // Always render P&L first (sets state.newCustomersNeeded dynamically)
     const fmt_ = currencyFormats[state.currency];
-    const years_ = Math.max(1, Math.round(state.timeframe / 12));
+    const years_ = Math.max(1, Math.ceil(state.timeframe / 12));
     buildPL(years_, 0, fmt_);  // budgetCAC=0 for PL-only pass, strategy sections below
 
     if (!selectedStrategy) return;
@@ -1071,7 +1076,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const newCustFrac = (state.newCustomersPercent !== undefined) ? state.newCustomersPercent : 0.5;
     const churn_ = state.churn || 0.25;
     const grr_ = Math.max(0.001, 1 - churn_);
-    const years_ = Math.max(1, Math.round(state.timeframe / 12));
+    const years_ = Math.max(1, Math.ceil(state.timeframe / 12));
 
     let expPct;
     if (newCustFrac >= 1.0) {
@@ -1192,7 +1197,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   // Toggle a cost row on/off — redistribute proportionally when disabled
   function toggleAllocRow(allocKey, isChecked) {
-    const years = Math.max(1, Math.round(state.timeframe / 12));
+    const years = Math.max(1, Math.ceil(state.timeframe / 12));
     const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
     const allKeys = ['sales', 'salesact', 'mkt'];
 
@@ -1971,5 +1976,10 @@ Object.assign(window, {
   setQtrScenario,
   togglePlQtr,
   updateCashAssumptions,
-  updateQuarterSM
+  updateQuarterSM,
+  onBudgetGranularityChange,
+  onViewGranularityChange,
+  onRevenuePhasingChange,
+  onManualNewARRPeriodChange,
+  resetNewARRPlan
 });
