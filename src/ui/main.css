@@ -60,3 +60,17 @@
     .btn-remove { padding: 0.5rem 1rem; background: #E24B4A; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
     .btn-add { padding: 0.75rem 1.5rem; background: #378ADD; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 1rem; }
     @media (max-width: 768px) { .metric-grid { grid-template-columns: 1fr 1fr; } }
+
+    /* Compact PLAN assumption strip; scoped to the existing forecast controls. */
+    .pl-assumptions-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:1rem; }
+    .pl-assumption-card { min-width:0; padding:10px 12px; background:#fafafa; border:0.5px solid #e0e0e0; border-radius:6px; }
+    .pl-assumption-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; min-height:38px; }
+    .pl-assumption-heading > div:first-child { min-width:0; }
+    .pl-assumption-name { font-size:11px; font-weight:500; color:#333; }
+    .pl-assumption-description { font-size:10px; color:#999; margin-top:2px; line-height:1.35; }
+    .pl-assumption-value { flex-shrink:0; font-size:18px; font-weight:600; line-height:1.15; color:#333; }
+    .pl-assumption-card input[type="range"] { display:block; width:100%; margin:8px 0 0; }
+    .pl-assumption-note { font-size:10px; color:#999; margin-top:5px; line-height:1.35; }
+    .pl-phasing-ends { display:flex; justify-content:space-between; gap:4px; margin-top:5px; color:#888; font-size:9px; }
+    @media (max-width:1100px) { .pl-assumptions-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:600px) { .pl-assumptions-grid { grid-template-columns:1fr; } }
