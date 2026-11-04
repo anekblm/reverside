@@ -656,6 +656,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     selectedStrategy = null;
     yearAllocs = {};
     quarterSMShares = {};
+    manualPeriodARR = null;
     document.getElementById('budgetSummarySection').style.display = 'none';
     populateStrategyCards();
     initPLSliders();
@@ -1364,6 +1365,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
   // Revenue timing lives in engine/monthly-plan.js (no second phasing model).
   function setQtrScenario(s) {
     plQtrScenario = s;
+    manualPeriodARR = null; // Presets repopulate the budget; users can then override periods.
     const select = document.getElementById('signingPattern');
     if (select) select.value = s;
     updateStep3Display();
@@ -1565,6 +1567,9 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
       openingARR: state.revenue, acv, targetARR: state.targetRevenue,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
       yearShares: yearSplit, signingPattern: plQtrScenario,
+      granularity: planBudgetGranularity,
+      phasePercent: planPhasePercent,
+      newARRByPeriod: manualPeriodARR,
       priceNewOnExpansion: plUseExpACV,
       cacByYear: Array.from({ length: years }, (_, y) => selectedStrategy ? getCACForYear(y, years) : 0),
       smBudgetPercentByYear,
@@ -2033,6 +2038,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
     el.innerHTML = html;
     renderMonthlyCashControls(model, fmt);
+    renderPlanningControls(model);
   }
 
 
