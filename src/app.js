@@ -1837,7 +1837,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     const totSM2 = rows.reduce((s,r)=>s+r.smSpend,0);
     const totOP  = rows.reduce((s,r)=>s+r.opResult,0);
 
-    html += label('Revenue — phased <span style="font-size:9px;font-weight:400;color:#bbb;" title="Phased revenue per quarter uses cohort logic: 50% in signing Q, 100% in subsequent Qs.">ⓘ</span>', false, true);
+    html += label('Recognized Revenue <span style="font-size:9px;font-weight:400;color:#bbb;" title="Sum of earned monthly MRR from all active cohorts.">ⓘ</span>', false, true);
     for (let y = 0; y < years; y++) {
       html += yearRevenueCells(y);
     }
@@ -1922,7 +1922,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     }
 
     html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
-      + 'ⓘ Signing pattern alone controls revenue timing; newly signed customer revenue starts mid-month. '
+      + 'ⓘ First-invoice month earns a full month of MRR. Budget-level phasing only adjusts first-invoice timing. '
       + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
 
     // ── BREAK-EVEN ──
