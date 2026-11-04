@@ -586,9 +586,55 @@
             </label>
           </div>
 
-          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-            <div id="plTable"></div>
+          <!-- Authoritative cohort matrix, from a single monthly ledger -->
+          <div style="border-top:1px solid #e7e7e7;padding-top:1rem;margin-top:1rem;">
+            <div style="font-size:13px;font-weight:650;margin-bottom:0.5rem;">ARR, MRR &amp; Revenue Bridge</div>
+            <div style="font-size:11px;color:#666;line-height:1.6;margin-bottom:12px;">
+              Budget level determines financial assumptions. View level only changes the columns.
+              The first invoicing month earns full MRR. All three views reconcile.
+            </div>
+            <div style="display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Budget granularity
+                <select id="budgetGranularity" class="form-input" onchange="onBudgetGranularityChange(this.value)">
+                  <option value="quarter">Quarterly</option>
+                  <option value="year">Yearly</option>
+                  <option value="month">Monthly</option>
+                </select>
+              </label>
+              <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">View granularity
+                <select id="viewGranularity" class="form-input" onchange="onViewGranularityChange(this.value)">
+                  <option value="quarter">Quarterly</option>
+                  <option value="year">Yearly</option>
+                  <option value="month">Monthly</option>
+                </select>
+              </label>
+              <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">New ARR distribution
+                <select id="signingPattern" class="form-input" onchange="setQtrScenario(this.value)">
+                  <option value="EVEN">Even</option>
+                  <option value="FRONT">Front</option>
+                  <option value="BACK">Back</option>
+                </select>
+              </label>
+              <label id="phasingControl" style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Revenue phasing · budget period (%)
+                <input id="revenuePhasingPct" class="form-input" style="width:125px;" type="number"
+                  min="33.34" max="100" step="0.01" placeholder="Auto" onchange="onRevenuePhasingChange(this.value)">
+              </label>
+            </div>
+            <div id="budgetPhasingNote" style="font-size:11px;color:#666;line-height:1.6;margin-bottom:12px;"></div>
+            <div id="budgetModelWarning" role="status" style="display:none;color:#A32D2D;font-size:11px;margin-bottom:12px;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin:12px 0 8px;">
+              <div style="font-size:12px;font-weight:600;">New ARR · first invoice by budget period</div>
+              <button onclick="resetNewARRPlan()" style="font-size:11px;border:1px solid #ddd;background:white;border-radius:5px;padding:5px 10px;cursor:pointer;">Reset to target</button>
+            </div>
+            <div id="periodARRControls" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
+            <div id="revenueMatrix"></div>
           </div>
+          <details style="margin-top:1rem;">
+            <summary style="font-size:11px;color:#777;cursor:pointer;">Legacy unit-economics analysis (experimental)</summary>
+            <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:1rem;">
+              <div id="plTable"></div>
+            </div>
+          </details>
         </div>
 
       <!-- STEP 1: CHOOSE STRATEGY -->
@@ -718,11 +764,6 @@
           <div class="card-title">5. Cash flow & quarterly S&M timing <span style="font-size:11px;color:#999;font-weight:400;">— monthly engine</span></div>
           <div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:1rem;">Schedule customer signings and S&M cash payments independently. The model calculates monthly recognized revenue, collections, cash-neutral S&M capacity and possible liquidity shortfalls.</div>
           <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end;">
-            <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Customer signing pattern
-              <select id="signingPattern" class="form-input" onchange="setQtrScenario(this.value)">
-                <option value="EVEN">Even</option><option value="FRONT">Front-loaded</option><option value="BACK">Back-loaded</option>
-              </select>
-            </label>
             <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Opening cash
               <input id="cashOpening" class="form-input" type="number" min="0" value="0" onchange="updateCashAssumptions()">
             </label>
