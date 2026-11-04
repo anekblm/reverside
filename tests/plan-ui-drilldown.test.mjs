@@ -95,3 +95,45 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   assert.match(node('plTable').innerHTML,/Revenue · new, earlier periods/);
   assert.equal(win._latestMonthlyPlan.months.length,12);
 });
+
+test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in every view',()=>{
+  const {app,node,win}=createApp(36);
+  const required=[
+    'A. Existing Base – Start of Year',
+    'Base Revenue',
+    '− Churn impact',
+    '+ Expansion impact',
+    'Net Revenue – Original Base',
+    'B. New Customers – Earlier Periods',
+    'Revenue from prior new cohorts',
+    'Net Revenue – Earlier Cohorts',
+    'C. New Customers – Current Period',
+    'Recognized New Revenue',
+    'Total Recognized Revenue'
+  ];
+  const checkLabels=()=>{
+    const html=node('plTable').innerHTML;
+    required.forEach(label=>assert.ok(html.includes(label),'Missing label '+label));
+    assert.ok(!html.includes('id="revenueMatrix"'),'A separate revenue table must not be added');
+  };
+  const reconcile=p=>{
+    close(p.originalBaseRevenue+p.originalChurnRevenueImpact+
+      p.originalExpansionRevenueImpact,p.originalNetRevenue);
+    close(p.earlierNewBaseRevenue+p.earlierNewChurnRevenueImpact+
+      p.earlierNewExpansionRevenueImpact,p.earlierNewNetRevenue);
+    close(p.originalNetRevenue+p.earlierNewNetRevenue+
+      p.currentNewNetRevenue,p.recognizedRevenue);
+  };
+  checkLabels();
+  win._latestMonthlyPlan.years.forEach(reconcile);
+  app.togglePlQtr(0);
+  checkLabels();
+  win._latestMonthlyPlan.quarters.forEach(reconcile);
+  app.togglePlMonth(0,1);
+  checkLabels();
+  buildRevenueBridge(win._latestMonthlyPlan.months,'month').forEach(reconcile);
+  const q2=win._latestMonthlyPlan.quarters[1];
+  assert.ok(q2.earlierNewNetRevenue>0,'Q2 must include prior Q1 new customers');
+  assert.ok(win._latestMonthlyPlan.years[0].earlierNewNetRevenue===0,
+    'The current year acquired cohort remains current within the year view');
+});
