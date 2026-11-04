@@ -1741,18 +1741,35 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const totSM2 = rows.reduce((s,r)=>s+r.smSpend,0);
     const totOP  = rows.reduce((s,r)=>s+r.opResult,0);
 
-    // Revenue Bridge: three additive lines, classified against the currently
-    // displayed period boundaries, never by blindly summing month-level labels.
-    html += label('Revenue · existing base (start of year)', true);
-    for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'originalNetRevenue', 1, false, '#555');
+    // Revenue Bridge: cohort categories follow the *displayed* period boundaries.
+    // All cells come from the same monthly ledger, so A + B + C = recognized revenue
+    // in year, quarter and month columns without relabeling/summing monthly cohorts.
+    const revenueSection = title =>
+      `<div style="grid-column:1/-1;background:#f7f7f7;border-top:0.5px solid #e0e0e0;
+         padding:0.4rem 0.5rem;font-size:11px;font-weight:600;color:#444;margin-top:5px;">${title}</div>`;
+    const revenueRow = (title, key, {bold=false, color='#555'}={}) => {
+      html += label(title, true, bold);
+      for (let y = 0; y < years; y++)
+        html += yearQuarterCells(y, key, 1, bold, color, bold?'#fafafa':'white');
+    };
 
-    html += label('Revenue · new, earlier periods', true);
-    for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'earlierNewNetRevenue', 1, false, '#555');
+    html += revenueSection('A. Existing Base – Start of Year');
+    revenueRow('Base Revenue', 'originalBaseRevenue');
+    revenueRow('− Churn impact', 'originalChurnRevenueImpact', {color:'#E24B4A'});
+    revenueRow('+ Expansion impact', 'originalExpansionRevenueImpact', {color:'#3B6D11'});
+    revenueRow('Net Revenue – Original Base', 'originalNetRevenue', {bold:true});
 
-    html += label('Revenue · new, current period', true);
-    for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'currentNewNetRevenue', 1, false, '#555');
+    html += revenueSection('B. New Customers – Earlier Periods');
+    revenueRow('Revenue from prior new cohorts', 'earlierNewBaseRevenue');
+    revenueRow('− Churn impact', 'earlierNewChurnRevenueImpact', {color:'#E24B4A'});
+    revenueRow('+ Expansion impact', 'earlierNewExpansionRevenueImpact', {color:'#3B6D11'});
+    revenueRow('Net Revenue – Earlier Cohorts', 'earlierNewNetRevenue', {bold:true});
 
-    html += label('Total recognized revenue', false, true);
+    html += revenueSection('C. New Customers – Current Period');
+    revenueRow('Recognized New Revenue', 'currentNewNetRevenue', {bold:true});
+
+    html += divider();
+    html += label('Total Recognized Revenue', false, true);
     for (let y = 0; y < years; y++) html += yearRevenueCells(y);
 
     html += label('Realized ACV', false, true);
