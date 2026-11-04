@@ -224,3 +224,78 @@ export function buildRevenueBridge(monthly, view = "quarter") {
   }
   return output;
 }
+
+/**
+ * Full monthly SaaS plan. Budget level changes input assumptions; view level
+ * only re-groups the SAME saved monthly cohort ledger.
+ *
+ * phasePercent/phaseByPeriod are only applicable to year/quarter budgets.
+ * For monthly planning, a new invoice always yields full month's MRR.
+ * For quarter/year, phase acts by modifying auto first-invoice month weights,
+ * never by discounting recognized revenue or imposing fictitious delays.
+ */
+export function forecastSaaS(input) {
+  const months=finite(input.months,"months",1);
+  if(!Number.isInteger(months)||months>120) throw new RangeError("months must be an integer from 1 to 120");
+  const granularity=input.granularity||"month";
+  const width=periodMonths(granularity);
+  const acv=finite(input.acv,"acv",Number.EPSILON);
+  const openingARR=finite(input.openingARR,"openingARR");
+  const targetARR=finite(input.targetARR,"targetARR");
+  const annualChurn=finite(input.annualChurn,"annualChurn");
+  const annualExpansionComp=finite(input.annualExpansionComp,"annualExpansionComp");
+  const grossMargin=finite(input.grossMargin,"grossMargin");
+  if(annualChurn>=1||grossMargin>1||1-annualChurn+annualExpansionComp<=0)
+    throw new RangeError("Churn, NRR or margin outside valid range");
+  const collectionLagMonths=finite(input.collectionLagMonths??0,"collectionLagMonths");
+  if(!Number.isInteger(collectionLagMonths)||collectionLagMonths>12)
+    throw new RangeError("Collection lag must be whole months from 0 to 12");
+  const openingCash=finite(input.openingCash??0,"openingCash",-1e15);
+  const otherOpexMonthly=finite(input.otherOpexMonthly??0,"otherOpexMonthly");
+  const yearsCount=Math.ceil(months/12);
+  const {weights,phase,periodTotals}=firstInvoiceWeights({...input,months,granularity});
+  const nrrAnnual=1-annualChurn+annualExpansionComp;
+  const factor=nrrAnnual/(1-annualChurn);
+  const newACV=Array.from({length:months},(_,m)=>
+    acv*Math.pow(factor,Math.floor(m/12)+(input.priceNewOnExpansion?1:0)));
+  let newCustomersNeeded;
+  let monthNewARR;
+  if(input.newARRByPeriod != null) {
+    monthNewARR=weights.map((weight,m)=>{
+      const p=Math.floor(m/width);
+      const denominator=periodTotals[p];
+      return denominator>0?(weight/denominator)*input.newARRByPeriod[p]:0;
+    });
+    newCustomersNeeded=sum(monthNewARR.map((arr,m)=>arr/newACV[m]));
+  } else {
+    const zeros=Array(months).fill(0);
+    const baseline=makeARRRows({months,openingARR,acv,annualChurn,annualExpansionComp,granularity},zeros).at(-1).endARR;
+    const unitARR=weights.map((w,m)=>w*newACV[m]);
+    const withOne=makeARRRows({months,openingARR,acv,annualChurn,annualExpansionComp,granularity},unitARR).at(-1).endARR;
+    const endingContribution=withOne-baseline;
+    newCustomersNeeded=targetARR>baseline?
+      Math.ceil((targetARR-baseline)/endingContribution-1e-10):0;
+    if(!Number.isSafeInteger(newCustomersNeeded)||newCustomersNeeded>1e8)throw new RangeError("Target requires too many customers");
+    monthNewARR=unitARR.map(v=>v*newCustomersNeeded);
+  }
+  const monthly=makeARRRows({months,openingARR,acv,annualChurn,annualExpansionComp,granularity},monthNewARR);
+  monthly.forEach((m,i)=>{
+    m.newACV=newACV[i];
+    m.newCustomers=m.newARR/newACV[i];
+    m.signedMRR=m.newARR/12;
+    m.closingMRR=m.endARR/12;
+    m.budgetPeriod=monthToPeriod(i,granularity);
+    m.effectivePeriodPhasing=phase[m.budgetPeriod];
+  });
+  const annualCustomers=Array.from({length:yearsCount},(_,y)=>
+    sum(monthly.slice(12*y,Math.min(months,12*(y+1))).map(m=>m.newCustomers)));
+  const annualCAC=Array.from({length:yearsCount},(_,y)=>finite(input.cacByYear?.[y]??0,"CAC"));
+  const smAllocation=Array.from({length:yearsCount},(_,y)=>finite(input.smBudgetPercentByYear?.[y]??100,"S&M allocation"));
+  const annualSM=annualCustomers.map((count,y)=>count*annualCAC[y]*smAllocation[y]/100);
+  const quarterSM=Array.from({length:yearsCount},(_,y)=>{
+    const active=Math.ceil(Math.min(12,months-12*y)/3);
+    const shares=(input.quarterSMSharesByYear?.[y]??Array(active).fill(100/active)).slice(0,active);
+    if(shares.length!==active||shares.some(v=>!Number.isFinite(v)||v<0)||!near(sum(shares),100,1e-10))
+      throw new RangeError("S&M quarter shares for Year "+(y+1)+" must total 100%");
+    return shares.map(s=>annualSM[y]*s/100);
+  });
