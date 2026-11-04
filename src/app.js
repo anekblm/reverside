@@ -2,7 +2,6 @@ import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cac
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
 import { forecastSaaS } from "./engine/monthly-plan.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
-import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
 
 
@@ -104,7 +103,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     const cacRatios = { Mice: 0.20, Rabbits: 0.25, Deer: 0.30, Elephants: 0.35, Whales: 0.40 };
     const benchPayback = paybackBenchmarks[state.animal] || 12;
     const benchCacRatio = cacRatios[state.animal] || 0.25;
-    const grossMarginForBench = state.grossMargin ?? 0.80;
+    const grossMarginForBench = state.grossMargin || 0.80;
 
     const dynamicBenchLTV = Math.round(annualGrossProfitLtv(bench.acv, grossMarginForBench, bench.churn));
     // Use same ratio logic as Updated Metrics for consistency
@@ -641,10 +640,6 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
   let plQtrScenario = 'EVEN'; // Quarter signing distribution scenario
-  let planBudgetGranularity = 'quarter';
-  let planViewGranularity = 'quarter';
-  let planPhasePercent = null; // null means implied by first-invoice month distribution
-  let manualPeriodARR = null; // null = solve to target; otherwise explicit ARR by budget period
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -656,12 +651,11 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     selectedStrategy = null;
     yearAllocs = {};
     quarterSMShares = {};
-    manualPeriodARR = null;
     document.getElementById('budgetSummarySection').style.display = 'none';
     populateStrategyCards();
     initPLSliders();
     // Init yearSplit with linear distribution so S&M is spread evenly from the start
-    const years = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years = Math.max(1, Math.round(state.timeframe / 12));
     yearSplit = [];
     const base = Math.floor(100 / years);
     for (let y = 0; y < years; y++) {
@@ -723,7 +717,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     }
 
     // Timeframe warning
-    const years = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years = Math.max(1, Math.round(state.timeframe / 12));
     const minMonths = growthMaxMonths[state.animal] || 18;
     const warningEl = document.getElementById('strategyWarning');
 
@@ -786,7 +780,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
   }
 
   function initYearSplit() {
-    const years = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years = Math.max(1, Math.round(state.timeframe / 12));
     yearSplit = [];
 
     if (selectedStrategy === 'growth' && years > 1) {
@@ -819,10 +813,10 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
   function updateStep3Display() {
     // P&L always renders. Strategy-dependent sections check selectedStrategy themselves.
     const fmt = currencyFormats[state.currency];
-    const years = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years = Math.max(1, Math.round(state.timeframe / 12));
     // Always render P&L first (sets state.newCustomersNeeded dynamically)
     const fmt_ = currencyFormats[state.currency];
-    const years_ = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years_ = Math.max(1, Math.round(state.timeframe / 12));
     buildPL(years_, 0, fmt_);  // budgetCAC=0 for PL-only pass, strategy sections below
 
     if (!selectedStrategy) return;
@@ -1067,7 +1061,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
   // Initialize P&L sliders from state when entering step 3
   function initPLSliders() {
-    const churnPct = Math.round((state.churn ?? 0.25) * 100);
+    const churnPct = Math.round((state.churn || 0.25) * 100);
 
     // Derive default expansion from Step 2's share of revenue from new customers
     // Back-calculate: existing base × NRR^years must reach (1 - newCustPct%) of target
@@ -1075,9 +1069,9 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     // expansion = NRR - GRR
     // state.newCustomersPercent is stored as 0-1 decimal
     const newCustFrac = (state.newCustomersPercent !== undefined) ? state.newCustomersPercent : 0.5;
-    const churn_ = state.churn ?? 0.25;
+    const churn_ = state.churn || 0.25;
     const grr_ = Math.max(0.001, 1 - churn_);
-    const years_ = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years_ = Math.max(1, Math.round(state.timeframe / 12));
 
     let expPct;
     if (newCustFrac >= 1.0) {
@@ -1198,7 +1192,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
   // Toggle a cost row on/off — redistribute proportionally when disabled
   function toggleAllocRow(allocKey, isChecked) {
-    const years = Math.max(1, Math.ceil(state.timeframe / 12));
+    const years = Math.max(1, Math.round(state.timeframe / 12));
     const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
     const allKeys = ['sales', 'salesact', 'mkt'];
 
@@ -1365,132 +1359,9 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
   // Revenue timing lives in engine/monthly-plan.js (no second phasing model).
   function setQtrScenario(s) {
     plQtrScenario = s;
-    manualPeriodARR = null; // Presets repopulate the budget; users can then override periods.
     const select = document.getElementById('signingPattern');
     if (select) select.value = s;
     updateStep3Display();
-  }
-
-  function onBudgetGranularityChange(value) {
-    if (!['year', 'quarter', 'month'].includes(value)) return;
-    planBudgetGranularity = value;
-    planViewGranularity = value;
-    planPhasePercent = null; // meaning changes with the period; never carry over silently
-    manualPeriodARR = null;
-    updateStep3Display();
-  }
-
-  function onViewGranularityChange(value) {
-    if (!['year', 'quarter', 'month'].includes(value)) return;
-    planViewGranularity = value;
-    const selector = document.getElementById('viewGranularity');
-    if (selector) selector.value = value;
-    const model = window._latestMonthlyPlan;
-    const table = document.getElementById('revenueMatrix');
-    if (model && table) table.innerHTML = renderRevenueMatrix(model, state.currency, value);
-  }
-
-  function onRevenuePhasingChange(raw) {
-    const input = document.getElementById('revenuePhasingPct');
-    const warning = document.getElementById('budgetModelWarning');
-    if (planBudgetGranularity === 'month') return;
-    const value = raw.trim() === '' ? null : Number(raw);
-    const width = planBudgetGranularity === 'year' ? 12 : 3;
-    const remaining = state.timeframe % width;
-    const shortest = remaining || width;
-    const minimum = 100 / shortest;
-    if (value !== null && (!Number.isFinite(value) || value < minimum - 0.0000001 || value > 100)) {
-      if (warning) {
-        warning.style.display = 'block';
-        warning.textContent = 'With full MRR in the first invoice month, phasing must be between '
-          + minimum.toFixed(2) + '% and 100% for every budget period.';
-      }
-      if (input) input.value = planPhasePercent ?? '';
-      return;
-    }
-    planPhasePercent = value;
-    if (warning) warning.style.display = 'none';
-    updateStep3Display();
-  }
-
-  function onManualNewARRPeriodChange(index, raw) {
-    const value = Number(raw);
-    if (!Number.isFinite(value) || value < 0) {
-      const warning = document.getElementById('budgetModelWarning');
-      if (warning) {
-        warning.style.display = 'block';
-        warning.textContent = 'New ARR must be a non-negative amount.';
-      }
-      return;
-    }
-    if (!manualPeriodARR) {
-      const width = planBudgetGranularity === 'year' ? 12 : planBudgetGranularity === 'quarter' ? 3 : 1;
-      const model = window._latestMonthlyPlan;
-      manualPeriodARR = Array.from({length:Math.ceil(state.timeframe / width)}, (_, p) =>
-        model.months.slice(p*width, Math.min(state.timeframe,(p+1)*width)).reduce((s,m)=>s+m.newARR,0));
-    }
-    manualPeriodARR[index] = value;
-    updateStep3Display();
-  }
-
-  function resetNewARRPlan() {
-    manualPeriodARR = null;
-    updateStep3Display();
-  }
-
-  function renderPlanningControls(model) {
-    const budget = document.getElementById('budgetGranularity');
-    const view = document.getElementById('viewGranularity');
-    const pattern = document.getElementById('signingPattern');
-    const phaseControl = document.getElementById('phasingControl');
-    const phaseInput = document.getElementById('revenuePhasingPct');
-    const phaseNote = document.getElementById('budgetPhasingNote');
-    const periodControls = document.getElementById('periodARRControls');
-    const table = document.getElementById('revenueMatrix');
-    if (!budget || !view || !periodControls || !table) return;
-    budget.value = planBudgetGranularity;
-    view.value = planViewGranularity;
-    if (pattern) pattern.value = plQtrScenario;
-    if (phaseControl) phaseControl.style.display = planBudgetGranularity === 'month' ? 'none' : 'flex';
-    const width = planBudgetGranularity === 'year' ? 12 : planBudgetGranularity === 'quarter' ? 3 : 1;
-    if (phaseInput) {
-      const shortest = (state.timeframe % width) || width;
-      phaseInput.min = (100 / shortest).toFixed(6);
-      phaseInput.max = 100;
-      phaseInput.value = planPhasePercent ?? '';
-      phaseInput.placeholder = 'Auto';
-    }
-    if (phaseNote) {
-      const actual = model.periodPhasing.map(n => n.toFixed(1) + '%').join(' · ');
-      phaseNote.textContent = planBudgetGranularity === 'month'
-        ? 'Monthly budget: the first invoice month earns the full signed MRR. No monthly phasing multiplier.'
-        : 'Phasing is applied to ' + planBudgetGranularity + ' budget periods only. Effective realization: '
-          + actual + '. Monthly figures are generated to reconcile with the budget periods. '
-          + 'A value below the earliest possible full-month invoice timing is rejected.';
-    }
-    const cc=state.currency || 'EUR';
-    const format=n=>new Intl.NumberFormat('sv-SE',{style:'currency',currency:cc,maximumFractionDigits:2}).format(n);
-    const periodCount=Math.ceil(state.timeframe / width);
-    const totals=Array.from({length:periodCount},(_,p)=>model.months
-      .slice(p*width,Math.min(state.timeframe,(p+1)*width)).reduce((s,m)=>s+m.newARR,0));
-    const label=p=>planBudgetGranularity === 'year'?'Year '+(p+1)
-      :planBudgetGranularity === 'quarter'?'Y'+(Math.floor(p/4)+1)+' Q'+(p%4+1):'M'+(p+1);
-    periodControls.innerHTML = totals.map((n,p)=>'<label style="display:flex;flex-direction:column;gap:4px;min-width:95px;">'
-      + '<span style="font-size:11px;color:#666;">'+label(p)+'</span>'
-      + '<input aria-label="New ARR '+label(p)+'" type="number" min="0" step="any" value="'+n.toFixed(2)
-      + '" onchange="onManualNewARRPeriodChange('+p+',this.value)" '
-      + 'style="width:110px;border:1px solid #ddd;border-radius:5px;padding:7px;font-size:12px;" />'
-      + '</label>').join('');
-    const warning = document.getElementById('budgetModelWarning');
-    if (warning) {
-      warning.style.display = manualPeriodARR ? 'block' : 'none';
-      warning.style.color = '#785d27';
-      warning.textContent = manualPeriodARR
-        ? 'Custom New ARR amounts: closing ARR is now an output, not forced to the Step 2 target. '
-          + 'Closing ARR: '+format(model.summary.endingARR)+' · Step 2 target: '+format(state.targetRevenue)+'.'
-        : '';
-    }
-    table.innerHTML = renderRevenueMatrix(model,cc,planViewGranularity);
   }
 
   function quarterSharesForYear(year) {
@@ -1541,8 +1412,8 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     if (!el) return;
 
     const acv         = state.acv || 0;
-    const grossMargin = state.grossMargin ?? 0.80;
-    const churnRate   = plChurn !== null ? plChurn : (state.churn ?? 0.25);
+    const grossMargin = state.grossMargin || 0.80;
+    const churnRate   = plChurn !== null ? plChurn : (state.churn || 0.25);
     const expRate     = plExpansion !== null ? plExpansion : churnRate; // default NRR=100%
     const nrr         = 1 - churnRate + expRate; // resulting NRR
 
@@ -1567,9 +1438,6 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
       openingARR: state.revenue, acv, targetARR: state.targetRevenue,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
       yearShares: yearSplit, signingPattern: plQtrScenario,
-      granularity: planBudgetGranularity,
-      phasePercent: planPhasePercent,
-      newARRByPeriod: manualPeriodARR,
       priceNewOnExpansion: plUseExpACV,
       cacByYear: Array.from({ length: years }, (_, y) => selectedStrategy ? getCACForYear(y, years) : 0),
       smBudgetPercentByYear,
@@ -1837,7 +1705,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     const totSM2 = rows.reduce((s,r)=>s+r.smSpend,0);
     const totOP  = rows.reduce((s,r)=>s+r.opResult,0);
 
-    html += label('Recognized Revenue <span style="font-size:9px;font-weight:400;color:#bbb;" title="Sum of earned monthly MRR from all active cohorts.">ⓘ</span>', false, true);
+    html += label('Revenue — phased <span style="font-size:9px;font-weight:400;color:#bbb;" title="Phased revenue per quarter uses cohort logic: 50% in signing Q, 100% in subsequent Qs.">ⓘ</span>', false, true);
     for (let y = 0; y < years; y++) {
       html += yearRevenueCells(y);
     }
@@ -1922,7 +1790,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     }
 
     html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
-      + 'ⓘ First-invoice month earns a full month of MRR. Budget-level phasing only adjusts first-invoice timing. '
+      + 'ⓘ Signing pattern alone controls revenue timing; newly signed customer revenue starts mid-month. '
       + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
 
     // ── BREAK-EVEN ──
@@ -2038,7 +1906,6 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
     el.innerHTML = html;
     renderMonthlyCashControls(model, fmt);
-    renderPlanningControls(model);
   }
 
 
@@ -2104,10 +1971,5 @@ Object.assign(window, {
   setQtrScenario,
   togglePlQtr,
   updateCashAssumptions,
-  updateQuarterSM,
-  onBudgetGranularityChange,
-  onViewGranularityChange,
-  onRevenuePhasingChange,
-  onManualNewARRPeriodChange,
-  resetNewARRPlan
+  updateQuarterSM
 });
