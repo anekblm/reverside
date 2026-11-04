@@ -84,17 +84,29 @@ Extract state, calculations and UI into modules without changing existing output
 
 Do not merge this branch without financial and browser acceptance tests.
 
-## Separate mathematical prototype (November 2026)
+## Existing forecast matrix – limited cohort-engine integration (November 2026)
 
-The approved UI and existing application wiring are deliberately unchanged.
-`src/app.js`, `index.html`, `src/features/plan/cash-panel.js`, and
-`src/engine/monthly-plan.js` match the previously approved version.
+The existing HTML, CSS, section order and year-to-quarter collapse/expand
+behavior remain unchanged. The original cash panel is also retained.
+Only `src/app.js` has been changed to feed the approved forecast matrix from
+`src/engine/cohort-budget.js` rather than the legacy monthly solver.
+The original `src/engine/monthly-plan.js` and its tests are preserved.
 
-`src/engine/cohort-budget.js` is an **isolated experimental calculation
-engine**, not connected to the live PLAN interface. Its corresponding tests
-are in `tests/cohort-budget.test.mjs`; the proposed rules are documented in
-`FINANCIAL_MODEL.md`. The original deployed UI retains its old calculation
-engine until an explicit migration plan is approved.
+Within the existing ARR & contribution matrix we have added only these rows:
+`New MRR · first invoice`, `Revenue · existing base (start of year)`,
+`Revenue · new, earlier periods`, and `Revenue · new, current period`.
+The existing total revenue row is now the reconciled sum of the three groups.
+Original visible customer counts, churned customers and ACV annotations use
+cohort-derived values instead of a separate customer-count approximation.
 
-Do not alter navigation, section structure, year/quarter expansion behavior,
-customer-count annotations, or ACV displays without an explicit request.
+This is a **controlled partial integration**: the matrix currently runs
+**quarterly input granularity** as its default; it does not expose user
+controls for annual/monthly input granularity, manual period ARR overrides,
+or custom quarterly revenue phasing. Do not add new sections or redesign
+controls without explicit product agreement. Month-level planning, year-level
+planning, TRACK baseline persistence and annual prepaid cash are not yet in
+the live UI.
+
+The exact financial rules are described in `FINANCIAL_MODEL.md`. Both the
+old engine's tests and the new cohort engine's tests are retained. Do not
+merge this branch into production before full browser and financial acceptance.
