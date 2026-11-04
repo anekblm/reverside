@@ -1,6 +1,6 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
-import { forecastSaaS } from "./engine/monthly-plan.js";
+import { forecastSaaS } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
@@ -1412,8 +1412,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!el) return;
 
     const acv         = state.acv || 0;
-    const grossMargin = state.grossMargin || 0.80;
-    const churnRate   = plChurn !== null ? plChurn : (state.churn || 0.25);
+    const grossMargin = state.grossMargin ?? 0.80;
+    const churnRate   = plChurn !== null ? plChurn : (state.churn ?? 0.25);
     const expRate     = plExpansion !== null ? plExpansion : churnRate; // default NRR=100%
     const nrr         = 1 - churnRate + expRate; // resulting NRR
 
@@ -1435,7 +1435,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     });
     const model = forecastSaaS({
       months: state.timeframe,
-      openingARR: state.revenue, acv, targetARR: state.targetRevenue,
+      openingARR: state.revenue, openingCustomers: state.customers,
+      acv, targetARR: state.targetRevenue, granularity: "quarter",
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
       yearShares: yearSplit, signingPattern: plQtrScenario,
       priceNewOnExpansion: plUseExpACV,
@@ -1618,19 +1619,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
 
     // ── ARR SECTION ──
-    // Pre-calculate cumulative customer counts per year
-    const custAtStart = [state.customers];
-    for (let y = 1; y < years; y++) {
-      const prev = custAtStart[y-1];
-      const churned = Math.round(prev * (plChurn || 0));
-      custAtStart.push(prev - churned + newCustPerYear[y-1]);
-    }
-    const custAtEnd = custAtStart.map((c, y) => c - Math.round(c * (plChurn||0)) + newCustPerYear[y]);
-
-    // ACV at start of each year — use yearACVentry (single source of truth)
-    const acvAtStart = yearACVentry.slice(0, years);
-    // Expanded ACV — use yearACVexpanded (single source of truth, same formula)
-    const acvExpanded = yearACVexpanded;
+    // Customer counts and ACV are sourced from the SAME monthly cohort bridge as ARR.
+    const custAtStart = model.years.map(r => r.startCustomers);
+    const custAtEnd = model.years.map(r => r.endCustomers);
+    const acvAtStart = model.years.map(r => r.startACV);
+    const acvExpanded = model.years.map(r => r.retainedBaseACV);
 
     // Realized ACV per year = phased revenue / total customers at year end
     const realizedACV = rows.map((r, y) =>
@@ -1645,7 +1638,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     html += label('− Churn', true);
     for (let y = 0; y < years; y++) {
-      const churnedCust = Math.round(custAtStart[y] * (plChurn || 0));
+      const churnedCust = Math.round(model.years[y].churnCustomers);
       html += yearChurnCells(y, '−' + churnedCust + ' cust.');
     }
 
@@ -1790,7 +1783,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
 
     html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
-      + 'ⓘ Signing pattern alone controls revenue timing; newly signed customer revenue starts mid-month. '
+      + 'ⓘ New customers enter ARR and generate full MRR from their first invoicing month. '
       + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
 
     // ── BREAK-EVEN ──
