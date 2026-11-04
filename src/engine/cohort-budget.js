@@ -299,3 +299,51 @@ export function forecastSaaS(input) {
       throw new RangeError("S&M quarter shares for Year "+(y+1)+" must total 100%");
     return shares.map(s=>annualSM[y]*s/100);
   });
+
+  let cash=openingCash;
+  monthly.forEach((m,i)=>{
+    const first=12*m.year+3*m.quarter;
+    const active=Math.min(3,months-first);
+    const smPaid=quarterSM[m.year][m.quarter]/active;
+    const cashCollected=i>=collectionLagMonths?monthly[i-collectionLagMonths].recognizedRevenue:0;
+    const cogsPaid=m.recognizedRevenue*(1-grossMargin);
+    const grossProfit=m.recognizedRevenue*grossMargin;
+    const cashNeutralSMCapacity=cashCollected-cogsPaid-otherOpexMonthly;
+    const opCF=cashNeutralSMCapacity-smPaid;
+    const startCash=cash;
+    cash+=opCF;
+    Object.assign(m,{smPaid,cashCollected,cogsPaid,grossProfit,
+      operatingContribution:grossProfit-smPaid,
+      otherOpexPaid:otherOpexMonthly,cashNeutralSMCapacity,opCF,startCash,endCash:cash});
+  });
+  const quarters=buildRevenueBridge(monthly,"quarter");
+  const years=buildRevenueBridge(monthly,"year");
+  const total=key=>sum(monthly.map(m=>m[key]));
+  const minimumCash=Math.min(openingCash,...monthly.map(m=>m.endCash));
+  const summary={
+    newCustomersNeeded,endingARR:monthly.at(-1).endARR,
+    endingCash:cash,minimumCash,additionalLiquidityRequired:Math.max(0,-minimumCash),
+    totalRecognizedRevenue:total("recognizedRevenue"),
+    totalCashCollected:total("cashCollected"),totalSM:total("smPaid"),
+    totalOpCF:total("opCF"),cashNeutralSMCapacity:total("cashNeutralSMCapacity"),
+    monthsWithNegativeOpCF:monthly.filter(m=>m.opCF<0).length,
+    annualizedNewARR:total("newARR"),
+    targetGap:monthly.at(-1).endARR-targetARR,
+  };
+  return{
+    months:monthly,quarters,years,summary,
+    annualCustomers,annualSM,quarterSM,
+    signingPattern:input.signingPattern||"EVEN",
+    granularity,periodPhasing:phase,periodCount:periodTotals.length,
+    manualBudget:input.newARRByPeriod!=null,
+    assumptions:{
+      subscription:"Monthly SaaS: customer starts at first invoicing month.",
+      acquisition:"Signed MRR and recognized MRR coincide in first invoice month.",
+      phasing:"Only year/quarter plan: first-invoice timing changes period recognition; no revenue discount.",
+      churn:"New cohorts start churn/expansion in following BUDGET period.",
+      costs:"COGS paid in revenue month; other operating outflows entered separately.",
+      collections:"Monthly invoices, whole-month collection delay; no opening receivables.",
+      cash:"No annual upfront billing, financing, tax or capex in this PLAN version.",
+    },
+  };
+}
