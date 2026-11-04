@@ -640,6 +640,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
   let plQtrScenario = 'EVEN'; // Quarter signing distribution scenario
+  let plQuarterPhasing = null; // null = EVEN within-quarter first-invoice timing (~66.7%)
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -1108,6 +1109,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
+  function onQuarterPhasingChange(value) {
+    const fraction = Number(value);
+    if (!Number.isFinite(fraction) || fraction < 100/3 - 1e-7 || fraction > 100) return;
+    plQuarterPhasing = fraction;
+    const output = document.getElementById('plQuarterPhasingDisplay');
+    if (output) output.textContent = fraction.toFixed(1) + '%';
+    updateStep3Display();
+  }
+
   function onPLSlider() {
     const slC = document.getElementById('plChurnSlider');
     const slE = document.getElementById('plExpansionSlider');
@@ -1136,7 +1146,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (nn) {
       nn.textContent = nrr > 100 ? '— existing base grows' : nrr === 100 ? '— existing base flat (default)' : '— existing base shrinks';
     }
-    if (rn) rn.textContent = 'Revenue timing follows monthly customer signings';
+    if (rn) rn.textContent = 'New MRR starts in the first invoice month';
 
     // Expansion rate per retained customer note under NRR
     const expNoteEl = document.getElementById('plExpansionRateNote');
@@ -1165,6 +1175,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function resetPL() {
+    plQuarterPhasing = null;
+    const slider = document.getElementById('plQuarterPhasingSlider');
+    if (slider) slider.value = '66.7';
     initPLSliders();
     updateStep3Display();
   }
@@ -1437,6 +1450,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       months: state.timeframe,
       openingARR: state.revenue, openingCustomers: state.customers,
       acv, targetARR: state.targetRevenue, granularity: "quarter",
+      phasePercent: plQuarterPhasing,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
       yearShares: yearSplit, signingPattern: plQtrScenario,
       priceNewOnExpansion: plUseExpACV,
@@ -1448,6 +1462,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       collectionLagMonths: Number(document.getElementById('cashCollectionLag')?.value || 0),
     });
     window._latestMonthlyPlan = model;
+    const phaseOutput = document.getElementById('plQuarterPhasingDisplay');
+    if (phaseOutput) phaseOutput.textContent = (plQuarterPhasing ?? model.periodPhasing[0]).toFixed(1) + '%';
     const newCustPerYear = model.annualCustomers;
     state.newCustomersNeeded = model.summary.newCustomersNeeded;
     let cumulativeResult = 0, breakEvenYear = null;
@@ -1978,6 +1994,7 @@ Object.assign(window, {
   goToStep3,
   resetPL,
   onPLSlider,
+  onQuarterPhasingChange,
   onPLCheckbox,
   selectStrategy,
   onCustomCACChange,
