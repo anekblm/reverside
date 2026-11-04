@@ -156,3 +156,71 @@ function makeARRRows(input, monthlySignedARR) {
   }
   return rows;
 }
+
+/**
+ * Build a bridge for each displayed period, reclassifying vintages based on
+ * the DISPLAYED period (not the source budget's granularity).
+ * "Original" always means already present at that calendar year's start.
+ */
+export function buildRevenueBridge(monthly, view = "quarter") {
+  const width=periodMonths(view);
+  const output=[];
+  for(let start=0;start<monthly.length;start+=width) {
+    const slice=monthly.slice(start,start+width), first=slice[0],last=slice.at(-1);
+    const yearStart=Math.floor(start/12)*12;
+    const metrics={
+      originalBaseRevenue:0,originalChurnRevenueImpact:0,originalExpansionRevenueImpact:0,
+      earlierNewBaseRevenue:0,earlierNewChurnRevenueImpact:0,earlierNewExpansionRevenueImpact:0,
+      currentNewRevenue:0,currentNewChurnRevenueImpact:0,currentNewExpansionRevenueImpact:0,
+    };
+    for(const month of slice)for(const c of month.cohortFlows) {
+      const vintage=c.firstInvoiceMonth;
+      const bucket=vintage<yearStart?"original":vintage<start?"earlier":"current";
+      if(bucket==="original") {
+        metrics.originalBaseRevenue+=c.startARR/12;
+        metrics.originalChurnRevenueImpact-=c.churnARR/12;
+        metrics.originalExpansionRevenueImpact+=c.expansionARR/12;
+      } else if(bucket==="earlier") {
+        metrics.earlierNewBaseRevenue+=c.startARR/12;
+        metrics.earlierNewChurnRevenueImpact-=c.churnARR/12;
+        metrics.earlierNewExpansionRevenueImpact+=c.expansionARR/12;
+      } else {
+        metrics.currentNewRevenue+=c.recognizedRevenue;
+        metrics.currentNewChurnRevenueImpact-=c.churnARR/12;
+        metrics.currentNewExpansionRevenueImpact+=c.expansionARR/12;
+      }
+    }
+    const originalNet=metrics.originalBaseRevenue+
+      metrics.originalChurnRevenueImpact+metrics.originalExpansionRevenueImpact;
+    const earlierNet=metrics.earlierNewBaseRevenue+
+      metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact;
+    const currentNet=metrics.currentNewRevenue;
+    const flow=k=>sum(slice.map(m=>m[k]));
+    const result={
+      startMonth:start+1,endMonth:start+slice.length,
+      year:Math.floor(start/12),quarter:Math.floor((start%12)/3),
+      monthsInPeriod:slice.length,startARR:first.startARR,endARR:last.endARR,
+      startCash:first.startCash,endCash:last.endCash,
+      newARR:flow("newARR"),churnARR:flow("churnARR"),expansionARR:flow("expansionARR"),
+      newCustomers:flow("newCustomers"),
+      recognizedRevenue:flow("recognizedRevenue"),
+      existingRevenue:originalNet,newRevenue:earlierNet+currentNet,
+      originalNetRevenue:originalNet,earlierNewNetRevenue:earlierNet,currentNewNetRevenue:currentNet,
+      ...metrics,
+      signedMRR:flow("newARR")/12,closingMRR:last.endARR/12,
+      cashCollected:flow("cashCollected"),cogsPaid:flow("cogsPaid"),
+      smPaid:flow("smPaid"),otherOpexPaid:flow("otherOpexPaid"),
+      grossProfit:flow("grossProfit"),
+      operatingContribution:flow("operatingContribution"),
+      cashNeutralSMCapacity:flow("cashNeutralSMCapacity"),opCF:flow("opCF"),
+    };
+    if(!near(originalNet+earlierNet+currentNet,result.recognizedRevenue)) {
+      throw new Error("Revenue bridge does not reconcile for months "+(start+1)+"-"+(start+slice.length));
+    }
+    if(!near(result.startARR-result.churnARR+result.expansionARR+result.newARR,result.endARR)) {
+      throw new Error("ARR bridge does not reconcile for months "+(start+1)+"-"+(start+slice.length));
+    }
+    output.push(result);
+  }
+  return output;
+}
