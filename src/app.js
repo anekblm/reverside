@@ -1515,6 +1515,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       while (found.length < 4) found.push({
         startARR: endARR, endARR, churnARR: 0, expansionARR: 0,
         newARR: 0, recognizedRevenue: 0, grossProfit: 0,
+        originalNetRevenue: 0, earlierNewNetRevenue: 0, currentNewNetRevenue: 0,
+        newCustomers: 0, churnCustomers: 0,
         smPaid: 0, operatingContribution: 0
       });
       return found;
@@ -1545,7 +1547,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const yearChurnCells = (y, note='') => {
       if (!window._qtr || !window._qtr[y]) return cell(-rows[y].churnAmt, false, '#E24B4A', 'white', note);
       const qs = _qtrStock[y];
-      return qs.map(q => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#E24B4A;">${fmt(-q.churn)}</div>`).join('')
+      return qs.map((q,i) => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#E24B4A;">${fmt(-q.churn)}<div style="font-size:9px;color:#aaa;">−${Math.round(modelQuarterByYear[y][i].churnCustomers || 0)} cust.</div></div>`).join('')
         + ycell(-rows[y].churnAmt, false, '#E24B4A', 'white', note);
     };
 
@@ -1559,7 +1561,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const yearNewARRcells = (y, note='') => {
       if (!window._qtr || !window._qtr[y]) return cell(rows[y].newCustARR, false, '#555', 'white', note);
       const qs = _qtrStock[y];
-      return qs.map(q => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(q.newARR)}</div>`).join('')
+      return qs.map((q,i) => `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#555;">${fmt(q.newARR)}<div style="font-size:9px;color:#aaa;">${Math.round(modelQuarterByYear[y][i].newCustomers || 0)} cust.</div></div>`).join('')
         + ycell(rows[y].newCustARR, false, '#555', 'white', note);
     };
 
@@ -1654,7 +1656,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     for (let y = 0; y < years; y++) {
       const rampPct = Math.round(getArrPhase(y) * 100);
       const newACVstr = fmt(Math.round(rows[y].displayACV));
-      const note = rows[y].newCust + ' cust. · ACV ' + newACVstr + (rampPct < 100 ? ' · ' + rampPct + '% phased' : '');
+      const note = Math.round(rows[y].newCust) + ' cust. · ACV ' + newACVstr;
       html += yearNewARRcells(y, note);
     }
 
