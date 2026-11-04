@@ -496,59 +496,64 @@
             </div>
           </div>
 
-          <!-- Churn and expansion controls; signing cadence determines revenue timing -->
-          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-bottom:1.25rem;">
-            <div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <!-- PLAN assumption strip: existing controls, compact single-row desktop layout. -->
+          <div class="pl-assumptions-grid">
+            <div class="pl-assumption-card">
+              <div class="pl-assumption-heading">
                 <div>
-                  <div style="font-size:11px;font-weight:500;color:#333;">Churn rate</div>
-                  <div style="font-size:10px;color:#999;">% of ARR lost per year</div>
+                  <div class="pl-assumption-name">Churn rate</div>
+                  <div class="pl-assumption-description">% of ARR lost per year</div>
                 </div>
-                <div style="font-size:20px;font-weight:600;color:#E24B4A;" id="plChurnDisplay">—</div>
+                <div class="pl-assumption-value" style="color:#E24B4A;" id="plChurnDisplay">—</div>
               </div>
-              <input type="range" id="plChurnSlider" min="0" max="80" step="1" value="25" style="width:100%;" oninput="onPLSlider()">
+              <input type="range" id="plChurnSlider" min="0" max="80" step="1" value="25"
+                oninput="onPLSlider()" aria-label="Annual ARR churn rate">
             </div>
-            <div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+
+            <div class="pl-assumption-card">
+              <div class="pl-assumption-heading">
                 <div>
-                  <div style="font-size:11px;font-weight:500;color:#333;">Expansion compensation</div>
-                  <div style="font-size:10px;color:#999;">% of ARR offset against churn loss</div>
+                  <div class="pl-assumption-name">Expansion compensation</div>
+                  <div class="pl-assumption-description">% of ARR offset against churn</div>
                 </div>
-                <div style="font-size:20px;font-weight:600;color:#3B6D11;" id="plExpansionDisplay">—</div>
+                <div class="pl-assumption-value" style="color:#3B6D11;" id="plExpansionDisplay">—</div>
               </div>
-              <input type="range" id="plExpansionSlider" min="0" max="80" step="1" value="25" style="width:100%;" oninput="onPLSlider()">
+              <input type="range" id="plExpansionSlider" min="0" max="80" step="1" value="25"
+                oninput="onPLSlider()" aria-label="Annual ARR expansion compensation">
             </div>
-          </div>
 
-          <!-- PLAN: quarter phasing adjusts first-invoice timing, not monthly recognition. -->
-          <div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:0.45rem;">
-              <div>
-                <div style="font-size:11px;font-weight:500;color:#333;">Revenue phasing · quarterly</div>
-                <div style="font-size:10px;color:#777;">When new customers first invoice within the quarter; no monthly phasing</div>
+            <div class="pl-assumption-card">
+              <div class="pl-assumption-heading">
+                <div>
+                  <div class="pl-assumption-name">Resulting NRR</div>
+                  <div class="pl-assumption-description">100% − Churn + Expansion</div>
+                </div>
+                <div class="pl-assumption-value" id="plNRROutcome">—</div>
               </div>
-              <div id="plQuarterPhasingDisplay" style="font-size:18px;font-weight:600;color:#185FA5;">66.7%</div>
+              <div id="plNRRNote" class="pl-assumption-note"></div>
+              <div id="plExpansionRateNote" class="pl-assumption-note" style="display:none;"></div>
             </div>
-            <input type="range" id="plQuarterPhasingSlider" min="33.333333333333336" max="100" step="0.1"
-                   value="66.7" style="width:100%;" oninput="onQuarterPhasingChange(this.value)"
-                   aria-label="Quarterly revenue phasing">
-            <div style="display:flex;justify-content:space-between;color:#888;font-size:10px;margin-top:4px;">
-              <span>33.3% · first invoice in final month</span>
-              <span>100% · first invoice in first month</span>
+
+            <div class="pl-assumption-card">
+              <div class="pl-assumption-heading">
+                <div>
+                  <div class="pl-assumption-name">Revenue phasing · quarterly</div>
+                  <div class="pl-assumption-description">First invoice timing within quarter</div>
+                </div>
+                <div class="pl-assumption-value" style="color:#185FA5;" id="plQuarterPhasingDisplay">66.7%</div>
+              </div>
+              <input type="range" id="plQuarterPhasingSlider"
+                min="33.333333333333336" max="100" step="0.1" value="66.7"
+                oninput="onQuarterPhasingChange(this.value)" aria-label="Quarterly revenue phasing">
+              <div class="pl-phasing-ends">
+                <span title="33.3%: first invoice in final month">33.3% · last month</span>
+                <span title="100%: first invoice in first month">100% · first month</span>
+              </div>
+              <div id="plRampNote" class="pl-assumption-note"></div>
             </div>
           </div>
 
-          <!-- NRR outcome row -->
-          <div style="margin-bottom:1.25rem;padding:0.5rem 0.75rem;background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;">
-            <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;font-size:11px;color:#666;">
-              <div>Resulting NRR: <span style="font-size:14px;font-weight:600;margin-left:4px;" id="plNRROutcome">—</span></div>
-              <div id="plNRRNote" style="font-size:10px;color:#999;"></div>
-              <div style="margin-left:auto;font-size:11px;color:#999;" id="plRampNote"></div>
-            </div>
-            <div id="plExpansionRateNote" style="font-size:10px;margin-top:4px;display:none;"></div>
-          </div>
-
-          <!-- ACV concepts collapsible -->
+                    <!-- ACV concepts collapsible -->
           <div class="collapsible" style="margin-bottom:1rem;">
             <div class="collapsible-header" onclick="toggleCollapsible(this)" style="padding:0.6rem 0.75rem;">
               <div class="collapsible-header-text" style="font-size:12px;">📖 How the four ACV concepts relate</div>
