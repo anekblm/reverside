@@ -1773,8 +1773,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
         const ph = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">select strategy ↓</div>`;
-        if (window._qtr[y]) html += ph + ph + ph + ph + ph;
-        else html += ph;
+        html += eachPeriod(y,()=>ph);
       }
     } else {
       for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'smPaid', -1, false, '#E24B4A');
@@ -1786,8 +1785,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
         const ph = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
-        if (window._qtr[y]) html += ph + ph + ph + ph + ph;
-        else html += ph;
+        html += eachPeriod(y,()=>ph);
       }
     } else {
       for (let y = 0; y < years; y++) {
@@ -1798,16 +1796,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       for (let y = 0; y < years; y++) {
         const v = rows[y].cumResult;
         const ph = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:${v>=0?'#3B6D11':'#E24B4A'};">${fmt(Math.round(v))}</div>`;
-        if (window._qtr[y]) {
-          // Cumulative grows through quarters
-          [1,2,3,4].forEach(q => {
-            const qv = Math.round((y > 0 ? rows[y-1].cumResult : 0) + modelQuarterByYear[y].slice(0,q).reduce((sum,part) => sum + part.operatingContribution, 0));
-            html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.4rem;text-align:right;font-size:10px;color:${qv>=0?'#3B6D11':'#E24B4A'};">${fmt(qv)}</div>`;
-          });
-          html += ph;
-        } else {
-          html += ph;
-        }
+        html += eachPeriod(y,(period,kind)=>{
+          const end = period.endMonth ?? Math.min(state.timeframe,(y+1)*12);
+          const subtotal = model.months.slice(0,end).reduce((sum,m)=>sum+m.operatingContribution,0);
+          const color = subtotal>=0?'#3B6D11':'#E24B4A';
+          return periodCell(subtotal,kind,{color});
+        });
       }
     }
 
