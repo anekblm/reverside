@@ -43,7 +43,12 @@ function phaseFraction(monthWeights) {
  */
 function tiltToPhasing(baseline, percent, name) {
   const length = baseline.length;
-  if (percent == null || length === 1) return baseline.slice();
+  if (percent == null) return baseline.slice();
+  if (length === 1) {
+    if (!near(Number(percent),100,1e-9)) throw new RangeError(
+      name+" must be 100% for a one-month budget period with immediate billing");
+    return baseline.slice();
+  }
   const target = finite(percent, name) / 100;
   const min = 1 / length;
   if (target < min - 1e-10 || target > 1 + 1e-10) {
