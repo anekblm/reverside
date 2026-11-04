@@ -84,11 +84,17 @@ Extract state, calculations and UI into modules without changing existing output
 
 Do not merge this branch without financial and browser acceptance tests.
 
-## Current PLAN rules (November 2026)
+## Separate mathematical prototype (November 2026)
 
-The earlier mid-month revenue implementation was replaced by
-`src/engine/cohort-budget.js` (re-exported by `src/engine/monthly-plan.js`).
-**See [`FINANCIAL_MODEL.md`](FINANCIAL_MODEL.md) for the authoritative specification.**
-The current rule is full MRR recognition in each customer's first invoice month;
-annual and quarterly phasing only reshapes estimated first-invoice months.
-The new ARR/MRR/Revenue Bridge is the primary matrix; legacy analysis is collapsed.
+The approved UI and existing application wiring are deliberately unchanged.
+`src/app.js`, `index.html`, `src/features/plan/cash-panel.js`, and
+`src/engine/monthly-plan.js` match the previously approved version.
+
+`src/engine/cohort-budget.js` is an **isolated experimental calculation
+engine**, not connected to the live PLAN interface. Its corresponding tests
+are in `tests/cohort-budget.test.mjs`; the proposed rules are documented in
+`FINANCIAL_MODEL.md`. The original deployed UI retains its old calculation
+engine until an explicit migration plan is approved.
+
+Do not alter navigation, section structure, year/quarter expansion behavior,
+customer-count annotations, or ACV displays without an explicit request.
