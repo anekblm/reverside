@@ -1636,7 +1636,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += label('ARR (start of year)', false, true);
     for (let y = 0; y < years; y++) {
       const acvStr = fmt(Math.round(acvAtStart[y]));
-      html += yearArrStartCells(y, custAtStart[y] + ' cust. · ACV ' + acvStr);
+      html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
     }
 
     html += label('− Churn', true);
@@ -1664,7 +1664,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += label('ARR (end of year)', false, true);
     for (let y = 0; y < years; y++) {
       const isTarget = y === years-1;
-      const note = custAtEnd[y] + ' cust.' + (isTarget ? ' · target' : '');
+      const note = Math.round(custAtEnd[y]) + ' cust.' + (isTarget ? ' · target' : '');
       // ARR end uses ycell directly (always blue) — yearCells handles Q distribution
       if (window._qtr[y]) {
         // Quarter ARR grows linearly through the year
