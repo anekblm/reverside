@@ -99,6 +99,7 @@ function firstInvoiceWeights(input) {
     newARRByPeriod.forEach(v=>finite(v,"period New ARR"));
   }
   const weights = [];
+  const intraPeriodWeights = [];
   const phase = [];
   for(let p=0;p<count;p++) {
     const begin=p*width;
@@ -109,8 +110,9 @@ function firstInvoiceWeights(input) {
     const adjusted=tiltToPhasing(normalized,requested,"Revenue phasing for period "+(p+1));
     phase.push(phaseFraction(adjusted)*100);
     weights.push(...adjusted.map(v=>v*periodTotals[p]));
+    intraPeriodWeights.push(...adjusted);
   }
-  return {weights,phase,periodTotals};
+  return {weights,phase,periodTotals,intraPeriodWeights};
 }
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
@@ -253,7 +255,7 @@ export function forecastSaaS(input) {
   const openingCash=finite(input.openingCash??0,"openingCash",-1e15);
   const otherOpexMonthly=finite(input.otherOpexMonthly??0,"otherOpexMonthly");
   const yearsCount=Math.ceil(months/12);
-  const {weights,phase,periodTotals}=firstInvoiceWeights({...input,months,granularity});
+  const {weights,phase,periodTotals,intraPeriodWeights}=firstInvoiceWeights({...input,months,granularity});
   const nrrAnnual=1-annualChurn+annualExpansionComp;
   const factor=nrrAnnual/(1-annualChurn);
   const newACV=Array.from({length:months},(_,m)=>
@@ -261,11 +263,7 @@ export function forecastSaaS(input) {
   let newCustomersNeeded;
   let monthNewARR;
   if(input.newARRByPeriod != null) {
-    monthNewARR=weights.map((weight,m)=>{
-      const p=Math.floor(m/width);
-      const denominator=periodTotals[p];
-      return denominator>0?(weight/denominator)*input.newARRByPeriod[p]:0;
-    });
+    monthNewARR=intraPeriodWeights.map((weight,m)=>weight*input.newARRByPeriod[Math.floor(m/width)]);
     newCustomersNeeded=sum(monthNewARR.map((arr,m)=>arr/newACV[m]));
   } else {
     const zeros=Array(months).fill(0);
