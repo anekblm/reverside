@@ -74,7 +74,7 @@ test('quarter phasing slider modifies the same cohort engine while preserving op
   app.togglePlMonth(0,0);
   const initial=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
   app.onQuarterPhasingChange('50');
-  assert.equal(width(node),10); // 1 label + 3 month columns + 4 quarter totals + 1 Y1 total + Y2 + Y3
+  assert.equal(width(node),11); // 1 label + 3 months + 4 quarter totals + Y1 total + Y2 + Y3
   assert.match(node('plTable').innerHTML,/Y1 Q1 ▲/);
   assert.equal(node('plQuarterPhasingDisplay').textContent,'50.0%');
   win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,50));
