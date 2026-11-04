@@ -104,7 +104,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     const cacRatios = { Mice: 0.20, Rabbits: 0.25, Deer: 0.30, Elephants: 0.35, Whales: 0.40 };
     const benchPayback = paybackBenchmarks[state.animal] || 12;
     const benchCacRatio = cacRatios[state.animal] || 0.25;
-    const grossMarginForBench = state.grossMargin || 0.80;
+    const grossMarginForBench = state.grossMargin ?? 0.80;
 
     const dynamicBenchLTV = Math.round(annualGrossProfitLtv(bench.acv, grossMarginForBench, bench.churn));
     // Use same ratio logic as Updated Metrics for consistency
@@ -1067,7 +1067,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
 
   // Initialize P&L sliders from state when entering step 3
   function initPLSliders() {
-    const churnPct = Math.round((state.churn || 0.25) * 100);
+    const churnPct = Math.round((state.churn ?? 0.25) * 100);
 
     // Derive default expansion from Step 2's share of revenue from new customers
     // Back-calculate: existing base × NRR^years must reach (1 - newCustPct%) of target
@@ -1075,7 +1075,7 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     // expansion = NRR - GRR
     // state.newCustomersPercent is stored as 0-1 decimal
     const newCustFrac = (state.newCustomersPercent !== undefined) ? state.newCustomersPercent : 0.5;
-    const churn_ = state.churn || 0.25;
+    const churn_ = state.churn ?? 0.25;
     const grr_ = Math.max(0.001, 1 - churn_);
     const years_ = Math.max(1, Math.ceil(state.timeframe / 12));
 
@@ -1541,8 +1541,8 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     if (!el) return;
 
     const acv         = state.acv || 0;
-    const grossMargin = state.grossMargin || 0.80;
-    const churnRate   = plChurn !== null ? plChurn : (state.churn || 0.25);
+    const grossMargin = state.grossMargin ?? 0.80;
+    const churnRate   = plChurn !== null ? plChurn : (state.churn ?? 0.25);
     const expRate     = plExpansion !== null ? plExpansion : churnRate; // default NRR=100%
     const nrr         = 1 - churnRate + expRate; // resulting NRR
 
