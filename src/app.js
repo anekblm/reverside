@@ -1369,6 +1369,73 @@ import { renderRevenueMatrix } from "./features/plan/revenue-matrix.js";
     updateStep3Display();
   }
 
+  function onBudgetGranularityChange(value) {
+    if (!['year', 'quarter', 'month'].includes(value)) return;
+    planBudgetGranularity = value;
+    planViewGranularity = value;
+    planPhasePercent = null; // meaning changes with the period; never carry over silently
+    manualPeriodARR = null;
+    updateStep3Display();
+  }
+
+  function onViewGranularityChange(value) {
+    if (!['year', 'quarter', 'month'].includes(value)) return;
+    planViewGranularity = value;
+    const selector = document.getElementById('viewGranularity');
+    if (selector) selector.value = value;
+    const model = window._latestMonthlyPlan;
+    const table = document.getElementById('revenueMatrix');
+    if (model && table) table.innerHTML = renderRevenueMatrix(model, state.currency, value);
+  }
+
+  function onRevenuePhasingChange(raw) {
+    const input = document.getElementById('revenuePhasingPct');
+    const warning = document.getElementById('budgetModelWarning');
+    if (planBudgetGranularity === 'month') return;
+    const value = raw.trim() === '' ? null : Number(raw);
+    const width = planBudgetGranularity === 'year' ? 12 : 3;
+    const remaining = state.timeframe % width;
+    const shortest = remaining || width;
+    const minimum = 100 / shortest;
+    if (value !== null && (!Number.isFinite(value) || value < minimum - 0.0000001 || value > 100)) {
+      if (warning) {
+        warning.style.display = 'block';
+        warning.textContent = 'With full MRR in the first invoice month, phasing must be between '
+          + minimum.toFixed(2) + '% and 100% for every budget period.';
+      }
+      if (input) input.value = planPhasePercent ?? '';
+      return;
+    }
+    planPhasePercent = value;
+    if (warning) warning.style.display = 'none';
+    updateStep3Display();
+  }
+
+  function onManualNewARRPeriodChange(index, raw) {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) {
+      const warning = document.getElementById('budgetModelWarning');
+      if (warning) {
+        warning.style.display = 'block';
+        warning.textContent = 'New ARR must be a non-negative amount.';
+      }
+      return;
+    }
+    if (!manualPeriodARR) {
+      const width = planBudgetGranularity === 'year' ? 12 : planBudgetGranularity === 'quarter' ? 3 : 1;
+      const model = window._latestMonthlyPlan;
+      manualPeriodARR = Array.from({length:Math.ceil(state.timeframe / width)}, (_, p) =>
+        model.months.slice(p*width, Math.min(state.timeframe,(p+1)*width)).reduce((s,m)=>s+m.newARR,0));
+    }
+    manualPeriodARR[index] = value;
+    updateStep3Display();
+  }
+
+  function resetNewARRPlan() {
+    manualPeriodARR = null;
+    updateStep3Display();
+  }
+
   function quarterSharesForYear(year) {
     const active = Math.ceil(Math.min(12, state.timeframe - year * 12) / 3);
     if (!quarterSMShares[year] || quarterSMShares[year].length !== active) {
