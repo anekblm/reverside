@@ -261,7 +261,7 @@
 
       <div class="form-group">
         <div class="slider-header">
-          <label class="slider-header-label">3. TARGET REVENUE LEVEL</label>
+          <label class="slider-header-label">3. TARGET CLOSING ARR (annualized, at horizon end)</label>
           <span class="slider-value" id="targetDisplay">-</span>
         </div>
         <div style="display:flex;gap:0.75rem;align-items:center;">
@@ -310,7 +310,7 @@
               <div>
                 <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:1rem;margin-bottom:1rem;">
                   <div style="font-size:11px;color:#666;margin-bottom:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.03em;">Existing Customers</div>
-                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Share of target revenue</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Share of target closing ARR</div>
                   <div style="font-size:16px;font-weight:500;color:#555;margin-bottom:1rem;" id="nrrPercentDisplay">-</div>
                   <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Annual NRR</div>
                   <div style="font-size:20px;font-weight:600;color:#378ADD;margin-bottom:1rem;" id="nrrValue">-</div>
@@ -325,7 +325,7 @@
               <div>
                 <div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:1rem;margin-bottom:1rem;">
                   <div style="font-size:11px;color:#666;margin-bottom:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.03em;">New Customers</div>
-                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Share of target revenue</div>
+                  <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">Share of target closing ARR</div>
                   <div style="font-size:16px;font-weight:500;color:#555;margin-bottom:1rem;" id="newCustomersPercentDisplay2">-</div>
                   <div style="font-size:11px;color:#999;margin-bottom:0.25rem;">New customers / year</div>
                   <div style="font-size:20px;font-weight:600;color:#3B6D11;margin-bottom:1rem;" id="newCustomersPerYearValue">0</div>
@@ -487,12 +487,12 @@
             <button onclick="resetPL()" style="flex:none;padding:0.3rem 0.75rem;font-size:11px;font-weight:500;color:#555;background:white;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;">↺ Reset</button>
           </div>
           <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
-            Adjust churn and expansion to model your growth scenario. Signing pattern controls when new ARR becomes recognized revenue; no separate phasing multiplier is applied. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
+            Adjust churn and expansion to model your growth scenario. New ARR is included from the first invoice month. Yearly and quarterly planning can use revenue phasing to generate a consistent monthly first-invoice schedule; monthly planning has no phasing slider. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
             <div style="margin-top:0.5rem;font-size:11px;color:#666;line-height:1.6;">
               Expansion Compensation is a 1:1 percentage point offset to churn — setting both to 25% results in NRR 100% (flat base). The actual expansion required per retained customer is always higher than the compensation rate, because expansion is spread across fewer customers after churn. Example: 25% churn + 25% expansion compensation → 33% expansion per retained customer.
             </div>
             <div style="margin-top:0.4rem;padding:0.25rem 0.6rem;display:inline-block;background:#fafafa;border:0.5px solid #e0e0e0;border-radius:4px;font-size:11px;color:#999;">
-              S&M spending is independently scheduled by quarter below
+              S&amp;M cash spending is independently scheduled by quarter below
             </div>
           </div>
 
@@ -561,7 +561,7 @@
                   <div style="background:#E6F1FB;border:0.5px solid #b5d4f4;border-radius:6px;padding:0.75rem;">
                     <div style="font-size:11px;font-weight:600;color:#185FA5;margin-bottom:0.3rem;">Realized ACV</div>
                     <div style="font-size:11px;color:#555;margin-bottom:0.3rem;">= Phased revenue ÷ customers at year end</div>
-                    <div style="font-size:10px;color:#666;line-height:1.5;">What actually appeared in the books this year. Lower than Standard ACV when revenue phasing < 100%. This is what the controller reconciles to.</div>
+                    <div style="font-size:10px;color:#666;line-height:1.5;">Recognized revenue earned during the period divided by customers at period end (illustrative, not a standardized ACV metric).</div>
                   </div>
 
                 </div>
