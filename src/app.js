@@ -640,7 +640,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
   let plQtrScenario = 'EVEN'; // Quarter signing distribution scenario
-  let plQuarterPhasing = null; // null = EVEN within-quarter first-invoice timing (~66.7%)
+  let plQuarterPhasing = null; // null = implied phase in the selected budget period
+  let plBudgetGranularity = 'quarter';
+  let plPeriodOverride = null; // explicit New Contracted ARR per budget period
+  let plPeriodInputsOpen = false;
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -1371,10 +1374,122 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   // Revenue timing lives in engine/monthly-plan.js (no second phasing model).
   function setQtrScenario(s) {
+    if (plBudgetGranularity==='month' || plPeriodOverride!==null) return;
+    if (!['EVEN','FRONT','BACK'].includes(s)) return;
     plQtrScenario = s;
     const select = document.getElementById('signingPattern');
     if (select) select.value = s;
     updateStep3Display();
+  }
+
+
+  function onPlanBudgetGranularityChange(value) {
+    if (!['year','quarter','month'].includes(value) || plBudgetGranularity===value) return;
+    plBudgetGranularity=value;
+    plQuarterPhasing=null;
+    plPeriodOverride=null; // Never reinterpret an amount set for a different period length.
+    if(value==='month') plQtrScenario='EVEN';
+    updateStep3Display();
+  }
+
+  function togglePlanPeriodInputs() {
+    plPeriodInputsOpen=!plPeriodInputsOpen;
+    if(window._latestMonthlyPlan) renderPlanToolbar(window._latestMonthlyPlan);
+  }
+
+  function onPlanPeriodValueChange(index,raw) {
+    if(raw.trim()==='') return;
+    const value=Number(raw);
+    const model=window._latestMonthlyPlan;
+    if(!Number.isFinite(value)||value<0||!model) return;
+    const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
+    const count=Math.ceil(state.timeframe/width);
+    if(!Number.isInteger(index)||index<0||index>=count) return;
+    if(!plPeriodOverride) {
+      plPeriodOverride=Array.from({length:count},(_,p)=>
+        model.months.slice(p*width,Math.min(state.timeframe,(p+1)*width))
+          .reduce((total,m)=>total+m.newARR,0));
+    }
+    plPeriodOverride[index]=value;
+    updateStep3Display();
+  }
+
+  function resetPlanPeriodInputs() {
+    plPeriodOverride=null;
+    updateStep3Display();
+  }
+
+  function renderPlanToolbar(model) {
+    const select=document.getElementById('planBudgetGranularity');
+    if(select) select.value=plBudgetGranularity;
+    const presetsEnabled=plBudgetGranularity!=='month' && plPeriodOverride===null;
+    for(const pattern of ['EVEN','FRONT','BACK']) {
+      const btn=document.getElementById('planPattern'+pattern);
+      if(!btn) continue;
+      btn.disabled=!presetsEnabled;
+      btn.classList?.toggle?.('active',presetsEnabled&&pattern===plQtrScenario);
+      if(btn.setAttribute) btn.setAttribute('aria-pressed',String(presetsEnabled&&pattern===plQtrScenario));
+    }
+    const oldSelect=document.getElementById('signingPattern');
+    if(oldSelect) {oldSelect.value=plQtrScenario;oldSelect.disabled=!presetsEnabled;}
+    const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
+    const remaining=state.timeframe%width;
+    const min=100/(remaining||width);
+    const phaseActive=plBudgetGranularity!=='month';
+    const slider=document.getElementById('plQuarterPhasingSlider');
+    const card=document.getElementById('plQuarterPhasingCard');
+    const title=document.getElementById('plQuarterPhasingLabel');
+    const note=document.getElementById('plQuarterPhasingNote');
+    const output=document.getElementById('plQuarterPhasingDisplay');
+    if(card) card.style.opacity=phaseActive?'1':'0.55';
+    if(title) title.textContent=phaseActive
+      ? 'Revenue phasing · '+(plBudgetGranularity==='year'?'yearly':'quarterly')
+      : 'Revenue phasing · monthly';
+    if(note) note.textContent=phaseActive
+      ? 'First invoice timing within '+(plBudgetGranularity==='year'?'year':'quarter')
+      : 'Not applicable: full MRR in first invoice month';
+    if(slider){
+      slider.disabled=!phaseActive;
+      slider.min=String(min);
+      slider.max='100';
+      slider.value=String(plQuarterPhasing??model.periodPhasing[0]??100);
+    }
+    if(output) output.textContent=phaseActive
+      ?(plQuarterPhasing??model.periodPhasing[0]).toFixed(1)+'%':'100%';
+    const modeNote=document.getElementById('planBudgetGranularityNote');
+    if(modeNote) modeNote.textContent=
+      (plBudgetGranularity==='year'?'Yearly':plBudgetGranularity==='quarter'?'Quarterly':'Monthly')+
+      ' budget. The system maintains the same monthly ledger in all views. '+
+      (plPeriodOverride
+        ? 'Custom period New ARR is authoritative; closing CARR becomes an output.'
+        : 'Target closing CARR determines how much New ARR is needed.');
+    const editor=document.getElementById('planPeriodEditor');
+    if(editor) editor.style.display=plPeriodInputsOpen?'block':'none';
+    const editBtn=document.getElementById('planPeriodEditButton');
+    if(editBtn){
+      editBtn.textContent=plPeriodInputsOpen?'Hide period New ARR ▴':'Edit period New ARR ▾';
+      if(editBtn.setAttribute) editBtn.setAttribute('aria-expanded',String(plPeriodInputsOpen));
+    }
+    const editorStatus=document.getElementById('planPeriodEditorStatus');
+    if(editorStatus) editorStatus.textContent=plPeriodOverride
+      ? 'Closing CARR: '+Math.round(model.summary.endingARR).toLocaleString('sv-SE')+
+        '; original target: '+Math.round(state.targetRevenue).toLocaleString('sv-SE')+'.'
+      : 'Automatically calculated against the closing CARR target.';
+    const grid=document.getElementById('planPeriodInputGrid');
+    if(grid&&plPeriodInputsOpen){
+      const count=Math.ceil(state.timeframe/width);
+      const amounts=plPeriodOverride??Array.from({length:count},(_,p)=>
+        model.months.slice(p*width,Math.min(state.timeframe,(p+1)*width))
+          .reduce((total,m)=>total+m.newARR,0));
+      grid.innerHTML=amounts.map((value,p)=>{
+        const name=plBudgetGranularity==='year'?'Y'+(p+1)
+          :plBudgetGranularity==='quarter'?'Y'+(Math.floor(p/4)+1)+' Q'+(p%4+1)
+          :'Y'+(Math.floor(p/12)+1)+' M'+(p%12+1);
+        return '<label>'+name+'<input type="number" min="0" step="any" value="'+
+          Number(value.toFixed(2))+'" onchange="onPlanPeriodValueChange('+p+',this.value)" '+
+          'aria-label="New Contracted ARR '+name+'"></label>';
+      }).join('');
+    }
   }
 
   function quarterSharesForYear(year) {
@@ -1449,8 +1564,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const model = forecastSaaS({
       months: state.timeframe,
       openingARR: state.revenue, openingCustomers: state.customers,
-      acv, targetARR: state.targetRevenue, granularity: "quarter",
-      phasePercent: plQuarterPhasing,
+      acv, targetARR: state.targetRevenue, granularity: plBudgetGranularity,
+      phasePercent: plBudgetGranularity==='month'?null:plQuarterPhasing,
+      newARRByPeriod: plPeriodOverride,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
       yearShares: yearSplit, signingPattern: plQtrScenario,
       priceNewOnExpansion: plUseExpACV,
@@ -1944,6 +2060,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     el.innerHTML = html;
     renderMonthlyCashControls(model, fmt);
+    renderPlanToolbar(model);
   }
 
 
