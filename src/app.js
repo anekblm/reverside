@@ -2020,9 +2020,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">Avg</div>`;
 
     // LTV — two versions: Contracted (expanded ACV) and Realized
-    html += label('LTV (realized)', false, true);
+    html += label('LTV (contracted ACV × GM / annual churn)', false, true);
     const ltvVals = rows.map((r, y) => {
-      const rACV = realizedACV[y] || acv;
+      const rACV = model.years[y].endACV || acv;
       return churnRate > 0 ? Math.round((rACV * grossMargin) / churnRate) : 0;
     });
     const avgLTV = Math.round(ltvVals.reduce((s,v)=>s+v,0) / years);
@@ -2056,9 +2056,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     </div>`;
 
     // CAC Payback — based on Realized ACV
-    html += label('CAC Payback', false, true);
+    html += label('CAC Payback (CAC / monthly ACV gross profit)', false, true);
     for (let y = 0; y < years; y++) {
-      const expACV = realizedACV[y] || acv;
+      const expACV = model.years[y].endACV || acv;
       const monthlyGP = (expACV / 12) * grossMargin;
       const payback = monthlyGP > 0 && cacVals[y] > 0 ? Math.round(cacVals[y] / monthlyGP) : 0;
       const color = payback > 0 && payback <= 12 ? '#3B6D11' : payback <= 24 ? '#BA7517' : '#E24B4A';
