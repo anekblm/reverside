@@ -1698,7 +1698,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       html += yearNewARRcells(y, note);
     }
 
-    html += label('ARR (end of year)', false, true);
+    html += label('Contracted ARR (end of period)', false, true);
     for (let y = 0; y < years; y++) {
       const isTarget = y === years-1;
       const note = Math.round(custAtEnd[y]) + ' cust.' + (isTarget ? ' · target' : '');
@@ -1827,7 +1827,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
 
     html += `<div style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
-      Total/End: incremental for revenue & GP · summed for costs & result · end ARR for stock rows
+      Contracted ARR is annualized at period start/end; recognized revenue, churn and expansion impacts in A/B/C are earned amounts during the period. Existing (A) + New (B+C) = Total Recognized Revenue.
     </div>`;
 
     html += '</div>';
