@@ -43,9 +43,12 @@ test("quarterly input 35 and 50% phasing reproduces exactly 4.375 in new revenue
 });
 test("phasing below one full invoice month is rejected, not faked",()=>{
   assert.throws(()=>forecastSaaS(base({months:3,phasePercent:25})),/33.33%/);
-  const r=forecastSaaS(base({granularity:"year",phasePercent:25}));
-  approx(r.periodPhasing[0],25);
-  assert.throws(()=>forecastSaaS(base({granularity:"year",phasePercent:1})),/8.33%/);
+  // Annual phasing must not secretly change the FRONT quarter allocation.
+  assert.throws(()=>forecastSaaS(base({granularity:"year",phasePercent:25})),/54.58%/);
+  const r=forecastSaaS(base({granularity:"year",phasePercent:60}));
+  approx(r.periodPhasing[0],60);
+  [35,30,20,15].forEach((pct,i)=>approx(r.quarters[i].newARR,100*pct/100));
+  assert.throws(()=>forecastSaaS(base({granularity:"year",phasePercent:1})),/54.58%/);
 });
 test("monthly budget has no phantom phasing and quarter/year aggregate exactly",()=>{
   const r=forecastSaaS(base({granularity:"month",months:12}));
