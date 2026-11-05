@@ -1,7 +1,6 @@
 # ReverSide PLAN – Cohort Financial Model (working specification)
 
-This document specifies the **experimental, isolated calculation engine** in `src/engine/cohort-budget.js`.
-**It now supplies the existing ARR & contribution forecast matrix at quarterly budget granularity**, without changing the approved page structure. The historical `src/engine/monthly-plan.js` remains available for comparison, but the UI's primary forecast imports `src/engine/cohort-budget.js`. Annual and monthly input modes are not yet exposed in the current UI.
+This document specifies the cohort calculation engine in `src/engine/cohort-budget.js`, which now feeds the approved single collapsible PLAN matrix. The original `src/engine/monthly-plan.js` remains for comparison. **Yearly, quarterly and monthly budget input levels are available separately from the year/quarter/month viewing drilldown.**
 
 **PLAN is a financial matrix, not a dashboard.** One reconciled monthly ledger
 supports input at three levels and read-only aggregation into three view levels.
@@ -115,6 +114,44 @@ feasible range depending on actual months.
 When this engine is integrated, the cash-neutral S&M capacity is not a safe budget if other operating
 outflows are incomplete; the interface warns when other OPEX is set to zero.
 
+## One integrated CARR/Revenue bridge in the existing PLAN matrix
+
+The forecast grid has exactly one opening and one closing Contracted ARR row.
+The intermediate groups are mutually exclusive **cohort classifications** for
+the displayed period, and share one monthly source ledger:
+
+- **A Existing**: customer cohorts present at the start of the current year.
+- **B Earlier New**: customer cohorts first invoiced earlier in the *same year*,
+  but before the start of the selected **displayed** period.
+- **C Current New**: customer cohorts first invoiced within that displayed
+  period (month/quarter/year).
+
+Each group has its opening or new CARR and churn/expansion CARR movements.
+A/B opening CARR rows are **of-which decompositions** of the top Opening CARR;
+never add them twice. Closing Contracted ARR = closing A+B+C.
+In any full-year display B is zero by definition: all cohorts acquired within
+the displayed year belong to C. The following year's A absorbs prior years.
+
+After the A/B/C movement lines, three **flow** rows appear:
+- Recognized Revenue Existing (A)
+- Recognized Revenue New (B+C)
+- Total Recognized Revenue (sum of the first two)
+
+Recognized revenue is never added to CARR stocks and differs from churn ARR
+and expansion ARR by measurement units and timing. The full revenue bridge
+separately verifies A base revenue + A churn/expansion revenue impact = A net
+recognized revenue, and equivalent B movement recognition.
+
+The EVEN/FRONT/BACK controls are always present in a fixed toolbar, not inserted
+into the forecast grid on expansion. They are greyed out in monthly and manual
+budget modes. Users can override New Contracted ARR values per input budget
+period; then closing CARR is an output and the previous target remains a
+reference only.
+
+`tests/cohort-carr-reconciliation.test.mjs` checks the six essential CARR
+and recognized-revenue reconciliations across Year/Quarter/Month budgeting,
+every display granularity, FRONT/EVEN/BACK, and 12/24/36-month horizons.
+
 ## Guarantees and acceptance
 
 - The engine throws if an ARR or recognized revenue bridge does not reconcile.
@@ -126,7 +163,7 @@ outflows are incomplete; the interface warns when other OPEX is set to zero.
   source cohorts, phasing feasibility, all three budget levels, front/even/back,
   6/12/24 month plans, cash lag, and S&M timing.
 
-**Not yet complete:** full year/quarter/month input controls and monthly collapse/expand in the original interface, production-level billing calendar, annual prepaid cash
+**Not yet complete:** production-level billing calendar, annual prepaid cash
 logic, mixed billing, accurate contract-level churn constraints, storing a
 frozen approved baseline for TRACK, and a real-browser end-to-end acceptance
 suite. These are separate from the now-reconciled first-invoice monthly model.
