@@ -170,9 +170,14 @@ test('budget granularity Year/Quarter/Month changes the input engine, not the di
   assert.equal(win._latestMonthlyPlan.granularity,'year');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,3);
   assert.equal(node('plQuarterPhasingLabel').textContent,'Revenue phasing · yearly');
-  assert.ok(Number(node('plQuarterPhasingSlider').min)<9);
-  app.onQuarterPhasingChange('25');
-  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,25));
+  assert.ok(Number(node('plQuarterPhasingSlider').min)>45);
+  assert.ok(Number(node('plQuarterPhasingSlider').max)<63);
+  const signedBefore=win._latestMonthlyPlan.quarters.map(p=>p.newARR);
+  app.onQuarterPhasingChange('55');
+  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,55));
+  win._latestMonthlyPlan.quarters.forEach((q,i)=>close(q.newARR,signedBefore[i]));
+  app.onQuarterPhasingChange('25'); // outside feasible range: ignored
+  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,55));
   assert.equal(width(node),4);
   app.onPlanBudgetGranularityChange('quarter');
   assert.equal(win._latestMonthlyPlan.granularity,'quarter');
