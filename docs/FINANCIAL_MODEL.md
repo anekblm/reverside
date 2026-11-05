@@ -96,12 +96,32 @@ feasible range depending on actual months.
 
 ## Retention timing and cash
 
-- Annual ARR-based churn is converted into a monthly gross retention factor
-  `(1-churn)^1/12`. Annual NRR `1-churn+expansion` is converted into
-  monthly net retention `NRR^1/12`. These factors apply to eligible cohorts.
-- The horizon's original base is eligible immediately; newly acquired cohorts
-  are eligible for churn/expansion **only after their first input budget period**
-  ends (following month/quarter/year as chosen).
+- **Budget period is the calculation scope**, not a display mode. Annual
+  churn `c` and annual expansion `e` are INPUT rates. For a full input
+  period of `L` months (12 year, 3 quarter, 1 month), calculate ONCE on
+  each eligible cohort's opening CARR:
+  `grossRetention=(1-c)^(L/12)`;
+  `netRetention=(1-c+e)^(L/12)`;
+  `churnCARR=openingCARR*(1-grossRetention)`;
+  `expansionCARR=openingCARR*(netRetention-grossRetention)`.
+  These same-period amounts must not be recomputed from month to month.
+- **Yearly planning:** With 500,000 opening CARR, 25% annual churn and
+  51% annual expansion, Year 1 churn is EXACTLY 125,000, expansion is
+  EXACTLY 255,000 and closing CARR is 630,000 before new customers.
+  Quarterly planning instead uses quarter-specific rates applied to each
+  QUARTER opening CARR. Monthly planning is the only mode recalculating
+  retention at each month opening. A yearly view of a quarterly budget must
+  preserve the original four quarterly churn/expansion calculations.
+- After the selected budget-period churn and expansion amounts are computed,
+  each is **allocated evenly over that period's months**, as an estimated
+  forecast, without recalculating the amounts. Recognized monthly revenue
+  earns the new active MRR IN that month, including its assigned retention
+  changes. The monthly allocation can be viewed but never silently treated
+  as a revised monthly-budget forecast.
+- Newly acquired cohorts are eligible for churn/expansion **only after their
+  first input budget period** (following month/quarter/year) ends.
+  Within that period they receive a full MRR in the first invoice month,
+  but no churn or expansion.
 - COGS cash proxy = recognized revenue × (1 − gross margin), paid in the
   same month. Other OPEX cash payments are a separately entered monthly value.
 - Monthly cash collection = monthly earned subscription revenue shifted by
@@ -151,6 +171,34 @@ reference only.
 `tests/cohort-carr-reconciliation.test.mjs` checks the six essential CARR
 and recognized-revenue reconciliations across Year/Quarter/Month budgeting,
 every display granularity, FRONT/EVEN/BACK, and 12/24/36-month horizons.
+
+## Recognition from the same visible CARR bridge
+
+Within a displayed period of `D` months, annualized opening CARR earns
+`openingCARR * D/12` before any changes. If a CARR change is allocated to
+month `j` (1-based), it affects `(D-j+1)` full months of period revenue.
+The earned impact is `monthlyCARRChange * (D-j+1)/12`. Therefore every A/B/C
+recognized-revenue subtotal is derived from the CARR changes visible above
+it, and `Recognized A + Recognized (B+C) = Total Recognized`.
+
+For the year-budget example above, we allocate the fixed period CARR changes
+equally across the 12 months. The first month's change affects 12 months;
+the last month's change affects 1 month. The effective revenue weight is
+`(12+11+...+1)/(12*12)=13/24`:
+- Opening base revenue = 500,000 × 12/12 = **500,000**
+- Churn revenue effect = −125,000 × 13/24 = **−67,708.33**
+- Expansion revenue effect = +255,000 × 13/24 = **+138,125**
+- **Year 1 recognized existing revenue = 570,416.67**
+
+The same closing CARR of 630,000 can coexist with a different year's
+recognized revenue when the user deliberately chooses QUARTER or MONTH
+budgeting, because the timing and calculation scope are different.
+
+`src/engine/cohort-budget.js` also resets monthly Existing vs New revenue
+classification at the beginning of EACH budget year, matching A/B/C in the
+displayed bridge. Phasing applies ONLY to first-invoiced New CARR; it
+cannot change churn or expansion in the existing base. If no New CARR
+is required, the phasing slider is greyed out and explicitly says why.
 
 ## Guarantees and acceptance
 
