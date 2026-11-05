@@ -84,29 +84,46 @@ Extract state, calculations and UI into modules without changing existing output
 
 Do not merge this branch without financial and browser acceptance tests.
 
-## Existing forecast matrix – limited cohort-engine integration (November 2026)
+## PLAN matrix and budget input controls (November 2026)
 
-The existing HTML, CSS, section order and year-to-quarter collapse/expand
-behavior remain unchanged. The original cash panel is also retained.
-Only `src/app.js` has been changed to feed the approved forecast matrix from
-`src/engine/cohort-budget.js` rather than the legacy monthly solver.
-The original `src/engine/monthly-plan.js` and its tests are preserved.
+The original collapsible single financial matrix is retained. It opens with
+yearly columns; users can expand individual years into quarters and individual
+quarters into months. Expanding only changes displayed columns, not the monthly
+source ledger.
 
-Within the existing ARR & contribution matrix we have added only these rows:
-`New MRR · first invoice`, `Revenue · existing base (start of year)`,
-`Revenue · new, earlier periods`, and `Revenue · new, current period`.
-The existing total revenue row is now the reconciled sum of the three groups.
-Original visible customer counts, churned customers and ACV annotations use
-cohort-derived values instead of a separate customer-count approximation.
+**One integrated bridge**, in the original forecast grid:
+1. Contracted ARR (opening stock).
+2. Cohort A: customers present at the beginning of the calendar year —
+   their share of opening CARR, churn ARR, expansion ARR and closing CARR.
+3. Cohort B: customers first invoiced in **earlier displayed periods within
+   the same calendar year** — their opening CARR, churn ARR, expansion ARR and
+   closing CARR.
+4. Cohort C: customers first invoiced in the **current displayed period** —
+   new CARR, plus possible eligible churn/expansion based on planning level,
+   and closing CARR.
+5. Recognized Revenue Existing (A), Recognized Revenue New (B+C),
+   Total Recognized Revenue.
+6. Contracted ARR (closing stock = A + B + C).
 
-This is a **controlled partial integration**: the matrix currently runs
-**quarterly input granularity** as its default; it does not expose user
-controls for annual/monthly input granularity, manual period ARR overrides,
-or custom quarterly revenue phasing. Do not add new sections or redesign
-controls without explicit product agreement. Month-level planning, year-level
-planning, TRACK baseline persistence and annual prepaid cash are not yet in
-the live UI.
+A/B **opening rows are "of which" decompositions** of opening CARR; they must
+never be added a second time. Annual CARR is a stock, not revenue. Within-year
+B is zero in a whole-year display, because acquisitions during that entire
+displayed year belong to C; expanding into quarters/months exposes B properly.
 
-The exact financial rules are described in `FINANCIAL_MODEL.md`. Both the
-old engine's tests and the new cohort engine's tests are retained. Do not
-merge this branch into production before full browser and financial acceptance.
+**Budget granularity** (Year, Quarter, Month) is an independent input selector
+above the matrix and changes how churn, expansion and new-invoice phasing are
+calculated. The engine always emits a reconciled monthly ledger.
+Users can override New Contracted ARR per **budget period**; when they do,
+closing CARR is an output rather than a forced target.
+**View granularity** is solely the existing expand/collapse presentation.
+Presets EVEN/FRONT/BACK stay in a permanent toolbar: enabled in target-driven
+yearly/quarterly planning, visibly greyed out in monthly/manual mode. They are
+never conditionally injected into grid rows when a year is expanded.
+
+The original cash controls remain separate from revenue and CARR stocks.
+The legacy engine `src/engine/monthly-plan.js` remains for comparison,
+but the displayed PLAN matrix uses `src/engine/cohort-budget.js`.
+
+The financial specification is in `FINANCIAL_MODEL.md`, and regression tests
+cover original row structure, granularity controls and A/B/C reconciliation.
+Do not merge into production without browser and financial acceptance.
