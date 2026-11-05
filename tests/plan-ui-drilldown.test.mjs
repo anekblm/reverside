@@ -92,29 +92,39 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   app.togglePlMonth(0,0);
   app.selectStrategy('efficient');
   assert.match(node('cashFlowPanel').innerHTML,/Operating cash flow/);
-  assert.match(node('plTable').innerHTML,/B\. New Customers – Earlier Periods/);
+  assert.match(node('plTable').innerHTML,/B\. New – Earlier Periods/);
   assert.equal(win._latestMonthlyPlan.months.length,12);
 });
 
 test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in every view',()=>{
   const {app,node,win}=createApp(36);
   const required=[
-    'A. Existing Base – Start of Year',
+    'A. Existing – Start of Year',
     'Base Revenue',
     '− Churn impact',
     '+ Expansion impact',
-    'Net Revenue – Original Base',
-    'B. New Customers – Earlier Periods',
-    'Revenue from prior new cohorts',
-    'Net Revenue – Earlier Cohorts',
-    'C. New Customers – Current Period',
-    'Recognized New Revenue',
+    'Net Revenue – Existing (A)',
+    'B. New – Earlier Periods',
+    'Revenue from earlier cohorts',
+    'Net Revenue – Earlier (B)',
+    'C. New – Current Period',
+    'Recognized New Revenue (C)',
+    'Recognized Revenue – Existing (A)',
+    'Recognized Revenue – New (B+C)',
     'Total Recognized Revenue'
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
     required.forEach(label=>assert.ok(html.includes(label),'Missing label '+label));
     assert.ok(!html.includes('id="revenueMatrix"'),'A separate revenue table must not be added');
+    assert.ok(html.indexOf('Contracted ARR (start of period)')<
+      html.indexOf('A. Existing – Start of Year'),
+      'Revenue A/B/C must follow ARR in the original matrix');
+    assert.ok(html.indexOf('Recognized Revenue – Existing (A)')<
+      html.indexOf('Recognized Revenue – New (B+C)') &&
+      html.indexOf('Recognized Revenue – New (B+C)')<
+      html.indexOf('Total Recognized Revenue'),
+      'Existing and New revenue subtotal rows must precede total');
   };
   const reconcile=p=>{
     close(p.originalBaseRevenue+p.originalChurnRevenueImpact+
@@ -123,6 +133,9 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
       p.earlierNewExpansionRevenueImpact,p.earlierNewNetRevenue);
     close(p.originalNetRevenue+p.earlierNewNetRevenue+
       p.currentNewNetRevenue,p.recognizedRevenue);
+    close(p.existingRevenue,p.originalNetRevenue);
+    close(p.newRevenue,p.earlierNewNetRevenue+p.currentNewNetRevenue);
+    close(p.existingRevenue+p.newRevenue,p.recognizedRevenue);
   };
   checkLabels();
   win._latestMonthlyPlan.years.forEach(reconcile);
