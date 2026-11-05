@@ -1800,9 +1800,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const custAtStart = model.years.map(r => r.startCustomers);
     const custAtEnd = model.years.map(r => r.endCustomers);
     const acvAtStart = model.years.map(r => r.startACV);
-    const realizedACV = rows.map((r, y) =>
-      custAtEnd[y] > 0 ? Math.round(r.totalRevenue / custAtEnd[y]) : 0
-    );
 
     // Keep the original first row (opening Contracted ARR, customers and ACV).
     html += label('Contracted ARR (start of period)', false, true);
@@ -1923,13 +1920,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const totSM2 = rows.reduce((sum,r)=>sum+r.smSpend,0);
     const totOP  = rows.reduce((sum,r)=>sum+r.opResult,0);
 
-    html += label('Realized ACV', false, true);
-    for (let y = 0; y < years; y++) {
-      const contractedACV = custAtEnd[y] > 0 ? Math.round(rows[y].arrEnd / custAtEnd[y]) : 0;
-      const rACV = realizedACV[y];
-      const acvCell = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;"><div style="font-size:11px;font-weight:500;color:#333;">${fmt(rACV)}</div><div style="font-size:9px;color:#bbb;">std: ${fmt(contractedACV)}</div></div>`;
-      const emptyCell = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#ccc;">—</div>`;
-      html += eachPeriod(y,(_,kind)=>kind==='year'||kind==='yearTotal'?acvCell:emptyCell);
+    // ACV is a contracted annualized run rate per CURRENT customer,
+    // not recognized revenue divided by end-of-period customers.
+    html += label('Contracted ACV (end) = Closing CARR / Customers', false, true);
+    for(let y=0;y<years;y++) {
+      html += eachPeriod(y,(period,kind)=>periodCell(period.endACV??0,kind,{
+        color:'#555',bg:'white',
+        note:Math.round(period.endCustomers??0)+' customers'
+      }));
     }
 
     html += divider();
