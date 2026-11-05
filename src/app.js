@@ -1818,10 +1818,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         });
       });
     };
-    const recognizedRow = (name,key,{bold=true}={}) => {
-      html += label(name,false,bold);
+    const recognizedRow = (name,key,{bold=true,indent=false,color='#555'}={}) => {
+      html += label(name,indent,bold);
       for(let y=0;y<years;y++)
-        html += yearQuarterCells(y,key,1,bold,'#555',bold?'#fafafa':'white');
+        html += yearQuarterCells(y,key,1,bold,color,bold?'#fafafa':'white');
     };
 
     cohortHeading('A. Existing Customers – Start of Year');
@@ -1829,18 +1829,38 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     cohortARRRow('− Churn CARR – A','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – A','original','ExpansionARR');
     cohortARRRow('Closing CARR – A','original','EndARR',{bold:true});
+    // Earned revenue is NOT the annualized CARR closing stock.
+    // Opening CARR earns through the entire displayed period; each ARR change
+    // changes earned MRR for the remaining months, including the change month.
+    recognizedRow('Revenue · Opening CARR × period / 12 (A)','originalBaseRevenue',{bold:false,indent:true});
+    recognizedRow('− Revenue impact · churn (A)','originalChurnRevenueImpact',
+      {bold:false,indent:true,color:'#E24B4A'});
+    recognizedRow('+ Revenue impact · expansion (A)','originalExpansionRevenueImpact',
+      {bold:false,indent:true,color:'#3B6D11'});
 
     cohortHeading('B. New Customers – Earlier This Year');
     cohortARRRow('Of which: Opening CARR – Earlier New (B)','earlier','StartARR',{noteKey:'StartCustomers'});
     cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
     cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
+    recognizedRow('Revenue · Opening CARR × period / 12 (B)','earlierNewBaseRevenue',
+      {bold:false,indent:true});
+    recognizedRow('− Revenue impact · churn (B)','earlierNewChurnRevenueImpact',
+      {bold:false,indent:true,color:'#E24B4A'});
+    recognizedRow('+ Revenue impact · expansion (B)','earlierNewExpansionRevenueImpact',
+      {bold:false,indent:true,color:'#3B6D11'});
 
     cohortHeading('C. New Customers – Current Period');
     cohortARRRow('+ First-invoiced New CARR – Current (C)','current','NewARR',{noteKey:'NewCustomers'});
     cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
     cohortARRRow('Closing CARR – C','current','EndARR',{bold:true});
+    recognizedRow('Revenue · First invoice timing (C)','currentNewRevenue',
+      {bold:false,indent:true});
+    recognizedRow('− Revenue impact · churn (C)','currentNewChurnRevenueImpact',
+      {bold:false,indent:true,color:'#E24B4A'});
+    recognizedRow('+ Revenue impact · expansion (C)','currentNewExpansionRevenueImpact',
+      {bold:false,indent:true,color:'#3B6D11'});
 
     html += divider();
     recognizedRow('Recognized Revenue – Existing (A)','existingRevenue');
@@ -1862,8 +1882,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Revenue impact and annualized CARR change are different units. The
     // recognized revenue lines cannot be added to the CARR closing stock.
     html += `<div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
-      CARR values are annualized contract run rates. A/B/C change CARR stock;
-      recognized revenue is the amount earned within each period.
+      CARR is an annualized contract run rate (a stock). Recognized revenue is
+      earned during the period (a flow). Within each A/B/C group, opening CARR
+      contributes opening CARR × months in the displayed period / 12.
+      Churn and expansion change revenue for the remaining months of that period;
+      first-invoiced customers contribute from their first invoice month.
       "Of which" rows describe the opening CARR split; do not add them again to Opening CARR.
       Opening CARR - A/B/C churn + A/B/C expansion + new CARR = Closing CARR.
       Recognized Existing (A) + Recognized New (B+C) = Total Recognized Revenue.
