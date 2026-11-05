@@ -1120,9 +1120,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (plBudgetGranularity==='month' ||
         !(window._latestMonthlyPlan?.summary?.annualizedNewARR>1e-8)) return;
     const fraction = Number(value);
-    const width=plBudgetGranularity==='year'?12:3;
-    const minimum=100/((state.timeframe%width)||width);
-    if (!Number.isFinite(fraction) || fraction < minimum-1e-7 || fraction > 100) return;
+    const ranges=window._latestMonthlyPlan?.periodPhaseRanges??[];
+    const minimum=ranges.length?Math.max(...ranges.map(r=>r[0])):100/3;
+    const maximum=ranges.length?Math.min(...ranges.map(r=>r[1])):100;
+    if (!Number.isFinite(fraction) || fraction < minimum-1e-7 || fraction > maximum+1e-7) return;
     plQuarterPhasing = fraction;
     const output = document.getElementById('plQuarterPhasingDisplay');
     if (output) output.textContent = fraction.toFixed(1) + '%';
@@ -1441,8 +1442,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const oldSelect=document.getElementById('signingPattern');
     if(oldSelect) {oldSelect.value=plQtrScenario;oldSelect.disabled=!presetsEnabled;}
     const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
-    const remaining=state.timeframe%width;
-    const min=100/(remaining||width);
+    const ranges=model.periodPhaseRanges??[];
+    const min=ranges.length?Math.max(...ranges.map(r=>r[0])):100/width;
+    const max=ranges.length?Math.min(...ranges.map(r=>r[1])):100;
     const hasNewCARR=model.summary.annualizedNewARR>1e-8;
     const phaseActive=plBudgetGranularity!=='month' && hasNewCARR;
     const slider=document.getElementById('plQuarterPhasingSlider');
@@ -1462,7 +1464,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if(slider){
       slider.disabled=!phaseActive;
       slider.min=String(min);
-      slider.max='100';
+      slider.max=String(max);
       slider.value=String(plQuarterPhasing??model.periodPhasing[0]??100);
     }
     if(output) output.textContent=phaseActive
@@ -1470,10 +1472,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       : plBudgetGranularity==='month'?'100%':'—';
     const minimumLabel=document.getElementById('plPhasingMinLabel');
     if(minimumLabel) minimumLabel.textContent=phaseActive
-      ? min.toFixed(1)+'% · last month' : 'Not applicable';
+      ? min.toFixed(1)+'% · latest allowed' : 'Not applicable';
     const maximumLabel=document.getElementById('plPhasingMaxLabel');
     if(maximumLabel) maximumLabel.textContent=phaseActive
-      ? '100% · first month' : hasNewCARR?'First invoice = full MRR':'No new customers';
+      ? max.toFixed(1)+'% · earliest allowed' :
+        hasNewCARR?'First invoice = full MRR':'No new customers';
     const modeNote=document.getElementById('planBudgetGranularityNote');
     if(modeNote) {
       const churn=plChurn??state.churn??0.25;
@@ -1493,8 +1496,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         (!hasNewCARR?(plPeriodOverride
           ?'Manually budgeted New CARR is zero; revenue phasing is inactive. '
           :'Existing cohorts already achieve the CARR target; no New CARR is needed and phasing is inactive. '): '')+
-        (plBudgetGranularity==='year'&&plQuarterPhasing!==null&&hasNewCARR
-          ? 'Annual revenue phasing can change the FRONT/EVEN/BACK quarter template. ':'')+
+        (plBudgetGranularity==='year'&&hasNewCARR
+          ? 'Annual phasing is constrained to '+min.toFixed(1)+'–'+max.toFixed(1)+
+            '% to preserve the selected FRONT/EVEN/BACK quarter shares. ':'')+
         (plPeriodOverride
           ? 'Custom New CARR overrides the target; closing CARR is an output.'
           : 'Closing CARR target sets the required New CARR.');
