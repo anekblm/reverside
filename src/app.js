@@ -1658,123 +1658,105 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     }
 
-    // ── ARR SECTION ──
-    // Customer counts and ACV are sourced from the SAME monthly cohort bridge as ARR.
+    // Single integrated Contracted ARR / Revenue bridge, with no duplicate ARR
+    // section. A/B are the cohorts present at the displayed period start;
+    // C holds subscriptions first invoiced inside the displayed period.
+    // ARR rows are annualized STOCK movements; revenue rows are earned FLOWS.
     const custAtStart = model.years.map(r => r.startCustomers);
     const custAtEnd = model.years.map(r => r.endCustomers);
     const acvAtStart = model.years.map(r => r.startACV);
-    const acvExpanded = model.years.map(r => r.retainedBaseACV);
-
-    // Realized ACV per year = phased revenue / total customers at year end
     const realizedACV = rows.map((r, y) =>
       custAtEnd[y] > 0 ? Math.round(r.totalRevenue / custAtEnd[y]) : 0
     );
 
+    // Keep the original first row (opening Contracted ARR, customers and ACV).
     html += label('Contracted ARR (start of period)', false, true);
     for (let y = 0; y < years; y++) {
       const acvStr = fmt(Math.round(acvAtStart[y]));
       html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
     }
 
-    html += label('− Churn', true);
-    for (let y = 0; y < years; y++) {
-      const churnedCust = Math.round(model.years[y].churnCustomers);
-      html += yearChurnCells(y, '−' + churnedCust + ' cust.');
-    }
+    const cohortHeading = title => {
+      html += divider();
+      html += label(title, false, true, '#444');
+      for (let y=0;y<years;y++) html += eachPeriod(y,()=>'<div></div>');
+    };
+    const cohortARRRow = (name, prefix, key, {bold=false, negative=false, noteKey=null}={}) => {
+      html += label(name, true, bold);
+      for (let y=0;y<years;y++) html += eachPeriod(y,(period,kind)=>{
+        const value=(period[prefix+key]??0)*(negative?-1:1);
+        const isYear=kind==='year'||kind==='yearTotal';
+        const relevantCustomers=noteKey ? period[prefix+noteKey] : null;
+        let note=noteKey
+          ? Math.round(relevantCustomers??0)+(noteKey==='ChurnCustomers'?' lost cust.':' cust.')
+          : '';
+        if(isYear&&key==='EndARR'&&(period[prefix+'EndCustomers']??0)>0){
+          const count=period[prefix+'EndCustomers'];
+          note=Math.round(count)+' cust. · ACV '+fmt(Math.round(period[prefix+'EndARR']/count));
+        }
+        if(isYear&&key==='NewARR'&&(period[prefix+'NewCustomers']??0)>0){
+          const count=period[prefix+'NewCustomers'];
+          note=Math.round(count)+' new cust. · ACV '+fmt(Math.round(period[prefix+'NewARR']/count));
+        }
+        return periodCell(value,kind,{
+          bold,color:negative?'#E24B4A':key==='ExpansionARR'?'#3B6D11':'#555',
+          bg:bold?'#fafafa':'white',note,
+        });
+      });
+    };
+    const recognizedRow = (name,key,{bold=true}={}) => {
+      html += label(name,false,bold);
+      for(let y=0;y<years;y++)
+        html += yearQuarterCells(y,key,1,bold,'#555',bold?'#fafafa':'white');
+    };
 
-    html += label('+ Expansion', true);
-    for (let y = 0; y < years; y++) {
-      const retainedARR = rows[y].arrStart - rows[y].churnAmt;
-      const expRatePct = retainedARR > 0 ? Math.round((rows[y].expansionAmt / retainedARR) * 100) : 0;
-      const expACVstr = fmt(Math.round(acvExpanded[y]));
-      html += yearExpansionCells(y, expRatePct + '% per ret. · exp ACV ' + expACVstr);
-    }
+    cohortHeading('A. Existing – Start of Year');
+    cohortARRRow('Opening CARR – A','original','StartARR',{noteKey:'StartCustomers'});
+    cohortARRRow('− Churn CARR – A','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+    cohortARRRow('+ Expansion CARR – A','original','ExpansionARR');
+    cohortARRRow('Closing CARR – A','original','EndARR',{bold:true});
 
-    html += label('+ New ARR', true);
-    for (let y = 0; y < years; y++) {
-      const rampPct = Math.round(getArrPhase(y) * 100);
-      const newACVstr = fmt(Math.round(rows[y].displayACV));
-      const note = Math.round(rows[y].newCust) + ' cust. · ACV ' + newACVstr;
-      html += yearNewARRcells(y, note);
-    }
+    cohortHeading('B. New – Earlier Periods');
+    cohortARRRow('Opening CARR – B','earlier','StartARR',{noteKey:'StartCustomers'});
+    cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+    cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
+    cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
 
-    html += label('Contracted ARR (end of period)', false, true);
-    for (let y = 0; y < years; y++) {
-      const isTarget = y === years-1;
-      const note = Math.round(custAtEnd[y]) + ' cust.' + (isTarget ? ' · target' : '');
-      // ARR remains an end-of-period stock, including for expanded months.
+    cohortHeading('C. New – Current Period');
+    cohortARRRow('+ New CARR – C','current','NewARR',{noteKey:'NewCustomers'});
+    cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+    cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
+    cohortARRRow('Closing CARR – C','current','EndARR',{bold:true});
+
+    html += divider();
+    recognizedRow('Recognized Revenue – Existing (A)','existingRevenue');
+    recognizedRow('Recognized Revenue – New (B+C)','newRevenue');
+    recognizedRow('Total Recognized Revenue','recognizedRevenue');
+
+    html += divider();
+    html += label('Contracted ARR (end of period)',false,true);
+    for(let y=0;y<years;y++){
       html += eachPeriod(y,(period,kind)=>periodCell(period.endARR??0,kind,{
         bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
-        note:kind==='year'||kind==='yearTotal'?note:
-          Math.round(period.endCustomers??0)+' cust.'
+        note:kind==='year'||kind==='yearTotal'
+          ? Math.round(custAtEnd[y])+' cust.'+(y===years-1?' · target':'')
+          : Math.round(period.endCustomers??0)+' cust.'
       }));
     }
 
-    // New subscription MRR is the annualized new ARR divided by 12. It is an
-    // incremental monthly run-rate, not the recognized revenue for the whole period.
-    html += label('New MRR · first invoice', true);
-    for (let y = 0; y < years; y++) {
-      html += yearQuarterCells(y, 'signedMRR', 1, false, '#555');
-    }
+    // Revenue impact and annualized CARR change are different units. The
+    // recognized revenue lines cannot be added to the CARR closing stock.
+    html += `<div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
+      CARR values are annualized contract run rates. A/B/C change CARR stock;
+      recognized revenue is the amount earned within each period.
+      Opening CARR + all A/B/C changes = Closing CARR.
+      Recognized Existing (A) + Recognized New (B+C) = Total Recognized Revenue.
+    </div>`;
 
-    html += divider();
-
-    // Effective phasing is the current-period cohort revenue relative to full
-    // possible period revenue from the same new ARR. Do not repeat annual
-    // percentages in quarter cells: each quarter has its own phasing.
-    html += label('New customer revenue realization', true);
-    const realization = period => period?.newARR > 0 && period.monthsInPeriod > 0
-      ? Math.round(100 * period.currentNewNetRevenue /
-          (period.newARR * period.monthsInPeriod / 12)) + '%'
-      : '—';
-    const phaseCell = (value, total = false) =>
-      `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;color:#777;font-weight:${total?'600':'400'};">${value}</div>`;
-    for (let y = 0; y < years; y++) {
-      html += eachPeriod(y,(period,kind)=>phaseCell(realization(period),kind==='yearTotal'));
-    }
-
-    html += divider();
-
-    // ── P&L SECTION ──
-    const totRev = rows.reduce((s,r)=>s+r.totalRevenue,0);
-    const totGP  = rows.reduce((s,r)=>s+r.grossProfit,0);
-    const totSM2 = rows.reduce((s,r)=>s+r.smSpend,0);
-    const totOP  = rows.reduce((s,r)=>s+r.opResult,0);
-
-    // A/B/C live directly in the existing ARR matrix, not a second table.
-    // ARR above is annualized end/start stock; revenue below is a period flow.
-    // E.g. a monthly churn ARR impact of −12,000 is −1,000 of monthly revenue.
-    // All cohort categories are classified against the *displayed* period.
-    const revenueSection = title => {
-      html += label(title, false, true, '#444');
-      for (let y = 0; y < years; y++) html += eachPeriod(y, () => '<div></div>');
-    };
-    const revenueRow = (title, key, {bold=false, color='#555'}={}) => {
-      html += label(title, true, bold);
-      for (let y = 0; y < years; y++)
-        html += yearQuarterCells(y, key, 1, bold, color, bold?'#fafafa':'white');
-    };
-
-    revenueSection('A. Existing – Start of Year');
-    revenueRow('Base Revenue', 'originalBaseRevenue');
-    revenueRow('− Churn impact', 'originalChurnRevenueImpact', {color:'#E24B4A'});
-    revenueRow('+ Expansion impact', 'originalExpansionRevenueImpact', {color:'#3B6D11'});
-    revenueRow('Net Revenue – Existing (A)', 'originalNetRevenue', {bold:true});
-
-    revenueSection('B. New – Earlier Periods');
-    revenueRow('Revenue from earlier cohorts', 'earlierNewBaseRevenue');
-    revenueRow('− Churn impact', 'earlierNewChurnRevenueImpact', {color:'#E24B4A'});
-    revenueRow('+ Expansion impact', 'earlierNewExpansionRevenueImpact', {color:'#3B6D11'});
-    revenueRow('Net Revenue – Earlier (B)', 'earlierNewNetRevenue', {bold:true});
-
-    revenueSection('C. New – Current Period');
-    revenueRow('Recognized New Revenue (C)', 'currentNewNetRevenue', {bold:true});
-
-    html += divider();
-    revenueRow('Recognized Revenue – Existing (A)', 'existingRevenue', {bold:true});
-    revenueRow('Recognized Revenue – New (B+C)', 'newRevenue', {bold:true});
-    html += label('Total Recognized Revenue', false, true);
-    for (let y = 0; y < years; y++) html += yearRevenueCells(y);
+    const totRev = rows.reduce((sum,r)=>sum+r.totalRevenue,0);
+    const totGP  = rows.reduce((sum,r)=>sum+r.grossProfit,0);
+    const totSM2 = rows.reduce((sum,r)=>sum+r.smSpend,0);
+    const totOP  = rows.reduce((sum,r)=>sum+r.opResult,0);
 
     html += label('Realized ACV', false, true);
     for (let y = 0; y < years; y++) {
