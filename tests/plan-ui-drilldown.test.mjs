@@ -11,7 +11,7 @@ import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
 const originalApp=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
 const appBody=originalApp.replace(/^import .*;$/gm,'') +
-  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL};';
+  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
 
 function createApp(timeframe=36){
   const controls={};
@@ -101,12 +101,12 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   const required=[
     'Contracted ARR (start of period)',
     'A. Existing – Start of Year',
-    'Opening CARR – A',
+    'Of which: Opening CARR – A',
     '− Churn CARR – A',
     '+ Expansion CARR – A',
     'Closing CARR – A',
     'B. New – Earlier Periods',
-    'Opening CARR – B',
+    'Of which: Opening CARR – B',
     '− Churn CARR – B',
     '+ Expansion CARR – B',
     'Closing CARR – B',
@@ -118,7 +118,7 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     'Recognized Revenue – Existing (A)',
     'Recognized Revenue – New (B+C)',
     'Total Recognized Revenue',
-    'Contracted ARR (end of period)'
+    'Contracted ARR (end of period) = A + B + C'
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
@@ -159,4 +159,61 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   assert.ok(q2.earlierNewNetRevenue>0,'Q2 must include prior Q1 new customers');
   assert.ok(win._latestMonthlyPlan.years[0].earlierNewNetRevenue===0,
     'The current year acquired cohort remains current within the year view');
+});
+
+test('budget granularity Year/Quarter/Month changes the input engine, not the display layout',()=>{
+  const {app,node,win}=createApp(36);
+  assert.equal(width(node),4);
+  assert.equal(win._latestMonthlyPlan.granularity,'quarter');
+  assert.ok(!node('planPatternEVEN').disabled);
+  app.onPlanBudgetGranularityChange('year');
+  assert.equal(win._latestMonthlyPlan.granularity,'year');
+  assert.equal(win._latestMonthlyPlan.periodPhasing.length,3);
+  assert.equal(node('plQuarterPhasingLabel').textContent,'Revenue phasing · yearly');
+  assert.ok(Number(node('plQuarterPhasingSlider').min)<9);
+  app.onQuarterPhasingChange('25');
+  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,25));
+  assert.equal(width(node),4);
+  app.onPlanBudgetGranularityChange('quarter');
+  assert.equal(win._latestMonthlyPlan.granularity,'quarter');
+  assert.equal(win._latestMonthlyPlan.periodPhasing.length,12);
+  assert.ok(Number(node('plQuarterPhasingSlider').min)>33);
+  app.onPlanBudgetGranularityChange('month');
+  assert.equal(win._latestMonthlyPlan.granularity,'month');
+  assert.equal(win._latestMonthlyPlan.periodPhasing.length,36);
+  assert.ok(node('plQuarterPhasingSlider').disabled);
+  assert.ok(node('planPatternFRONT').disabled && node('planPatternBACK').disabled);
+  assert.equal(width(node),4);
+  const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
+  app.onQuarterPhasingChange('50');
+  assert.equal(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
+  assert.equal(node('plQuarterPhasingDisplay').textContent,'100%');
+  app.onPlanBudgetGranularityChange('quarter');
+  assert.ok(!node('planPatternFRONT').disabled);
+  app.setQtrScenario('FRONT');
+  assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
+  assert.equal(width(node),4);
+  app.togglePlQtr(0);
+  assert.equal(width(node),8);
+  assert.ok(!node('planPatternFRONT').disabled);
+});
+
+test('manual New CARR inputs obey budget periods and deactivate preset buttons without moving the grid',()=>{
+  const {app,node,win}=createApp(36);
+  app.togglePlanPeriodInputs();
+  assert.equal(node('planPeriodEditor').style.display,'block');
+  assert.ok(node('planPeriodInputGrid').innerHTML.includes('Y1 Q1'));
+  app.onPlanPeriodValueChange(0,'125000');
+  close(win._latestMonthlyPlan.quarters[0].newARR,125000);
+  assert.ok(node('planPatternEVEN').disabled);
+  assert.ok(node('planPatternFRONT').disabled);
+  assert.equal(width(node),4);
+  app.setQtrScenario('BACK'); // ignored while manual values are authoritative
+  assert.notEqual(win._latestMonthlyPlan.signingPattern,'BACK');
+  app.resetPlanPeriodInputs();
+  assert.equal(win._latestMonthlyPlan.manualBudget,false);
+  assert.ok(!node('planPatternEVEN').disabled);
+  assert.equal(width(node),4);
+  app.togglePlanPeriodInputs();
+  assert.equal(node('planPeriodEditor').style.display,'none');
 });
