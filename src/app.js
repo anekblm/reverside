@@ -1815,13 +1815,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     };
 
     cohortHeading('A. Existing – Start of Year');
-    cohortARRRow('Opening CARR – A','original','StartARR',{noteKey:'StartCustomers'});
+    cohortARRRow('Of which: Opening CARR – A','original','StartARR',{noteKey:'StartCustomers'});
     cohortARRRow('− Churn CARR – A','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – A','original','ExpansionARR');
     cohortARRRow('Closing CARR – A','original','EndARR',{bold:true});
 
     cohortHeading('B. New – Earlier Periods');
-    cohortARRRow('Opening CARR – B','earlier','StartARR',{noteKey:'StartCustomers'});
+    cohortARRRow('Of which: Opening CARR – B','earlier','StartARR',{noteKey:'StartCustomers'});
     cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
     cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
@@ -1838,7 +1838,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     recognizedRow('Total Recognized Revenue','recognizedRevenue');
 
     html += divider();
-    html += label('Contracted ARR (end of period)',false,true);
+    html += label('Contracted ARR (end of period) = A + B + C',false,true);
     for(let y=0;y<years;y++){
       html += eachPeriod(y,(period,kind)=>periodCell(period.endARR??0,kind,{
         bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
@@ -1853,8 +1853,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += `<div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
       CARR values are annualized contract run rates. A/B/C change CARR stock;
       recognized revenue is the amount earned within each period.
-      Opening CARR + all A/B/C changes = Closing CARR.
+      "Of which" rows describe the opening CARR split; do not add them again to Opening CARR.
+      Opening CARR - A/B/C churn + A/B/C expansion + new CARR = Closing CARR.
       Recognized Existing (A) + Recognized New (B+C) = Total Recognized Revenue.
+      In the full-year view, B is zero: all customers acquired during the displayed year belong to C.
+      Expand into quarters or months to separate earlier and current new customers.
     </div>`;
 
     const totRev = rows.reduce((sum,r)=>sum+r.totalRevenue,0);
