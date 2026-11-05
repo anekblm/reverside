@@ -655,6 +655,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     selectedStrategy = null;
     yearAllocs = {};
     quarterSMShares = {};
+    plPeriodOverride = null;
+    plPeriodInputsOpen = false;
+    plQuarterPhasing = null;
     document.getElementById('budgetSummarySection').style.display = 'none';
     populateStrategyCards();
     initPLSliders();
@@ -669,6 +672,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Render P&L immediately without waiting for strategy selection
     const fmt = currencyFormats[state.currency];
     buildPL(years, 0, fmt);
+    if (window._latestMonthlyPlan) renderPlanToolbar(window._latestMonthlyPlan);
   }
 
   function populateStrategyCards() {
@@ -1849,7 +1853,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       html += eachPeriod(y,(period,kind)=>periodCell(period.endARR??0,kind,{
         bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
         note:kind==='year'||kind==='yearTotal'
-          ? Math.round(custAtEnd[y])+' cust.'+(y===years-1?' · target':'')
+          ? Math.round(custAtEnd[y])+' cust. · ACV '+
+            fmt(Math.round(period.endACV??0))+(y===years-1?' · target':'')
           : Math.round(period.endCustomers??0)+' cust.'
       }));
     }
