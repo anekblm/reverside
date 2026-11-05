@@ -1824,20 +1824,20 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         html += yearQuarterCells(y,key,1,bold,'#555',bold?'#fafafa':'white');
     };
 
-    cohortHeading('A. Existing – Start of Year');
-    cohortARRRow('Of which: Opening CARR – A','original','StartARR',{noteKey:'StartCustomers'});
+    cohortHeading('A. Existing Customers – Start of Year');
+    cohortARRRow('Of which: Opening CARR – Existing (A)','original','StartARR',{noteKey:'StartCustomers'});
     cohortARRRow('− Churn CARR – A','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – A','original','ExpansionARR');
     cohortARRRow('Closing CARR – A','original','EndARR',{bold:true});
 
-    cohortHeading('B. New – Earlier Periods');
-    cohortARRRow('Of which: Opening CARR – B','earlier','StartARR',{noteKey:'StartCustomers'});
+    cohortHeading('B. New Customers – Earlier This Year');
+    cohortARRRow('Of which: Opening CARR – Earlier New (B)','earlier','StartARR',{noteKey:'StartCustomers'});
     cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
     cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
 
-    cohortHeading('C. New – Current Period');
-    cohortARRRow('+ New CARR – C','current','NewARR',{noteKey:'NewCustomers'});
+    cohortHeading('C. New Customers – Current Period');
+    cohortARRRow('+ First-invoiced New CARR – Current (C)','current','NewARR',{noteKey:'NewCustomers'});
     cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
     cohortARRRow('Closing CARR – C','current','EndARR',{bold:true});
@@ -1867,8 +1867,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       "Of which" rows describe the opening CARR split; do not add them again to Opening CARR.
       Opening CARR - A/B/C churn + A/B/C expansion + new CARR = Closing CARR.
       Recognized Existing (A) + Recognized New (B+C) = Total Recognized Revenue.
-      In the full-year view, B is zero: all customers acquired during the displayed year belong to C.
-      Expand into quarters or months to separate earlier and current new customers.
+      Earlier New (B) includes only customers first invoiced earlier in the current year;
+      Current New (C) includes customers first invoiced within the displayed period.
+      When a full year is displayed, all customers first invoiced that year belong to C;
+      from the next year they belong to Existing (A). Expand quarters or months to see B.
+      Amounts are calculated before rounding to the displayed currency.
     </div>`;
 
     const totRev = rows.reduce((sum,r)=>sum+r.totalRevenue,0);
