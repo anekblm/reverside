@@ -1458,7 +1458,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       ? 'When new subscriptions first invoice within the '+(plBudgetGranularity==='year'?'year':'quarter')
       : plBudgetGranularity==='month'
         ? 'Monthly budget: full MRR from first invoice month'
-        : 'No New CARR required: phasing cannot affect this forecast';
+        : 'No New CARR in this plan: phasing cannot affect the forecast';
     if(slider){
       slider.disabled=!phaseActive;
       slider.min=String(min);
@@ -1490,7 +1490,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         ' annually → '+fmtPct(nrr-grr)+' of opening CARR per '+period+
         '. Each is calculated ONCE per budget period and then allocated evenly to its months.'+
         ' Changing expanded columns never recalculates retention. '+
-        (!hasNewCARR?'No New CARR is required by this ARR target; revenue phasing is inactive. ': '')+
+        (!hasNewCARR?(plPeriodOverride
+          ?'Manually budgeted New CARR is zero; revenue phasing is inactive. '
+          :'Existing cohorts already achieve the CARR target; no New CARR is needed and phasing is inactive. '): '')+
         (plBudgetGranularity==='year'&&plQuarterPhasing!==null&&hasNewCARR
           ? 'Annual revenue phasing can change the FRONT/EVEN/BACK quarter template. ':'')+
         (plPeriodOverride
