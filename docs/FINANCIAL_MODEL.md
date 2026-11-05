@@ -30,13 +30,25 @@ supports input at three levels and read-only aggregation into three view levels.
 - Month: one month-specific new-ARR budget. No monthly revenue phasing;
   first-invoice MRR earns immediately.
 
-When planning a full year, Front/Even/Back use provisional quarterly weights
-35/30/20/15, 25/25/25/25 or 15/20/25/40, with even months within each
-quarter by default. A manually chosen yearly phase may adjust this
-*template* to obtain feasible first-invoice timing. For quarter planning,
-quarter totals remain fixed while the months within each quarter are tilted
-when the user selects explicit phasing. Manual period ARR inputs override the
-target-derived period amounts; closing ARR then becomes an output.
+When planning a full year, Front/Even/Back set **quarterly New Contracted ARR shares**:
+35/30/20/15, 25/25/25/25 or 15/20/25/40. Within each quarter the default
+distribution is EVEN across its three months, independently of the full-year
+quarter pattern.
+
+A manually selected YEAR revenue phasing must preserve each quarter's
+Front/Even/Back share. The engine changes the first-invoice distribution
+**only within quarters** and rejects a phasing outside that preset's
+feasible range rather than moving planned ARR between quarters silently.
+For full twelve-month years, the allowed annual first-invoice phasing
+intervals are FRONT **54.58%–71.25%**, EVEN **45.83%–62.50%**, and
+BACK **35.83%–52.50%**. Therefore a desired annual phase of 25% is
+mathematically incompatible with all three fixed quarterly presets: it
+requires a different quarterly ARR allocation or different invoice-start
+assumptions. QUARTER phasing can range 33.33%–100% because it preserves
+the quarter total and adjusts only the three months within it.
+
+Manual period ARR inputs override target-derived new customer amounts;
+closing CARR then becomes an output, not a forced target.
 
 ### View granularity
 
@@ -82,10 +94,14 @@ sum(w_i) = 1; w_i >= 0
 
 This relies on full MRR being recognized in the first invoice month and no
 churn/expansion for acquired cohorts within their **budget input period**.
-Consequently, `phasing` can only be between `1/L` and `1`: for three
-months, **33.33–100%**; for twelve months, **8.33–100%**. A selected 25%
-quarterly phase is impossible under these assumptions and must be rejected,
-not "fixed" through unreported discounts or invoice delays.
+Consequently, without other constraints, `phasing` can only be between
+`1/L` and `1`: for three months **33.33–100%**; for twelve months
+**8.33–100%**. However fixed FRONT/EVEN/BACK quarterly shares make the
+YEAR feasible interval **narrower**, as described above. A selected 25%
+QUARTER phase is impossible under immediate full-month billing; a selected
+25% YEAR phase is also impossible with the default fixed quarterly presets.
+The engine rejects both instead of inventing recognition or changing
+a customer's budget.
 
 The engine finds a non-negative monthly first-invoice distribution consistent
 with any feasible explicit phase, using an exponential tilt of the selected
