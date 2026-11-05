@@ -609,6 +609,43 @@
             </label>
           </div>
 
+          <!-- Fixed planning controls: always occupy the same space, whether years are expanded or not. -->
+          <div class="pl-budget-toolbar">
+            <label class="pl-budget-granularity-label" for="planBudgetGranularity">
+              Budget level
+              <select id="planBudgetGranularity"
+                      onchange="onPlanBudgetGranularityChange(this.value)"
+                      aria-label="Budget planning granularity">
+                <option value="year">Year</option>
+                <option value="quarter" selected>Quarter</option>
+                <option value="month">Month</option>
+              </select>
+            </label>
+            <div class="pl-pattern-group" role="group" aria-label="New ARR distribution">
+              <span class="pl-pattern-caption">New ARR distribution</span>
+              <button type="button" class="pl-pattern-btn active" id="planPatternEVEN"
+                      onclick="setQtrScenario('EVEN')">EVEN</button>
+              <button type="button" class="pl-pattern-btn" id="planPatternFRONT"
+                      onclick="setQtrScenario('FRONT')">FRONT</button>
+              <button type="button" class="pl-pattern-btn" id="planPatternBACK"
+                      onclick="setQtrScenario('BACK')">BACK</button>
+            </div>
+            <button type="button" class="pl-period-edit-toggle" id="planPeriodEditButton"
+                    onclick="togglePlanPeriodInputs()" aria-expanded="false">
+              Edit period New ARR ▾
+            </button>
+          </div>
+          <div class="pl-budget-note" id="planBudgetGranularityNote">
+            Quarterly budget. Monthly values are generated automatically.
+          </div>
+          <div id="planPeriodEditor" class="pl-period-editor" style="display:none;">
+            <div class="pl-period-editor-title">New Contracted ARR at first invoice · per budget period</div>
+            <div id="planPeriodInputGrid" class="pl-period-input-grid"></div>
+            <div class="pl-period-editor-actions">
+              <button type="button" onclick="resetPlanPeriodInputs()">Reset to ARR target</button>
+              <span id="planPeriodEditorStatus"></span>
+            </div>
+          </div>
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <div id="plTable"></div>
           </div>
