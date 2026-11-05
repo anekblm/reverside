@@ -191,28 +191,44 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       earlierNewBaseRevenue:0,earlierNewChurnRevenueImpact:0,earlierNewExpansionRevenueImpact:0,
       currentNewRevenue:0,currentNewChurnRevenueImpact:0,currentNewExpansionRevenueImpact:0,
     };
-    for(const month of slice)for(const c of month.cohortFlows) {
-      const vintage=c.firstInvoiceMonth;
-      const bucket=vintage<yearStart?"original":vintage<start?"earlier":"current";
-      if(bucket==="original") {
-        metrics.originalBaseRevenue+=c.startARR/12;
-        metrics.originalChurnRevenueImpact-=c.churnARR/12;
-        metrics.originalExpansionRevenueImpact+=c.expansionARR/12;
-      } else if(bucket==="earlier") {
-        metrics.earlierNewBaseRevenue+=c.startARR/12;
-        metrics.earlierNewChurnRevenueImpact-=c.churnARR/12;
-        metrics.earlierNewExpansionRevenueImpact+=c.expansionARR/12;
-      } else {
-        metrics.currentNewRevenue+=c.recognizedRevenue;
-        metrics.currentNewChurnRevenueImpact-=c.churnARR/12;
-        metrics.currentNewExpansionRevenueImpact+=c.expansionARR/12;
-      }
+    // Reconcile earned revenue from the SAME opening CARR shown in the
+    // matrix. The effect of each monthly CARR change persists through all
+    // remaining months of the selected DISPLAY period, including that month.
+    //
+    // Base earned revenue = opening contracted ARR × displayed months / 12.
+    // Churn/expansion earned impact = change in ARR × remaining months / 12.
+    // New first invoices use the same remaining-month rule. These are flows,
+    // not annualized ARR stocks, and no hidden revenue-phasing multiplier exists.
+    const classifyRevenue = vintage => vintage<yearStart
+      ? "original" : vintage<start ? "earlier" : "current";
+    for(const c of first.cohortFlows) {
+      const bucket=classifyRevenue(c.firstInvoiceMonth);
+      if(bucket==="original") metrics.originalBaseRevenue+=c.startARR*slice.length/12;
+      if(bucket==="earlier") metrics.earlierNewBaseRevenue+=c.startARR*slice.length/12;
     }
+    slice.forEach((month,i)=>{
+      const revenueWeight=(slice.length-i)/12;
+      for(const c of month.cohortFlows) {
+        const bucket=classifyRevenue(c.firstInvoiceMonth);
+        if(bucket==="original") {
+          metrics.originalChurnRevenueImpact-=c.churnARR*revenueWeight;
+          metrics.originalExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+        } else if(bucket==="earlier") {
+          metrics.earlierNewChurnRevenueImpact-=c.churnARR*revenueWeight;
+          metrics.earlierNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+        } else {
+          metrics.currentNewRevenue+=c.newARR*revenueWeight;
+          metrics.currentNewChurnRevenueImpact-=c.churnARR*revenueWeight;
+          metrics.currentNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+        }
+      }
+    });
     const originalNet=metrics.originalBaseRevenue+
       metrics.originalChurnRevenueImpact+metrics.originalExpansionRevenueImpact;
     const earlierNet=metrics.earlierNewBaseRevenue+
       metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact;
-    const currentNet=metrics.currentNewRevenue;
+    const currentNet=metrics.currentNewRevenue+
+      metrics.currentNewChurnRevenueImpact+metrics.currentNewExpansionRevenueImpact;
     // Stock/flow cohort bridge for the DISPLAYED period, independent of the
     // budgeting granularity and with no double-counting of earlier new ARR.
     const cohortARR = {};
