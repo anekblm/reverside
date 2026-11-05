@@ -213,6 +213,49 @@ export function buildRevenueBridge(monthly, view = "quarter") {
     const earlierNet=metrics.earlierNewBaseRevenue+
       metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact;
     const currentNet=metrics.currentNewRevenue;
+    // Stock/flow cohort bridge for the DISPLAYED period, independent of the
+    // budgeting granularity and with no double-counting of earlier new ARR.
+    const cohortARR = {};
+    for(const prefix of ["original","earlier","current"]){
+      for(const key of ["StartARR","ChurnARR","ExpansionARR","NewARR","EndARR",
+                         "StartCustomers","ChurnCustomers","NewCustomers","EndCustomers"])
+        cohortARR[prefix+key] = 0;
+    }
+    const classify=vintage=>vintage<yearStart?"original":vintage<start?"earlier":"current";
+    // Only the FIRST month establishes a period's opening stock.
+    for(const c of first.cohortFlows) {
+      const prefix=classify(c.firstInvoiceMonth);
+      cohortARR[prefix+"StartARR"]+=c.startARR;
+      cohortARR[prefix+"StartCustomers"]+=c.startCustomers;
+    }
+    for(const month of slice)for(const c of month.cohortFlows) {
+      const prefix=classify(c.firstInvoiceMonth);
+      cohortARR[prefix+"ChurnARR"]+=c.churnARR;
+      cohortARR[prefix+"ExpansionARR"]+=c.expansionARR;
+      cohortARR[prefix+"NewARR"]+=c.newARR;
+      cohortARR[prefix+"ChurnCustomers"]+=c.churnCustomers;
+      cohortARR[prefix+"NewCustomers"]+=c.newCustomers;
+    }
+    for(const c of last.cohortFlows) {
+      const prefix=classify(c.firstInvoiceMonth);
+      cohortARR[prefix+"EndARR"]+=c.endARR;
+      cohortARR[prefix+"EndCustomers"]+=c.endCustomers;
+    }
+    for(const prefix of ["original","earlier","current"]){
+      if(!near(cohortARR[prefix+"StartARR"]-
+               cohortARR[prefix+"ChurnARR"]+
+               cohortARR[prefix+"ExpansionARR"]+
+               cohortARR[prefix+"NewARR"],
+               cohortARR[prefix+"EndARR"]))
+        throw new Error("Cohort ARR bridge does not reconcile: "+prefix+
+          " months "+(start+1)+"-"+(start+slice.length));
+      if(!near(cohortARR[prefix+"StartCustomers"]-
+               cohortARR[prefix+"ChurnCustomers"]+
+               cohortARR[prefix+"NewCustomers"],
+               cohortARR[prefix+"EndCustomers"]))
+        throw new Error("Cohort customer bridge does not reconcile: "+prefix+
+          " months "+(start+1)+"-"+(start+slice.length));
+    }
     const retainedOpeningCohorts=last.cohortFlows.filter(c=>c.firstInvoiceMonth<start);
     const retainedBaseARR=sum(retainedOpeningCohorts.map(c=>c.endARR));
     const retainedBaseCustomers=sum(retainedOpeningCohorts.map(c=>c.endCustomers));
@@ -230,6 +273,7 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       startACV:first.startCustomers>0?first.startARR/first.startCustomers:0,
       endACV:last.endCustomers>0?last.endARR/last.endCustomers:0,
       retainedBaseACV:retainedBaseCustomers>0?retainedBaseARR/retainedBaseCustomers:0,
+      ...cohortARR,
       recognizedRevenue:flow("recognizedRevenue"),
       existingRevenue:originalNet,newRevenue:earlierNet+currentNet,
       originalNetRevenue:originalNet,earlierNewNetRevenue:earlierNet,currentNewNetRevenue:currentNet,
@@ -241,6 +285,13 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       operatingContribution:flow("operatingContribution"),
       cashNeutralSMCapacity:flow("cashNeutralSMCapacity"),opCF:flow("opCF"),
     };
+    if(!near(result.originalStartARR+result.earlierStartARR+result.currentStartARR,result.startARR) ||
+       !near(result.originalEndARR+result.earlierEndARR+result.currentEndARR,result.endARR))
+      throw new Error("A+B+C ARR stocks do not reconcile for months "+(start+1)+"-"+(start+slice.length));
+    if(!near(result.originalChurnARR+result.earlierChurnARR+result.currentChurnARR,result.churnARR) ||
+       !near(result.originalExpansionARR+result.earlierExpansionARR+result.currentExpansionARR,result.expansionARR) ||
+       !near(result.originalNewARR+result.earlierNewARR+result.currentNewARR,result.newARR))
+      throw new Error("A+B+C ARR flows do not reconcile for months "+(start+1)+"-"+(start+slice.length));
     if(!near(originalNet+earlierNet+currentNet,result.recognizedRevenue)) {
       throw new Error("Revenue bridge does not reconcile for months "+(start+1)+"-"+(start+slice.length));
     }
