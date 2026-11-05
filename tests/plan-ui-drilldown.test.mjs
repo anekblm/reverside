@@ -11,7 +11,7 @@ import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
 const originalApp=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
 const appBody=originalApp.replace(/^import .*;$/gm,'') +
-  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
+  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPLSlider,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
 
 function createApp(timeframe=36){
   const controls={};
@@ -216,4 +216,38 @@ test('manual New CARR inputs obey budget periods and deactivate preset buttons w
   assert.equal(width(node),4);
   app.togglePlanPeriodInputs();
   assert.equal(node('planPeriodEditor').style.display,'none');
+});
+
+test('YEAR retention explicitly derives 25% churn and 51% expansion from opening CARR in the ORIGINAL matrix',()=>{
+  const {app,node,win}=createApp(12);
+  app.onPlanBudgetGranularityChange('year');
+  app.togglePlanPeriodInputs();
+  app.onPlanPeriodValueChange(0,'0'); // remove New CARR to isolate existing cohort
+  node('plChurnSlider').value='25';
+  node('plExpansionSlider').value='51';
+  app.onPLSlider();
+  const y=win._latestMonthlyPlan.years[0];
+  close(y.startARR,500000);
+  close(y.churnARR,125000);
+  close(y.expansionARR,255000);
+  close(y.newARR,0);
+  close(y.endARR,630000);
+  close(y.originalBaseRevenue,500000);
+  close(y.originalChurnRevenueImpact,-125000*13/24);
+  close(y.originalExpansionRevenueImpact,255000*13/24);
+  close(y.recognizedRevenue,500000+130000*13/24);
+  close(y.endACV,y.endARR/y.endCustomers);
+  assert.match(node('plTable').innerHTML,/Contracted ACV \(end\) = Closing CARR \/ Customers/);
+  assert.match(node('planBudgetGranularityNote').textContent,/Churn 25% annually → 25% of opening CARR per year/);
+  assert.match(node('planBudgetGranularityNote').textContent,/Expansion 51% annually → 51% of opening CARR per year/);
+  assert.ok(node('plQuarterPhasingSlider').disabled,'No new cohort means phasing has no relevance');
+  assert.equal(node('plQuarterPhasingDisplay').textContent,'—');
+  const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
+  app.onQuarterPhasingChange('50');
+  close(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
+  app.togglePlQtr(0);
+  const qs=win._latestMonthlyPlan.quarters;
+  close(qs.reduce((n,q)=>n+q.churnARR,0),125000);
+  close(qs.reduce((n,q)=>n+q.expansionARR,0),255000);
+  close(qs.reduce((n,q)=>n+q.recognizedRevenue,0),y.recognizedRevenue);
 });
