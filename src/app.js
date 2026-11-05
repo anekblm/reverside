@@ -1117,7 +1117,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function onQuarterPhasingChange(value) {
-    if (plBudgetGranularity==='month') return;
+    if (plBudgetGranularity==='month' ||
+        !(window._latestMonthlyPlan?.summary?.annualizedNewARR>1e-8)) return;
     const fraction = Number(value);
     const width=plBudgetGranularity==='year'?12:3;
     const minimum=100/((state.timeframe%width)||width);
@@ -1442,7 +1443,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
     const remaining=state.timeframe%width;
     const min=100/(remaining||width);
-    const phaseActive=plBudgetGranularity!=='month';
+    const hasNewCARR=model.summary.annualizedNewARR>1e-8;
+    const phaseActive=plBudgetGranularity!=='month' && hasNewCARR;
     const slider=document.getElementById('plQuarterPhasingSlider');
     const card=document.getElementById('plQuarterPhasingCard');
     const title=document.getElementById('plQuarterPhasingLabel');
@@ -1453,8 +1455,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       ? 'Revenue phasing · '+(plBudgetGranularity==='year'?'yearly':'quarterly')
       : 'Revenue phasing · monthly';
     if(note) note.textContent=phaseActive
-      ? 'First invoice timing within '+(plBudgetGranularity==='year'?'year':'quarter')
-      : 'Not applicable: full MRR in first invoice month';
+      ? 'When new subscriptions first invoice within the '+(plBudgetGranularity==='year'?'year':'quarter')
+      : plBudgetGranularity==='month'
+        ? 'Monthly budget: full MRR from first invoice month'
+        : 'No New CARR required: phasing cannot affect this forecast';
     if(slider){
       slider.disabled=!phaseActive;
       slider.min=String(min);
@@ -1462,20 +1466,37 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       slider.value=String(plQuarterPhasing??model.periodPhasing[0]??100);
     }
     if(output) output.textContent=phaseActive
-      ?(plQuarterPhasing??model.periodPhasing[0]).toFixed(1)+'%':'100%';
+      ?(plQuarterPhasing??model.periodPhasing[0]).toFixed(1)+'%'
+      : plBudgetGranularity==='month'?'100%':'—';
     const minimumLabel=document.getElementById('plPhasingMinLabel');
     if(minimumLabel) minimumLabel.textContent=phaseActive
       ? min.toFixed(1)+'% · last month' : 'Not applicable';
     const maximumLabel=document.getElementById('plPhasingMaxLabel');
     if(maximumLabel) maximumLabel.textContent=phaseActive
-      ? '100% · first month' : 'First invoice = full MRR';
+      ? '100% · first month' : hasNewCARR?'First invoice = full MRR':'No new customers';
     const modeNote=document.getElementById('planBudgetGranularityNote');
-    if(modeNote) modeNote.textContent=
-      (plBudgetGranularity==='year'?'Yearly':plBudgetGranularity==='quarter'?'Quarterly':'Monthly')+
-      ' budget. The system maintains the same monthly ledger in all views. '+
-      (plPeriodOverride
-        ? 'Custom period New ARR is authoritative; closing CARR becomes an output.'
-        : 'Target closing CARR determines how much New ARR is needed.');
+    if(modeNote) {
+      const churn=plChurn??state.churn??0.25;
+      const expansion=plExpansion??churn;
+      const grr=Math.pow(1-churn,width/12);
+      const nrr=Math.pow(1-churn+expansion,width/12);
+      const fmtPct=v=>new Intl.NumberFormat('sv-SE',{maximumFractionDigits:2}).format(v*100)+'%';
+      const scope=plBudgetGranularity==='year'?'year':'quarter';
+      const period=plBudgetGranularity==='month'?'month':scope;
+      modeNote.textContent=
+        'Budget: '+(plBudgetGranularity==='year'?'YEAR':plBudgetGranularity==='quarter'?'QUARTER':'MONTH')+
+        '. Churn '+fmtPct(churn)+' annually → '+fmtPct(1-grr)+
+        ' of opening CARR per '+period+'. Expansion '+fmtPct(expansion)+
+        ' annually → '+fmtPct(nrr-grr)+' of opening CARR per '+period+
+        '. Each is calculated ONCE per budget period and then allocated evenly to its months.'+
+        ' Changing expanded columns never recalculates retention. '+
+        (!hasNewCARR?'No New CARR is required by this ARR target; revenue phasing is inactive. ': '')+
+        (plBudgetGranularity==='year'&&plQuarterPhasing!==null&&hasNewCARR
+          ? 'Annual revenue phasing can change the FRONT/EVEN/BACK quarter template. ':'')+
+        (plPeriodOverride
+          ? 'Custom New CARR overrides the target; closing CARR is an output.'
+          : 'Closing CARR target sets the required New CARR.');
+    }
     const editor=document.getElementById('planPeriodEditor');
     if(editor) editor.style.display=plPeriodInputsOpen?'block':'none';
     const editBtn=document.getElementById('planPeriodEditButton');
