@@ -546,8 +546,8 @@
                 min="33.333333333333336" max="100" step="0.1" value="66.7"
                 oninput="onQuarterPhasingChange(this.value)" aria-label="Quarterly revenue phasing">
               <div class="pl-phasing-ends">
-                <span title="33.3%: first invoice in final month">33.3% · last month</span>
-                <span title="100%: first invoice in first month">100% · first month</span>
+                <span id="plPhasingMinLabel" title="Lowest feasible first-invoice timing for selected budget period">33.3% · last month</span>
+                <span id="plPhasingMaxLabel" title="All new invoices in first month">100% · first month</span>
               </div>
               <div id="plRampNote" class="pl-assumption-note"></div>
             </div>
@@ -778,11 +778,6 @@
           <div class="card-title">5. Cash flow & quarterly S&M timing <span style="font-size:11px;color:#999;font-weight:400;">— monthly engine</span></div>
           <div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:1rem;">Schedule customer signings and S&M cash payments independently. The model calculates monthly recognized revenue, collections, cash-neutral S&M capacity and possible liquidity shortfalls.</div>
           <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end;">
-            <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Customer signing pattern
-              <select id="signingPattern" class="form-input" onchange="setQtrScenario(this.value)">
-                <option value="EVEN">Even</option><option value="FRONT">Front-loaded</option><option value="BACK">Back-loaded</option>
-              </select>
-            </label>
             <label style="font-size:11px;display:flex;flex-direction:column;gap:5px;">Opening cash
               <input id="cashOpening" class="form-input" type="number" min="0" value="0" onchange="updateCashAssumptions()">
             </label>
