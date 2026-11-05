@@ -122,27 +122,46 @@ function firstInvoiceWeights(input) {
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
   const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv}=input;
-  const openingCustomers = input.openingCustomers ?? (openingARR / acv);
-  const newACVByMonth = input.newACVByMonth ?? Array(months).fill(acv);
-  const grr=Math.pow(1-annualChurn,1/12);
-  const nrr=Math.pow(1-annualChurn+annualExpansionComp,1/12);
-  const holdMonths=periodMonths(granularity);
+  const openingCustomers=input.openingCustomers??openingARR/acv;
+  const newACVByMonth=input.newACVByMonth??Array(months).fill(acv);
+  const width=periodMonths(granularity);
+  const annualGrossRetention=1-annualChurn;
+  const annualNRR=annualGrossRetention+annualExpansionComp;
   const cohorts=[{firstInvoiceMonth:-1,arr:openingARR,count:openingCustomers}];
   const rows=[];
   for(let m=0;m<months;m++) {
-    if(monthlySignedARR[m]>0) cohorts.push({firstInvoiceMonth:m,arr:monthlySignedARR[m],count:monthlySignedARR[m]/newACVByMonth[m]});
+    const periodStart=Math.floor(m/width)*width;
+    const periodLength=Math.min(width,months-periodStart);
+    if(m===periodStart) {
+      // Apply retention ONCE to opening CARR of the selected budget period.
+      // Changes are allocated evenly to months, not recomputed monthly.
+      const grossRetention=Math.pow(annualGrossRetention,periodLength/12);
+      const netRetention=Math.pow(annualNRR,periodLength/12);
+      for(const c of cohorts) {
+        const eligible=c.firstInvoiceMonth<periodStart;
+        c.periodChurnPerMonth=eligible?c.arr*(1-grossRetention)/periodLength:0;
+        c.periodExpansionPerMonth=eligible?c.arr*(netRetention-grossRetention)/periodLength:0;
+        c.periodLostCustomersPerMonth=eligible?c.count*(1-grossRetention)/periodLength:0;
+      }
+    }
+    if(monthlySignedARR[m]>0)cohorts.push({
+      firstInvoiceMonth:m,arr:monthlySignedARR[m],count:monthlySignedARR[m]/newACVByMonth[m],
+      periodChurnPerMonth:0,periodExpansionPerMonth:0,periodLostCustomersPerMonth:0
+    });
     const vintageRows=[];
     let startARR=0,churnARR=0,expansionARR=0,endARR=0;
     let startCustomers=0,churnCustomers=0,endCustomers=0;
     for(const c of cohorts) {
       const newlyAdded=c.firstInvoiceMonth===m;
-      const isEligible=c.firstInvoiceMonth<0 || m>= (Math.floor(c.firstInvoiceMonth/holdMonths)+1)*holdMonths;
       const before=newlyAdded?0:c.arr;
-      const churn=(!newlyAdded&&isEligible)?before*(1-grr):0;
-      const expansion=(!newlyAdded&&isEligible)?before*(nrr-grr):0;
       const beforeCustomers=newlyAdded?0:c.count;
-      const lostCustomers=(!newlyAdded&&isEligible)?beforeCustomers*(1-grr):0;
-      if(!newlyAdded){c.arr=before-churn+expansion;c.count=beforeCustomers-lostCustomers;}
+      const churn=newlyAdded?0:c.periodChurnPerMonth;
+      const expansion=newlyAdded?0:c.periodExpansionPerMonth;
+      const lostCustomers=newlyAdded?0:c.periodLostCustomersPerMonth;
+      if(!newlyAdded) {
+        c.arr=before-churn+expansion;
+        c.count=beforeCustomers-lostCustomers;
+      }
       const newlySigned=newlyAdded?c.arr:0;
       startCustomers+=beforeCustomers;
       churnCustomers+=lostCustomers;
@@ -163,9 +182,10 @@ function makeARRRows(input, monthlySignedARR) {
     const recognizedRevenue=endARR/12;
     rows.push({
       index:m,month:m+1,year:Math.floor(m/12),quarter:Math.floor((m%12)/3),
+      budgetPeriod:Math.floor(m/width),
       startARR,churnARR,expansionARR,newARR,endARR,
       startCustomers,churnCustomers,endCustomers,
-      newCustomers:newARR/newACVByMonth[m], newACV:newACVByMonth[m],
+      newCustomers:newARR/newACVByMonth[m],newACV:newACVByMonth[m],
       recognizedRevenue,
       existingRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth<0).map(c=>c.recognizedRevenue)),
       newRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth>=0).map(c=>c.recognizedRevenue)),
