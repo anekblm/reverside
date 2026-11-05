@@ -99,32 +99,36 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
 test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in every view',()=>{
   const {app,node,win}=createApp(36);
   const required=[
+    'Contracted ARR (start of period)',
     'A. Existing – Start of Year',
-    'Base Revenue',
-    '− Churn impact',
-    '+ Expansion impact',
-    'Net Revenue – Existing (A)',
+    'Opening CARR – A',
+    '− Churn CARR – A',
+    '+ Expansion CARR – A',
+    'Closing CARR – A',
     'B. New – Earlier Periods',
-    'Revenue from earlier cohorts',
-    'Net Revenue – Earlier (B)',
+    'Opening CARR – B',
+    '− Churn CARR – B',
+    '+ Expansion CARR – B',
+    'Closing CARR – B',
     'C. New – Current Period',
-    'Recognized New Revenue (C)',
+    '+ New CARR – C',
+    '− Churn CARR – C',
+    '+ Expansion CARR – C',
+    'Closing CARR – C',
     'Recognized Revenue – Existing (A)',
     'Recognized Revenue – New (B+C)',
-    'Total Recognized Revenue'
+    'Total Recognized Revenue',
+    'Contracted ARR (end of period)'
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
     required.forEach(label=>assert.ok(html.includes(label),'Missing label '+label));
     assert.ok(!html.includes('id="revenueMatrix"'),'A separate revenue table must not be added');
-    assert.ok(html.indexOf('Contracted ARR (start of period)')<
-      html.indexOf('A. Existing – Start of Year'),
-      'Revenue A/B/C must follow ARR in the original matrix');
-    assert.ok(html.indexOf('Recognized Revenue – Existing (A)')<
-      html.indexOf('Recognized Revenue – New (B+C)') &&
-      html.indexOf('Recognized Revenue – New (B+C)')<
-      html.indexOf('Total Recognized Revenue'),
-      'Existing and New revenue subtotal rows must precede total');
+    const positions=required.map(label=>html.indexOf(label));
+    assert.ok(positions.every((v,i)=>v>=0&&(i===0||v>positions[i-1])),
+      'Opening CARR, cohort changes, recognized revenue totals and closing CARR must appear in the agreed order');
+    assert.ok(!html.includes('New MRR · first invoice'),
+      'Remove the obsolete duplicate ARR/MRR block');
   };
   const reconcile=p=>{
     close(p.originalBaseRevenue+p.originalChurnRevenueImpact+
@@ -136,6 +140,12 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     close(p.existingRevenue,p.originalNetRevenue);
     close(p.newRevenue,p.earlierNewNetRevenue+p.currentNewNetRevenue);
     close(p.existingRevenue+p.newRevenue,p.recognizedRevenue);
+    close(p.originalStartARR+p.earlierStartARR+p.currentStartARR,p.startARR);
+    close(p.originalEndARR+p.earlierEndARR+p.currentEndARR,p.endARR);
+    for(const x of ['original','earlier','current']) {
+      close(p[x+'StartARR']-p[x+'ChurnARR']+p[x+'ExpansionARR']+
+        p[x+'NewARR'],p[x+'EndARR']);
+    }
   };
   checkLabels();
   win._latestMonthlyPlan.years.forEach(reconcile);
