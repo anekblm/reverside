@@ -187,8 +187,10 @@ function makeARRRows(input, monthlySignedARR) {
       startCustomers,churnCustomers,endCustomers,
       newCustomers:newARR/newACVByMonth[m],newACV:newACVByMonth[m],
       recognizedRevenue,
-      existingRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth<0).map(c=>c.recognizedRevenue)),
-      newRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth>=0).map(c=>c.recognizedRevenue)),
+      // "Existing" resets at the calendar year boundary, just like A in
+      // the displayed Revenue Bridge. Prior year's new customers are base now.
+      existingRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth<Math.floor(m/12)*12).map(c=>c.recognizedRevenue)),
+      newRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth>=Math.floor(m/12)*12).map(c=>c.recognizedRevenue)),
       cohortFlows:vintageRows,
     });
   }
