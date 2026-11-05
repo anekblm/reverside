@@ -1069,7 +1069,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   // Initialize P&L sliders from state when entering step 3
   function initPLSliders() {
-    const churnPct = Math.round((state.churn || 0.25) * 100);
+    const churnPct = Math.round((state.churn ?? 0.25) * 100);
 
     // Derive default expansion from Step 2's share of revenue from new customers
     // Back-calculate: existing base × NRR^years must reach (1 - newCustPct%) of target
@@ -1077,7 +1077,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // expansion = NRR - GRR
     // state.newCustomersPercent is stored as 0-1 decimal
     const newCustFrac = (state.newCustomersPercent !== undefined) ? state.newCustomersPercent : 0.5;
-    const churn_ = state.churn || 0.25;
+    const churn_ = state.churn ?? 0.25;
     const grr_ = Math.max(0.001, 1 - churn_);
     const years_ = Math.max(1, Math.round(state.timeframe / 12));
 
