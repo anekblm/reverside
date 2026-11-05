@@ -74,6 +74,54 @@ function tiltToPhasing(baseline, percent, name) {
   return weighted((lo + hi) / 2).map(v => v * all);
 }
 
+/**
+ * A YEAR-planned Front/Even/Back quarter allocation is authoritative.
+ * Annual revenue phasing may move first invoices WITHIN each quarter, never
+ * silently move New CARR from one quarter to another.
+ */
+function yearPhasingLimits(baseline) {
+  const length=baseline.length, total=sum(baseline);
+  if(total<=0) throw new RangeError("Yearly phasing requires positive quarterly template weights");
+  let minimum=0,maximum=0;
+  for(let start=0;start<length;start+=3) {
+    const span=Math.min(3,length-start);
+    const weight=sum(baseline.slice(start,start+span))/total;
+    minimum+=weight*(length-start-span+1)/length;
+    maximum+=weight*(length-start)/length;
+  }
+  return [minimum*100,maximum*100];
+}
+function phaseYearWithinQuarters(baseline,percent,name) {
+  if(percent==null)return baseline.slice();
+  const target=finite(percent,name);
+  const [minimum,maximum]=yearPhasingLimits(baseline);
+  if(target<minimum-1e-8||target>maximum+1e-8)
+    throw new RangeError(name+" must be between "+minimum.toFixed(2)+
+      "% and "+maximum.toFixed(2)+"% while preserving the selected "+
+      "FRONT/EVEN/BACK quarterly New CARR distribution");
+  const length=baseline.length;
+  const tilt=theta=>{
+    const result=[];
+    for(let start=0;start<length;start+=3){
+      const group=baseline.slice(start,start+3);
+      const total=sum(group);
+      const w=group.map((v,i)=>v*Math.exp(theta*(group.length-i)/group.length));
+      const denominator=sum(w);
+      result.push(...w.map(v=>v/denominator*total));
+    }
+    return result;
+  };
+  if(near(target,minimum,1e-10))return tilt(-60);
+  if(near(target,maximum,1e-10))return tilt(60);
+  let lo=-60,hi=60;
+  for(let step=0;step<110;step++){
+    const mid=(lo+hi)/2;
+    if(phaseFraction(tilt(mid))*100<target)lo=mid;
+    else hi=mid;
+  }
+  return tilt((lo+hi)/2);
+}
+
 function monthlyTemplateWeights(months, yearShares = [], pattern = "EVEN") {
   const quarterPattern = SIGNING_PATTERNS[pattern];
   if (!quarterPattern) throw new RangeError("Unknown signing pattern: " + pattern);
@@ -106,18 +154,27 @@ function firstInvoiceWeights(input) {
   const weights = [];
   const intraPeriodWeights = [];
   const phase = [];
+  const phaseRanges = [];
   for(let p=0;p<count;p++) {
     const begin=p*width;
     const within=template.slice(begin,Math.min(months,begin+width));
     const withinSum=sum(within);
-    const normalized=withinSum>0?within.map(v=>v/withinSum):Array(within.length).fill(1/within.length);
+    const fallback=granularity==="year"
+      ? monthlyTemplateWeights(within.length,[],input.signingPattern)
+      : Array(within.length).fill(1/within.length);
+    const normalized=withinSum>0?within.map(v=>v/withinSum):fallback;
     const requested=granularity==="month"?null:(phaseByPeriod?.[p] ?? phasePercent ?? null);
-    const adjusted=tiltToPhasing(normalized,requested,"Revenue phasing for period "+(p+1));
+    const range=granularity==="year"?yearPhasingLimits(normalized)
+      :[100/within.length,100];
+    const adjusted=granularity==="year"
+      ? phaseYearWithinQuarters(normalized,requested,"Revenue phasing for year "+(p+1))
+      : tiltToPhasing(normalized,requested,"Revenue phasing for period "+(p+1));
+    phaseRanges.push(range);
     phase.push(phaseFraction(adjusted)*100);
     weights.push(...adjusted.map(v=>v*periodTotals[p]));
     intraPeriodWeights.push(...adjusted);
   }
-  return {weights,phase,periodTotals,intraPeriodWeights};
+  return {weights,phase,phaseRanges,periodTotals,intraPeriodWeights};
 }
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
@@ -377,7 +434,8 @@ export function forecastSaaS(input) {
   const openingCash=finite(input.openingCash??0,"openingCash",-1e15);
   const otherOpexMonthly=finite(input.otherOpexMonthly??0,"otherOpexMonthly");
   const yearsCount=Math.ceil(months/12);
-  const {weights,phase,periodTotals,intraPeriodWeights}=firstInvoiceWeights({...input,months,granularity});
+  const {weights,phase,phaseRanges,periodTotals,intraPeriodWeights}=
+    firstInvoiceWeights({...input,months,granularity});
   const nrrAnnual=1-annualChurn+annualExpansionComp;
   const factor=nrrAnnual/(1-annualChurn);
   const newACV=Array.from({length:months},(_,m)=>
@@ -454,7 +512,8 @@ export function forecastSaaS(input) {
     months:monthly,quarters,years,summary,
     annualCustomers,annualSM,quarterSM,
     signingPattern:input.signingPattern||"EVEN",
-    granularity,periodPhasing:phase,periodCount:periodTotals.length,
+    granularity,periodPhasing:phase,periodPhaseRanges:phaseRanges,
+    periodCount:periodTotals.length,
     manualBudget:input.newARRByPeriod!=null,
     assumptions:{
       subscription:"Monthly SaaS: customer starts at first invoicing month.",
