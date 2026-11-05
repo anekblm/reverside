@@ -124,6 +124,20 @@ The original cash controls remain separate from revenue and CARR stocks.
 The legacy engine `src/engine/monthly-plan.js` remains for comparison,
 but the displayed PLAN matrix uses `src/engine/cohort-budget.js`.
 
+**Financial correctness regression fixed:** churn and expansion are
+computed ONCE on each selected budget period's opening CARR. Only the
+resulting signed amounts are distributed to months; they are NOT
+recomputed monthly unless budget granularity itself is Month. The
+customer-based annual/quarterly/monthly retention formulas, first-invoice
+recognition rules, and cross-year cohort classifications are documented
+in `FINANCIAL_MODEL.md` and `PLAN_LOGIC_AUDIT.md`.
+
+Year phasing is constrained to first-invoice timing WITHIN each fixed
+FRONT/EVEN/BACK quarter share (and can reject incompatible settings).
+The phasing slider is disabled when no New CARR is modeled. The ACV row
+shows actual contracted CARR divided by closing customer count, never
+"recognized ACV" inferred from annual earnings over a closing stock.
+
 The financial specification is in `FINANCIAL_MODEL.md`, and regression tests
 cover original row structure, granularity controls and A/B/C reconciliation.
 Do not merge into production without browser and financial acceptance.
