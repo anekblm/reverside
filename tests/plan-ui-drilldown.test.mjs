@@ -92,7 +92,7 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   app.togglePlMonth(0,0);
   app.selectStrategy('efficient');
   assert.match(node('cashFlowPanel').innerHTML,/Operating cash flow/);
-  assert.match(node('plTable').innerHTML,/B\. New – Earlier Periods/);
+  assert.match(node('plTable').innerHTML,/B\. New Customers – Earlier This Year/);
   assert.equal(win._latestMonthlyPlan.months.length,12);
 });
 
@@ -100,18 +100,18 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   const {app,node,win}=createApp(36);
   const required=[
     'Contracted ARR (start of period)',
-    'A. Existing – Start of Year',
-    'Of which: Opening CARR – A',
+    'A. Existing Customers – Start of Year',
+    'Of which: Opening CARR – Existing (A)',
     '− Churn CARR – A',
     '+ Expansion CARR – A',
     'Closing CARR – A',
-    'B. New – Earlier Periods',
-    'Of which: Opening CARR – B',
+    'B. New Customers – Earlier This Year',
+    'Of which: Opening CARR – Earlier New (B)',
     '− Churn CARR – B',
     '+ Expansion CARR – B',
     'Closing CARR – B',
-    'C. New – Current Period',
-    '+ New CARR – C',
+    'C. New Customers – Current Period',
+    '+ First-invoiced New CARR – Current (C)',
     '− Churn CARR – C',
     '+ Expansion CARR – C',
     'Closing CARR – C',
