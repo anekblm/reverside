@@ -124,3 +124,28 @@ test('CASH and ARR remain separate: collecting with lag changes cash, not recogn
   approx(now.summary.endingARR,lag.summary.endingARR);
   assert.notEqual(now.summary.endingCash,lag.summary.endingCash);
 });
+
+test('YEAR phasing cannot change the explicitly selected quarter New CARR shares',()=>{
+  const target=120000;
+  const base=input({openingARR:0,openingCustomers:0,targetARR:target,
+    annualChurn:0,annualExpansionComp:0,granularity:'year',
+    newARRByPeriod:[target]});
+  for(const [preset,shares] of [
+    ['FRONT',[35,30,20,15]],['EVEN',[25,25,25,25]],
+    ['BACK',[15,20,25,40]]
+  ]) {
+    const auto=forecastSaaS({...base,signingPattern:preset});
+    const range=auto.periodPhaseRanges[0];
+    const wanted=(range[0]+range[1])/2;
+    const chosen=forecastSaaS({...base,signingPattern:preset,phasePercent:wanted});
+    approx(chosen.periodPhasing[0],wanted);
+    for(let q=0;q<4;q++){
+      approx(auto.quarters[q].newARR,target*shares[q]/100);
+      approx(chosen.quarters[q].newARR,target*shares[q]/100);
+    }
+    assert.throws(()=>forecastSaaS({...base,signingPattern:preset,
+      phasePercent:range[0]-2}),/preserving the selected/);
+    assert.throws(()=>forecastSaaS({...base,signingPattern:preset,
+      phasePercent:range[1]+2}),/preserving the selected/);
+  }
+});
