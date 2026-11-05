@@ -1113,8 +1113,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function onQuarterPhasingChange(value) {
+    if (plBudgetGranularity==='month') return;
     const fraction = Number(value);
-    if (!Number.isFinite(fraction) || fraction < 100/3 - 1e-7 || fraction > 100) return;
+    const width=plBudgetGranularity==='year'?12:3;
+    const minimum=100/((state.timeframe%width)||width);
+    if (!Number.isFinite(fraction) || fraction < minimum-1e-7 || fraction > 100) return;
     plQuarterPhasing = fraction;
     const output = document.getElementById('plQuarterPhasingDisplay');
     if (output) output.textContent = fraction.toFixed(1) + '%';
@@ -1731,23 +1734,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     let html = `<div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
 
     // ── HEADERS ──
-    // Check if any year is expanded — show scenario selector if so
-    const anyQtrExpanded = Object.values(window._qtr || {}).some(v => v);
-    if (anyQtrExpanded) {
-      html += `<div></div>`;
-      // Scenario buttons spanning all columns
-      const scenBtns = ['EVEN','FRONT','BACK'].map(s =>
-        `<span onclick="setQtrScenario('${s}')" style="cursor:pointer;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:${plQtrScenario===s?'700':'400'};
-         background:${plQtrScenario===s?'#378ADD':'#f0f0f0'};color:${plQtrScenario===s?'white':'#666'};
-         border:0.5px solid ${plQtrScenario===s?'#378ADD':'#ddd'};margin-right:4px;">${s}</span>`
-      ).join('');
-      const totalQtrCols = colDefs.length - 1;
-      html += `<div style="grid-column: span ${totalQtrCols};padding:4px 0;font-size:10px;color:#999;">
-        Signing pattern: ${scenBtns}
-      </div>`;
-      html += `</div><div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
-    }
-
+    // Presets now occupy a permanent toolbar ABOVE this grid.
+    // No conditional rows: expand/collapse changes columns only, never vertical position.
     html += `<div></div>`;
     for (let y = 0; y < years; y++) {
       const exp = window._qtr && window._qtr[y];
@@ -2123,6 +2111,10 @@ Object.assign(window, {
   resetPL,
   onPLSlider,
   onQuarterPhasingChange,
+  onPlanBudgetGranularityChange,
+  togglePlanPeriodInputs,
+  onPlanPeriodValueChange,
+  resetPlanPeriodInputs,
   onPLCheckbox,
   selectStrategy,
   onCustomCACChange,
