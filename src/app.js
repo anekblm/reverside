@@ -1459,6 +1459,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     if(output) output.textContent=phaseActive
       ?(plQuarterPhasing??model.periodPhasing[0]).toFixed(1)+'%':'100%';
+    const minimumLabel=document.getElementById('plPhasingMinLabel');
+    if(minimumLabel) minimumLabel.textContent=phaseActive
+      ? min.toFixed(1)+'% · last month' : 'Not applicable';
+    const maximumLabel=document.getElementById('plPhasingMaxLabel');
+    if(maximumLabel) maximumLabel.textContent=phaseActive
+      ? '100% · first month' : 'First invoice = full MRR';
     const modeNote=document.getElementById('planBudgetGranularityNote');
     if(modeNote) modeNote.textContent=
       (plBudgetGranularity==='year'?'Yearly':plBudgetGranularity==='quarter'?'Quarterly':'Monthly')+
