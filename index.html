@@ -621,14 +621,23 @@
                 <option value="month">Month</option>
               </select>
             </label>
-            <div class="pl-pattern-group" role="group" aria-label="New ARR distribution">
-              <span class="pl-pattern-caption">New ARR distribution</span>
+            <div class="pl-pattern-group" role="group" aria-label="New CARR distribution between quarters">
+              <span class="pl-pattern-caption">Between quarters</span>
               <button type="button" class="pl-pattern-btn active" id="planPatternEVEN"
                       onclick="setQtrScenario('EVEN')">EVEN</button>
               <button type="button" class="pl-pattern-btn" id="planPatternFRONT"
                       onclick="setQtrScenario('FRONT')">FRONT</button>
               <button type="button" class="pl-pattern-btn" id="planPatternBACK"
                       onclick="setQtrScenario('BACK')">BACK</button>
+            </div>
+            <div class="pl-pattern-group" role="group" aria-label="New CARR distribution within each quarter">
+              <span class="pl-pattern-caption">Within quarter · months</span>
+              <button type="button" class="pl-pattern-btn" id="planMonthPatternFRONT"
+                      onclick="setMonthScenario('FRONT')">FRONT</button>
+              <button type="button" class="pl-pattern-btn active" id="planMonthPatternEVEN"
+                      onclick="setMonthScenario('EVEN')">EVEN</button>
+              <button type="button" class="pl-pattern-btn" id="planMonthPatternBACK"
+                      onclick="setMonthScenario('BACK')">BACK</button>
             </div>
             <button type="button" class="pl-period-edit-toggle" id="planPeriodEditButton"
                     onclick="togglePlanPeriodInputs()" aria-expanded="false">
