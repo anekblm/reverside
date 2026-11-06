@@ -11,7 +11,7 @@ import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
 const originalApp=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
 const appBody=originalApp.replace(/^import .*;$/gm,'') +
-  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPLSlider,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
+  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,setMonthScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPLSlider,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
 
 function createApp(timeframe=36){
   const controls={};
@@ -170,29 +170,30 @@ test('budget granularity Year/Quarter/Month changes the input engine, not the di
   assert.equal(win._latestMonthlyPlan.granularity,'year');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,3);
   assert.equal(node('plQuarterPhasingLabel').textContent,'Revenue phasing · yearly');
-  assert.ok(Number(node('plQuarterPhasingSlider').min)>45);
-  assert.ok(Number(node('plQuarterPhasingSlider').max)<63);
+  assert.equal(Number(node('plQuarterPhasingSlider').min),0);
+  assert.ok(Number(node('plQuarterPhasingSlider').max)>50);
   const signedBefore=win._latestMonthlyPlan.quarters.map(p=>p.newARR);
   app.onQuarterPhasingChange('55');
   win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,55));
   win._latestMonthlyPlan.quarters.forEach((q,i)=>close(q.newARR,signedBefore[i]));
-  app.onQuarterPhasingChange('25'); // outside feasible range: ignored
-  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,55));
+  app.onQuarterPhasingChange('25'); // valid independent revenue realization
+  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,25));
   assert.equal(width(node),4);
   app.onPlanBudgetGranularityChange('quarter');
   assert.equal(win._latestMonthlyPlan.granularity,'quarter');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,12);
-  assert.ok(Number(node('plQuarterPhasingSlider').min)>33);
+  assert.equal(Number(node('plQuarterPhasingSlider').min),0);
   app.onPlanBudgetGranularityChange('month');
   assert.equal(win._latestMonthlyPlan.granularity,'month');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,36);
-  assert.ok(node('plQuarterPhasingSlider').disabled);
+  assert.ok(!node('plQuarterPhasingSlider').disabled);
   assert.ok(node('planPatternFRONT').disabled && node('planPatternBACK').disabled);
+  assert.ok(node('planMonthPatternFRONT').disabled && node('planMonthPatternBACK').disabled);
   assert.equal(width(node),4);
   const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
   app.onQuarterPhasingChange('50');
-  assert.equal(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
-  assert.equal(node('plQuarterPhasingDisplay').textContent,'100%');
+  assert.notEqual(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
+  assert.equal(node('plQuarterPhasingDisplay').textContent,'50.0%');
   app.onPlanBudgetGranularityChange('quarter');
   assert.ok(!node('planPatternFRONT').disabled);
   app.setQtrScenario('FRONT');
@@ -278,10 +279,35 @@ test('BACK responds after explicit FRONT year phasing, without changing Existing
   close(back.years[0].originalChurnARR,existingBefore.originalChurnARR);
   close(back.years[0].originalExpansionARR,existingBefore.originalExpansionARR);
   close(back.years[0].originalNetRevenue,existingBefore.originalNetRevenue);
-  close(back.periodPhasing[0],(back.periodPhaseRanges[0][0]+back.periodPhaseRanges[0][1])/2);
+  close(back.periodPhasing[0],back.periodPhaseRanges[0][1]);
   assert.ok(node('plQuarterPhasingSlider').max>node('plQuarterPhasingSlider').min);
   app.setQtrScenario('EVEN');
   assert.equal(win._latestMonthlyPlan.signingPattern,'EVEN');
   app.setQtrScenario('FRONT');
   assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
+});
+
+test('independent quarter and month presets preserve one matrix and period revenue total',()=>{
+  const {app,node,win}=createApp(12);
+  app.onPlanBudgetGranularityChange('year');
+  app.setQtrScenario('FRONT');
+  app.setMonthScenario('EVEN');
+  const original=win._latestMonthlyPlan;
+  assert.equal(original.monthlySigningPattern,'EVEN');
+  close(original.quarters[0].newARR,original.years[0].newARR*.35);
+  close(original.months[0].newARR,original.months[1].newARR);
+  app.setMonthScenario('FRONT');
+  const front=win._latestMonthlyPlan;
+  assert.equal(front.signingPattern,'FRONT');
+  assert.equal(front.monthlySigningPattern,'FRONT');
+  close(front.quarters[0].newARR,original.quarters[0].newARR);
+  assert.ok(front.months[0].newARR>front.months[2].newARR);
+  assert.ok(node('planMonthPatternEVEN').disabled===false);
+  app.setMonthScenario('BACK');
+  const back=win._latestMonthlyPlan;
+  close(back.quarters[0].newARR,original.quarters[0].newARR);
+  assert.ok(back.months[0].newARR<back.months[2].newARR);
+  app.setMonthScenario('EVEN');
+  close(win._latestMonthlyPlan.quarters[0].newARR,original.quarters[0].newARR);
+  assert.equal(width(node),4);
 });
