@@ -41,14 +41,20 @@ test("quarterly input 35 and 50% phasing reproduces exactly 4.375 in new revenue
   approx(r.months[0].startARR,500);
   approx(r.months[2].endARR,535);
 });
-test("phasing below one full invoice month is rejected, not faked",()=>{
-  assert.throws(()=>forecastSaaS(base({months:3,phasePercent:25})),/33.33%/);
-  // Annual phasing must not secretly change the FRONT quarter allocation.
-  assert.throws(()=>forecastSaaS(base({granularity:"year",phasePercent:25})),/54.58%/);
-  const r=forecastSaaS(base({granularity:"year",phasePercent:60}));
-  approx(r.periodPhasing[0],60);
-  [35,30,20,15].forEach((pct,i)=>approx(r.quarters[i].newARR,100*pct/100));
-  assert.throws(()=>forecastSaaS(base({granularity:"year",phasePercent:1})),/54.58%/);
+test("quarter phasing of 25% is accepted, independent of contracted ARR signing",()=>{
+  const cfg=base({openingARR:0,openingCustomers:0,acv:100,
+    targetARR:100,granularity:"quarter",newARRByPeriod:[100,0,0,0],
+    signingPattern:"EVEN",monthlySigningPattern:"EVEN",phasePercent:25});
+  const m=forecastSaaS(cfg);
+  approx(m.quarters[0].newARR,100);
+  approx(m.quarters[0].recognizedRevenue,6.25);
+  [1,2,3].forEach(q=>approx(m.quarters[q].recognizedRevenue,25));
+  approx(m.years[0].recognizedRevenue,81.25);
+  const front=forecastSaaS({...cfg,monthlySigningPattern:"FRONT"});
+  approx(front.quarters[0].newARR,100);
+  approx(front.quarters[0].recognizedRevenue,6.25);
+  assert.notEqual(front.months[0].newARR,m.months[0].newARR);
+  assert.throws(()=>forecastSaaS({...cfg,phasePercent:100}),/exceeds/);
 });
 test("monthly budget has no phantom phasing and quarter/year aggregate exactly",()=>{
   const r=forecastSaaS(base({granularity:"month",months:12}));
