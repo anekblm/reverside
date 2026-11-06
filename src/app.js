@@ -1900,7 +1900,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       {bold:false,indent:true,color:'#E24B4A'});
 
     cohortHeading('C. New Customers – Current Period');
-    cohortARRRow('+ First-invoiced New CARR – Current (C)','current','NewARR',{noteKey:'NewCustomers'});
+    cohortARRRow('+ New Contracted ARR – Current (C)','current','NewARR',{noteKey:'NewCustomers'});
     cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
     cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
     cohortARRRow('Closing CARR – C','current','EndARR',{bold:true});
