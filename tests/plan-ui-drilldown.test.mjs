@@ -256,3 +256,32 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   close(qs.reduce((n,q)=>n+q.expansionARR,0),255000);
   close(qs.reduce((n,q)=>n+q.recognizedRevenue,0),y.recognizedRevenue);
 });
+
+test('BACK responds after explicit FRONT year phasing, without changing Existing A retention or revenue',()=>{
+  const {app,node,win}=createApp(12);
+  app.onPlanBudgetGranularityChange('year');
+  app.setQtrScenario('FRONT');
+  assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
+  const front=win._latestMonthlyPlan;
+  assert.ok(front.summary.annualizedNewARR>0,'Expected New CARR to exercise signing presets');
+  const frontPhasing=(front.periodPhaseRanges[0][0]+front.periodPhaseRanges[0][1])/2;
+  app.onQuarterPhasingChange(String(frontPhasing));
+  close(win._latestMonthlyPlan.periodPhasing[0],frontPhasing);
+  const existingBefore=win._latestMonthlyPlan.years[0];
+  const q1Front=win._latestMonthlyPlan.quarters[0].newARR;
+  // BACK annual feasible window is disjoint from the FRONT window.
+  // BACK used to fail because the obsolete FRONT phase was retained.
+  app.setQtrScenario('BACK');
+  assert.equal(win._latestMonthlyPlan.signingPattern,'BACK');
+  const back=win._latestMonthlyPlan;
+  assert.ok(back.quarters[0].newARR<q1Front,'BACK should defer first invoiced New CARR');
+  close(back.years[0].originalChurnARR,existingBefore.originalChurnARR);
+  close(back.years[0].originalExpansionARR,existingBefore.originalExpansionARR);
+  close(back.years[0].originalNetRevenue,existingBefore.originalNetRevenue);
+  close(back.periodPhasing[0],(back.periodPhaseRanges[0][0]+back.periodPhaseRanges[0][1])/2);
+  assert.ok(node('plQuarterPhasingSlider').max>node('plQuarterPhasingSlider').min);
+  app.setQtrScenario('EVEN');
+  assert.equal(win._latestMonthlyPlan.signingPattern,'EVEN');
+  app.setQtrScenario('FRONT');
+  assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
+});
