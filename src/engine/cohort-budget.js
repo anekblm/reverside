@@ -108,7 +108,7 @@ function firstInvoiceWeights(input) {
     const natural=phaseFraction(normalized)*100;
     const requested=phaseByPeriod?.[p]??phasePercent??natural;
     finite(requested,"Revenue phasing for period "+(p+1));
-    if(requested>natural+1e-8)throw new RangeError(
+    if(requested>natural+1e-8&&!(newARRByPeriod&&newARRByPeriod[p]===0))throw new RangeError(
       "Revenue phasing "+Number(requested).toFixed(2)+"% exceeds "+
       natural.toFixed(2)+"% realizable with the chosen signing months "+
       "in budget period "+(p+1)+
