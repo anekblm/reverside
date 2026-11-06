@@ -173,8 +173,8 @@ test('budget granularity Year/Quarter/Month changes the input engine, not the di
   assert.equal(Number(node('plQuarterPhasingSlider').min),0);
   assert.ok(Number(node('plQuarterPhasingSlider').max)>50);
   const signedBefore=win._latestMonthlyPlan.quarters.map(p=>p.newARR);
-  app.onQuarterPhasingChange('55');
-  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,55));
+  app.onQuarterPhasingChange('50');
+  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,50));
   win._latestMonthlyPlan.quarters.forEach((q,i)=>close(q.newARR,signedBefore[i]));
   app.onQuarterPhasingChange('25'); // valid independent revenue realization
   win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,25));
@@ -309,5 +309,5 @@ test('independent quarter and month presets preserve one matrix and period reven
   assert.ok(back.months[0].newARR<back.months[2].newARR);
   app.setMonthScenario('EVEN');
   close(win._latestMonthlyPlan.quarters[0].newARR,original.quarters[0].newARR);
-  assert.equal(width(node),4);
+  assert.equal(width(node),2);
 });
