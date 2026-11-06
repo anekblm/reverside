@@ -212,7 +212,9 @@ export function buildRevenueBridge(monthly, view = "quarter") {
     const metrics={
       originalBaseRevenue:0,originalChurnRevenueImpact:0,originalExpansionRevenueImpact:0,
       earlierNewBaseRevenue:0,earlierNewChurnRevenueImpact:0,earlierNewExpansionRevenueImpact:0,
+      earlierNewRealizationImpact:0,
       currentNewRevenue:0,currentNewChurnRevenueImpact:0,currentNewExpansionRevenueImpact:0,
+      currentNewRealizationImpact:0,
     };
     // Reconcile earned revenue from the SAME opening CARR shown in the
     // matrix. The effect of each monthly CARR change persists through all
@@ -239,19 +241,23 @@ export function buildRevenueBridge(monthly, view = "quarter") {
         } else if(bucket==="earlier") {
           metrics.earlierNewChurnRevenueImpact-=c.churnARR*revenueWeight;
           metrics.earlierNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+          metrics.earlierNewRealizationImpact+=c.realizationAdjustment??0;
         } else {
           metrics.currentNewRevenue+=c.newARR*revenueWeight;
           metrics.currentNewChurnRevenueImpact-=c.churnARR*revenueWeight;
           metrics.currentNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+          metrics.currentNewRealizationImpact+=c.realizationAdjustment??0;
         }
       }
     });
     const originalNet=metrics.originalBaseRevenue+
       metrics.originalChurnRevenueImpact+metrics.originalExpansionRevenueImpact;
     const earlierNet=metrics.earlierNewBaseRevenue+
-      metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact;
+      metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact+
+      metrics.earlierNewRealizationImpact;
     const currentNet=metrics.currentNewRevenue+
-      metrics.currentNewChurnRevenueImpact+metrics.currentNewExpansionRevenueImpact;
+      metrics.currentNewChurnRevenueImpact+metrics.currentNewExpansionRevenueImpact+
+      metrics.currentNewRealizationImpact;
     // Stock/flow cohort bridge for the DISPLAYED period, independent of the
     // budgeting granularity and with no double-counting of earlier new ARR.
     const cohortARR = {};
@@ -409,6 +415,39 @@ export function forecastSaaS(input) {
     m.budgetPeriod=monthToPeriod(i,granularity);
     m.effectivePeriodPhasing=phase[m.budgetPeriod];
   });
+  // Budget-level recognition is computed ONCE, then stored in the monthly
+  // ledger for TRACK. Contracted New ARR and cohort churn remain unchanged.
+  // This allocated first-period realization may lag contracted ARR; it must
+  // never be re-applied when the user expands a period in the matrix.
+  for(let p=0;p<periodTotals.length;p++){
+    const begin=p*width,end=Math.min(months,begin+width);
+    const budget=monthly.slice(begin,end);
+    const signed=sum(budget.map(row=>row.newARR));
+    const unphased=sum(budget.flatMap(row=>row.cohortFlows
+      .filter(c=>c.firstInvoiceMonth>=begin&&c.firstInvoiceMonth<end)
+      .map(c=>c.endARR/12)));
+    const target=signed*(end-begin)/12*phase[p]/100;
+    if(target>unphased+1e-7*Math.max(1,unphased))throw new Error(
+      "Period "+(p+1)+" cannot recognize more new revenue than signed-month activity");
+    const scale=unphased>0?target/unphased:1;
+    for(const row of budget){
+      for(const c of row.cohortFlows){
+        const currentBudgetCohort=c.firstInvoiceMonth>=begin&&c.firstInvoiceMonth<end;
+        const raw=c.endARR/12;
+        c.recognizedRevenue=currentBudgetCohort?raw*scale:raw;
+        c.realizationAdjustment=c.recognizedRevenue-raw;
+      }
+      row.recognizedRevenue=sum(row.cohortFlows.map(c=>c.recognizedRevenue));
+      const yearStart=Math.floor(row.index/12)*12;
+      row.existingRevenue=sum(row.cohortFlows.filter(c=>c.firstInvoiceMonth<yearStart)
+        .map(c=>c.recognizedRevenue));
+      row.newRevenue=row.recognizedRevenue-row.existingRevenue;
+    }
+    if(signed>0&&!near(sum(budget.flatMap(row=>row.cohortFlows
+      .filter(c=>c.firstInvoiceMonth>=begin&&c.firstInvoiceMonth<end)
+      .map(c=>c.recognizedRevenue))),target))
+      throw new Error("Budget-period revenue phasing failed to reconcile for period "+(p+1));
+  }
   const annualCustomers=Array.from({length:yearsCount},(_,y)=>
     sum(monthly.slice(12*y,Math.min(months,12*(y+1))).map(m=>m.newCustomers)));
   const annualCAC=Array.from({length:yearsCount},(_,y)=>finite(input.cacByYear?.[y]??0,"CAC"));
@@ -456,13 +495,14 @@ export function forecastSaaS(input) {
     months:monthly,quarters,years,summary,
     annualCustomers,annualSM,quarterSM,
     signingPattern:input.signingPattern||"EVEN",
+    monthlySigningPattern:input.monthlySigningPattern||"EVEN",
     granularity,periodPhasing:phase,periodPhaseRanges:phaseRanges,
     periodCount:periodTotals.length,
     manualBudget:input.newARRByPeriod!=null,
     assumptions:{
       subscription:"Monthly SaaS: customer starts at first invoicing month.",
-      acquisition:"Signed MRR and recognized MRR coincide in first invoice month.",
-      phasing:"Only year/quarter plan: first-invoice timing changes period recognition; no revenue discount.",
+      acquisition:"New Contracted ARR enters signed cohorts immediately. Revenue realization can lag the contract in its first budget period according to explicit phasing.",
+      phasing:"Year/quarter/month budget recognition percentage is applied once to the new cohort's maximum period revenue; the result is allocated to months and preserved in views.",
       churn:"New cohorts start churn/expansion in following BUDGET period.",
       costs:"COGS paid in revenue month; other operating outflows entered separately.",
       collections:"Monthly invoices, whole-month collection delay; no opening receivables.",
