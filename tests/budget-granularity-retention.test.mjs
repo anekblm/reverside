@@ -144,8 +144,8 @@ test('YEAR phasing cannot change the explicitly selected quarter New CARR shares
       approx(chosen.quarters[q].newARR,target*shares[q]/100);
     }
     assert.throws(()=>forecastSaaS({...base,signingPattern:preset,
-      phasePercent:range[0]-2}),/preserving the selected/);
+      phasePercent:range[0]-2}),/must be finite/);
     assert.throws(()=>forecastSaaS({...base,signingPattern:preset,
-      phasePercent:range[1]+2}),/preserving the selected/);
+      phasePercent:range[1]+2}),/exceeds/);
   }
 });
