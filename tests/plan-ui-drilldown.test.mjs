@@ -111,7 +111,7 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     '+ Expansion CARR – B',
     'Closing CARR – B',
     'C. New Customers – Current Period',
-    '+ First-invoiced New CARR – Current (C)',
+    '+ New Contracted ARR – Current (C)',
     '− Churn CARR – C',
     '+ Expansion CARR – C',
     'Closing CARR – C',
