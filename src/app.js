@@ -1385,6 +1385,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   function setQtrScenario(s) {
     if (plBudgetGranularity==='month' || plPeriodOverride!==null) return;
     if (!['EVEN','FRONT','BACK'].includes(s)) return;
+    if (plQtrScenario !== s) {
+      // Each year-pattern has a DIFFERENT feasible annual phasing interval.
+      // Retaining the previous preset's explicit phasing can make the next
+      // forecast invalid and leave the BACK/FRONT button looking unresponsive.
+      // Restore the new pattern's own naturally implied first-invoice timing.
+      plQuarterPhasing = null;
+    }
     plQtrScenario = s;
     const select = document.getElementById('signingPattern');
     if (select) select.value = s;
