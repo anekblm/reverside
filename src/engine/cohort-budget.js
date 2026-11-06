@@ -29,150 +29,94 @@ function monthsInPeriod(index, totalMonths, granularity) {
   return Math.min(totalMonths - start, periodMonths(granularity));
 }
 
-/** Fixed whole-month invoices imply a feasible first-period realization range [1 / L, 1]. */
+/**
+ * PLAN distinguishes signed Contracted ARR from the amount of that cohort's
+ * subscription revenue realized in its ORIGINAL input-budget period.
+ * Phase = earned current-period NEW revenue / theoretical full-period
+ * new CARR revenue. Thus 100 New CARR in Q1 at 25% phase earns
+ * 100 * 3/12 * 0.25 = 6.25, not 25 or 16.67.
+ *
+ * Zero through the naturally signable maximum is possible without
+ * recognizing any revenue before the signed customer exists. Anything above
+ * the signed-month maximum needs an explicit different signing allocation.
+ */
 export function feasiblePhasingRange(monthsInBudgetPeriod) {
-  return [100 / monthsInBudgetPeriod, 100];
+  if(!Number.isInteger(monthsInBudgetPeriod)||monthsInBudgetPeriod<1)
+    throw new RangeError("Budget period length must be a positive number of months");
+  return [0,100];
 }
 function phaseFraction(monthWeights) {
-  const length = monthWeights.length;
-  const total = sum(monthWeights);
-  return sum(monthWeights.map((w, i) => w * (length - i) / length)) / total;
+  const total=sum(monthWeights);
+  if(total<=0)return 1;
+  return sum(monthWeights.map((w,i)=>w*(monthWeights.length-i)/monthWeights.length))/total;
 }
-/** Tilt baseline shares until implied revenue realization equals requested phase.
- * This does not invent a delayed activation or fraction of a first invoice.
- */
-function tiltToPhasing(baseline, percent, name) {
-  const length = baseline.length;
-  if (percent == null) return baseline.slice();
-  if (length === 1) {
-    if (!near(Number(percent),100,1e-9)) throw new RangeError(
-      name+" must be 100% for a one-month budget period with immediate billing");
-    return baseline.slice();
-  }
-  const target = finite(percent, name) / 100;
-  const min = 1 / length;
-  if (target < min - 1e-10 || target > 1 + 1e-10) {
-    throw new RangeError(name + " must be between " + (100*min).toFixed(2) +
-      "% and 100% when each new subscription earns a full first month's MRR");
-  }
-  const all = sum(baseline);
-  if (all <= 0) throw new RangeError("Period needs positive signing weights");
-  if (near(target, min, 1e-11)) return baseline.map((_, i) => i === length - 1 ? all : 0);
-  if (near(target, 1, 1e-11)) return baseline.map((_, i) => i === 0 ? all : 0);
-  // f(theta) is monotonic: earlier months have higher monthly-invoice contribution.
-  const weighted = theta => {
-    const exps = baseline.map((w, i) => w * Math.exp(Math.max(-700, Math.min(700, theta * (length - i) / length))));
-    const divisor = sum(exps);
-    return exps.map(v => v / divisor);
-  };
-  let lo = -60, hi = 60;
-  for (let step = 0; step < 110; step++) {
-    const mid = (lo + hi) / 2;
-    if (phaseFraction(weighted(mid)) < target) lo = mid;
-    else hi = mid;
-  }
-  return weighted((lo + hi) / 2).map(v => v * all);
-}
-
-/**
- * A YEAR-planned Front/Even/Back quarter allocation is authoritative.
- * Annual revenue phasing may move first invoices WITHIN each quarter, never
- * silently move New CARR from one quarter to another.
- */
-function yearPhasingLimits(baseline) {
-  const length=baseline.length, total=sum(baseline);
-  if(total<=0) throw new RangeError("Yearly phasing requires positive quarterly template weights");
-  let minimum=0,maximum=0;
-  for(let start=0;start<length;start+=3) {
-    const span=Math.min(3,length-start);
-    const weight=sum(baseline.slice(start,start+span))/total;
-    minimum+=weight*(length-start-span+1)/length;
-    maximum+=weight*(length-start)/length;
-  }
-  return [minimum*100,maximum*100];
-}
-function phaseYearWithinQuarters(baseline,percent,name) {
-  if(percent==null)return baseline.slice();
-  const target=finite(percent,name);
-  const [minimum,maximum]=yearPhasingLimits(baseline);
-  if(target<minimum-1e-8||target>maximum+1e-8)
-    throw new RangeError(name+" must be between "+minimum.toFixed(2)+
-      "% and "+maximum.toFixed(2)+"% while preserving the selected "+
-      "FRONT/EVEN/BACK quarterly New CARR distribution");
-  const length=baseline.length;
-  const tilt=theta=>{
-    const result=[];
-    for(let start=0;start<length;start+=3){
-      const group=baseline.slice(start,start+3);
-      const total=sum(group);
-      const w=group.map((v,i)=>v*Math.exp(theta*(group.length-i)/group.length));
-      const denominator=sum(w);
-      result.push(...w.map(v=>v/denominator*total));
-    }
-    return result;
-  };
-  if(near(target,minimum,1e-10))return tilt(-60);
-  if(near(target,maximum,1e-10))return tilt(60);
-  let lo=-60,hi=60;
-  for(let step=0;step<110;step++){
-    const mid=(lo+hi)/2;
-    if(phaseFraction(tilt(mid))*100<target)lo=mid;
-    else hi=mid;
-  }
-  return tilt((lo+hi)/2);
-}
-
-function monthlyTemplateWeights(months, yearShares = [], pattern = "EVEN") {
-  const quarterPattern = SIGNING_PATTERNS[pattern];
-  if (!quarterPattern) throw new RangeError("Unknown signing pattern: " + pattern);
-  const years = Math.ceil(months / 12);
-  const shares = Array.from({length:years},(_,y)=>yearShares[y] ?? 100 / years);
-  if (shares.some(v=>!Number.isFinite(v)||v<0)||sum(shares)<=0) throw new RangeError("Invalid yearly distribution");
-  const result = [];
-  for (let y=0;y<years;y++) {
-    const yMonths = Math.min(12,months-12*y);
-    const qs = Math.ceil(yMonths/3);
-    const activeQWeight = sum(quarterPattern.slice(0,qs));
-    for (let m=0;m<yMonths;m++) {
-      const q = Math.floor(m/3), qMonths=Math.min(3,yMonths-3*q);
-      result.push((shares[y]/sum(shares))*(quarterPattern[q]/activeQWeight)/qMonths);
+// Between quarters: the user-approved annual FRONT/EVEN/BACK shares.
+// Within a quarter: independent monthly signing weights. FRONT and BACK
+// here are provisional symmetric presets (50/30/20 and 20/30/50);
+// they are NOT inherited from the annual preset.
+export const MONTH_SIGNING_PATTERNS=Object.freeze({
+  FRONT:[50,30,20], EVEN:[1,1,1], BACK:[20,30,50],
+});
+function monthlyTemplateWeights(months,yearShares=[],quarterPattern="EVEN",
+                                monthPattern="EVEN",monthlyPatternsByQuarter=null) {
+  const quarterWeights=SIGNING_PATTERNS[quarterPattern];
+  if(!quarterWeights)throw new RangeError("Unknown between-quarter pattern: "+quarterPattern);
+  if(!MONTH_SIGNING_PATTERNS[monthPattern])
+    throw new RangeError("Unknown within-quarter pattern: "+monthPattern);
+  const years=Math.ceil(months/12);
+  const shares=Array.from({length:years},(_,y)=>yearShares[y]??100/years);
+  if(shares.some(x=>!Number.isFinite(x)||x<0)||sum(shares)<=0)
+    throw new RangeError("Invalid yearly distribution");
+  const result=[];
+  for(let y=0;y<years;y++) {
+    const yMonths=Math.min(12,months-12*y);
+    const activeQ=Math.ceil(yMonths/3);
+    const activeQWeight=sum(quarterWeights.slice(0,activeQ));
+    for(let q=0;q<activeQ;q++){
+      const qMonths=Math.min(3,yMonths-3*q);
+      const override=monthlyPatternsByQuarter?.[4*y+q]??monthPattern;
+      const monthWeights=MONTH_SIGNING_PATTERNS[override];
+      if(!monthWeights)throw new RangeError("Unknown month pattern for Y"+(y+1)+" Q"+(q+1));
+      const within=monthWeights.slice(0,qMonths),qTotal=sum(within);
+      for(const weight of within)result.push(
+        shares[y]/sum(shares)*quarterWeights[q]/activeQWeight*weight/qTotal
+      );
     }
   }
   return result;
 }
 function firstInvoiceWeights(input) {
   const {months,granularity,phasePercent,phaseByPeriod,newARRByPeriod}=input;
-  const width = periodMonths(granularity);
-  const count = Math.ceil(months/width);
-  const template = monthlyTemplateWeights(months,input.yearShares,input.signingPattern);
-  const total = sum(template);
-  const periodTotals = Array.from({length:count},(_,p)=>sum(template.slice(p*width,Math.min(months,(p+1)*width)))/total);
-  if (newARRByPeriod != null) {
-    if (newARRByPeriod.length !== count) throw new RangeError("Manual ARR needs one amount per budget period");
+  const width=periodMonths(granularity);
+  const count=Math.ceil(months/width);
+  const template=monthlyTemplateWeights(months,input.yearShares,input.signingPattern,
+    input.monthlySigningPattern??"EVEN",input.monthlyPatternsByQuarter);
+  const total=sum(template);
+  const periodTotals=Array.from({length:count},(_,p)=>
+    sum(template.slice(p*width,Math.min(months,(p+1)*width)))/total);
+  if(newARRByPeriod!=null){
+    if(newARRByPeriod.length!==count)throw new RangeError("Manual ARR needs one amount per budget period");
     newARRByPeriod.forEach(v=>finite(v,"period New ARR"));
   }
-  const weights = [];
-  const intraPeriodWeights = [];
-  const phase = [];
-  const phaseRanges = [];
-  for(let p=0;p<count;p++) {
+  const weights=[],intraPeriodWeights=[],phase=[],phaseRanges=[];
+  for(let p=0;p<count;p++){
     const begin=p*width;
     const within=template.slice(begin,Math.min(months,begin+width));
     const withinSum=sum(within);
-    const fallback=granularity==="year"
-      ? monthlyTemplateWeights(within.length,[],input.signingPattern)
-      : Array(within.length).fill(1/within.length);
-    const normalized=withinSum>0?within.map(v=>v/withinSum):fallback;
-    const requested=granularity==="month"?null:(phaseByPeriod?.[p] ?? phasePercent ?? null);
-    const range=granularity==="year"?yearPhasingLimits(normalized)
-      :[100/within.length,100];
-    const adjusted=granularity==="year"
-      ? phaseYearWithinQuarters(normalized,requested,"Revenue phasing for year "+(p+1))
-      : tiltToPhasing(normalized,requested,"Revenue phasing for period "+(p+1));
-    phaseRanges.push(range);
-    phase.push(phaseFraction(adjusted)*100);
-    weights.push(...adjusted.map(v=>v*periodTotals[p]));
-    intraPeriodWeights.push(...adjusted);
+    const normalized=withinSum>0?within.map(v=>v/withinSum):
+      Array(within.length).fill(1/within.length);
+    const natural=phaseFraction(normalized)*100;
+    const requested=phaseByPeriod?.[p]??phasePercent??natural;
+    finite(requested,"Revenue phasing for period "+(p+1));
+    if(requested>natural+1e-8)throw new RangeError(
+      "Revenue phasing "+Number(requested).toFixed(2)+"% exceeds "+
+      natural.toFixed(2)+"% realizable with the chosen signing months "+
+      "in budget period "+(p+1)+
+      ". Choose an earlier within-quarter signing pattern or edit signing amounts.");
+    phaseRanges.push([0,natural]);
+    phase.push(requested);
+    weights.push(...normalized.map(v=>v*periodTotals[p]));
+    intraPeriodWeights.push(...normalized);
   }
   return {weights,phase,phaseRanges,periodTotals,intraPeriodWeights};
 }
