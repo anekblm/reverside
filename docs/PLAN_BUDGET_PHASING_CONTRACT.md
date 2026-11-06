@@ -5,6 +5,18 @@
 **Primärkälla:** [Ordagrann, oförändrad trådsammanställning](source-thread-budget-phasing-2026-11-06.md).
 **Omfattning:** Nyförsäljning, New Contracted ARR, budget-/visningsgranularitet, Revenue Phasing, månadsallokering och TRACK. Dokumentet ersätter motstridiga tekniska antaganden på *dessa områden* i tidigare implementation och dokumentation. Det avgör inte andra ospecificerade affärsregler.
 
+## Implementation på utvecklingsgrenen (denna iteration)
+
+**Implementerat och regressionstestat:** Separat FRONT/EVEN/BACK för kontrakterad New ARR mellan kvartalen och inom deras månader; dessa två nivåer ändrar inte varandras periodtotaler. Revenue Phasing styr separat redovisad intäkt från NYA kohorter på exakt vald inputnivå (Year/Quarter/Month), appliceras en gång och lagras per månad. Acceptansfallet 100 New CARR Q1, 25 % kvartalsphasing är nu 6,25 / 25 / 25 / 25 = 81,25 för året. A/B/C-intäktsbryggan har uttryckliga rader för intäktseffekt av phasing. Visning på en annan nivå räknar aldrig om phasing.
+
+**Preliminärt, INTE godkänd procentsats:** Källan anger FRONT/EVEN/BACK för kvartalen (35/30/20/15, 25/25/25/25, 15/20/25/40) men inga exakta månadsprocent för FRONT/BACK. Provisoriska standardmönster för val nummer två är **FRONT 50/30/20, EVEN 1/3–1/3–1/3, BACK 20/30/50**. Dessa ska endast betraktas som implementationsexempel till dess att användaren har fastställt dem.
+
+**UI-begränsning:** Det andra valet i toolbar gäller för närvarande alla kvartal som grupp. Motorn kan redan läsa `monthlyPatternsByQuarter` för separata kvartalsmönster, men individuell UI-inställning och CUSTOM har ännu inte byggts. Ingen ytterligare ändring görs före överenskommelse.
+
+**Intäktsallokeringens status:** Periodens phasing ger en explicit intäktsjustering för kohorter som kontrakterats under samma inputbudgetperiod, med månatlig fördelning som inte kan uppstå före kontraktet. Eventuellt tidigarelagd intäkt som inte går att förena med de valda kontraktsmånaderna avvisas i stället för att justera kontraktssiffrorna. Dessa allokerade intäkter är **inte en full kontraktsspecifik faktureringskalender**. En fryst TRACK-baseline och faktisk fakturering/aktiveringsschema återstår.
+
+## Historiska avvikelser dokumenterade före denna implementation
+
 ## Beslutade funktionella regler
 
 ### 1. Budgetnivå är beräkningsnivå. Visningsnivå är aldrig beräkningsnivå.
@@ -71,7 +83,7 @@ Följande avstämningar är invarianta:
 - Flera reglage som påverkar samma mått måste ha synlig prioritet; inkompatibla antaganden ska upptäckas explicit.
 - Matrisens layout får ingen egen finansiell modell.
 
-## Konkreta avvikelser i den nuvarande koden (kontrollerade 2026-11-06)
+## Tidigare identifierade kodavvikelser (före rättningen, arkiverade för spårbarhet)
 
 | Källkrav | Nuvarande kod | Korrektionskrav |
 |---|---|---|
