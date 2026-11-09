@@ -487,7 +487,7 @@
             <button onclick="resetPL()" style="flex:none;padding:0.3rem 0.75rem;font-size:11px;font-weight:500;color:#555;background:white;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;">↺ Reset</button>
           </div>
           <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
-            Adjust churn and expansion to model your growth scenario. Quarterly phasing controls the estimated first-invoice month for new customers. Signed MRR earns immediately in that month; recognized revenue is not separately scaled. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
+            Adjust churn and expansion to model your growth scenario. Existing customer changes are allocated over the year. New customer phasing applies to revenue in the acquisition budget period. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
             <div style="margin-top:0.5rem;font-size:11px;color:#666;line-height:1.6;">
               Expansion Compensation is a 1:1 percentage point offset to churn — setting both to 25% results in NRR 100% (flat base). The actual expansion required per retained customer is always higher than the compensation rate, because expansion is spread across fewer customers after churn. Example: 25% churn + 25% expansion compensation → 33% expansion per retained customer.
             </div>
@@ -502,7 +502,7 @@
               <div class="pl-assumption-heading">
                 <div>
                   <div class="pl-assumption-name">Churn rate</div>
-                  <div class="pl-assumption-description">Annual % · applied to budget-period opening CARR</div>
+                  <div class="pl-assumption-description">Annual % · A uses opening CARR for the year</div>
                 </div>
                 <div class="pl-assumption-value" style="color:#E24B4A;" id="plChurnDisplay">—</div>
               </div>
@@ -612,7 +612,7 @@
           <!-- Fixed planning controls: always occupy the same space, whether years are expanded or not. -->
           <div class="pl-budget-toolbar">
             <label class="pl-budget-granularity-label" for="planBudgetGranularity">
-              Budget level
+              New ARR budget
               <select id="planBudgetGranularity"
                       onchange="onPlanBudgetGranularityChange(this.value)"
                       aria-label="Budget planning granularity">
@@ -654,6 +654,23 @@
               <button type="button" onclick="resetPlanPeriodInputs()">Reset to ARR target</button>
               <span id="planPeriodEditorStatus"></span>
             </div>
+          </div>
+          <div class="pl-existing-toolbar" role="group" aria-label="Existing customer retention">
+            <label class="pl-budget-granularity-label">
+              A · Annual timing
+              <select id="plExistingPattern" onchange="onExistingRetentionChange()">
+                <option value="EVEN">EVEN</option>
+                <option value="FRONT">FRONT</option>
+                <option value="BACK">BACK</option>
+              </select>
+            </label>
+            <label class="pl-budget-granularity-label">
+              A · First-month revenue effect
+              <input type="range" id="plExistingPhase" min="0" max="100" step="1" value="50"
+                oninput="onExistingRetentionChange()" aria-describedby="plExistingPhaseNote">
+            </label>
+            <output id="plExistingPhaseValue" for="plExistingPhase">50%</output>
+            <span id="plExistingPhaseNote">Full effect from the following month</span>
           </div>
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <div id="plTable"></div>

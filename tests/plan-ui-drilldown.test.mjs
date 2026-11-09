@@ -11,7 +11,7 @@ import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
 const originalApp=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
 const appBody=originalApp.replace(/^import .*;$/gm,'') +
-  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,setMonthScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPLSlider,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
+  '\nreturn {goToStep2,goToStep3,selectStrategy,setQtrScenario,setMonthScenario,onQuarterPhasingChange,togglePlQtr,togglePlMonth,resetPL,onPLSlider,onExistingRetentionChange,onPlanBudgetGranularityChange,togglePlanPeriodInputs,onPlanPeriodValueChange,resetPlanPeriodInputs};';
 
 function createApp(timeframe=36){
   const controls={};
@@ -38,10 +38,10 @@ function createApp(timeframe=36){
   const factory=new Function('document','window','animals','targetDefaults','toEUR',
     'currencyFormats','paybackBenchmarks','cacRatios','growthMultipliers',
     'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv',
-    'forecastSaaS','renderCashPanel','buildRevenueBridge',appBody);
+    'forecastSaaS','renderCashPanel',appBody);
   const app=factory(doc,win,animals,targetDefaults,toEUR,currencyFormats,
     paybackBenchmarks,cacRatios,growthMultipliers,growthMaxMonths,budgetDefaults,
-    funnels,annualGrossProfitLtv,forecastSaaS,renderCashPanel,buildRevenueBridge);
+    funnels,annualGrossProfitLtv,forecastSaaS,renderCashPanel);
   app.goToStep2();
   app.goToStep3();
   return {app,node,win};
@@ -99,12 +99,12 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
 test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in every view',()=>{
   const {app,node,win}=createApp(36);
   const required=[
-    'Contracted ARR (start of period)',
-    'A. Existing Customers – Start of Year',
-    'Of which: Opening CARR – Existing (A)',
-    '− Churn CARR – A',
-    '+ Expansion CARR – A',
-    'Closing CARR – A',
+    '>Opening CARR</div>',
+    'A. Existing Customers',
+    'Opening CARR · A',
+    '>− Churn CARR</div>',
+    '>+ Expansion CARR</div>',
+    'Closing CARR · A',
     'B. New Customers – Earlier This Year',
     'Of which: Opening CARR – Earlier New (B)',
     '− Churn CARR – B',
@@ -115,10 +115,10 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     '− Churn CARR – C',
     '+ Expansion CARR – C',
     'Closing CARR – C',
-    'Recognized Revenue – Existing (A)',
+    'Recognized Revenue · A',
     'Recognized Revenue – New (B+C)',
     'Total Recognized Revenue',
-    'Contracted ARR (end of period) = A + B + C'
+    'Closing CARR · A + B + C'
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
@@ -239,13 +239,12 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   close(y.newARR,0);
   close(y.endARR,630000);
   close(y.originalBaseRevenue,500000);
-  close(y.originalChurnRevenueImpact,-125000*13/24);
-  close(y.originalExpansionRevenueImpact,255000*13/24);
-  close(y.recognizedRevenue,500000+130000*13/24);
+  close(y.originalChurnRevenueImpact,-62500);
+  close(y.originalExpansionRevenueImpact,127500);
+  close(y.recognizedRevenue,565000);
   close(y.endACV,y.endARR/y.endCustomers);
   assert.match(node('plTable').innerHTML,/Contracted ACV \(end\) = Closing CARR \/ Customers/);
-  assert.match(node('planBudgetGranularityNote').textContent,/Churn 25% annually → 25% of opening CARR per year/);
-  assert.match(node('planBudgetGranularityNote').textContent,/Expansion 51% annually → 51% of opening CARR per year/);
+  assert.match(node('planBudgetGranularityNote').textContent,/New ARR budget: YEAR/);
   assert.ok(node('plQuarterPhasingSlider').disabled,'No new cohort means phasing has no relevance');
   assert.equal(node('plQuarterPhasingDisplay').textContent,'—');
   const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
@@ -256,6 +255,44 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   close(qs.reduce((n,q)=>n+q.churnARR,0),125000);
   close(qs.reduce((n,q)=>n+q.expansionARR,0),255000);
   close(qs.reduce((n,q)=>n+q.recognizedRevenue,0),y.recognizedRevenue);
+});
+
+test('Existing A shows the full revenue bridge, month-only detail and customer counts in the same grid',()=>{
+  const {app,node,win}=createApp(12);
+  app.onPlanBudgetGranularityChange('year');
+  app.onPlanPeriodValueChange(0,'0');
+  node('plChurnSlider').value='25';
+  node('plExpansionSlider').value='20';
+  app.onPLSlider();
+  const plan=win._latestMonthlyPlan;
+  const year=plan.years[0];
+  close(year.originalEndARR,475000);
+  close(year.originalChurnCustomers,12.5);
+  close(year.originalEndCustomers,37.5);
+  close(year.originalBaseRevenue,500000);
+  close(year.originalChurnRevenueImpact,-62500);
+  close(year.originalExpansionRevenueImpact,50000);
+  close(year.existingRevenue,487500);
+  close(plan.quarters[0].existingRevenue,124218.75);
+  close(plan.monthlyBridge[1].originalChurnRevenueImpact,-1302.0833333333);
+  close(plan.monthlyBridge[1].originalChurnThisMonth,-434.0277777778);
+  close(plan.monthlyBridge[1].originalExpansionRevenueImpact,1041.6666666667);
+  close(plan.monthlyBridge[1].originalExpansionThisMonth,347.2222222222);
+  assert.doesNotMatch(node('plTable').innerHTML,/pl-month-impact/);
+  app.togglePlQtr(0);
+  app.togglePlMonth(0,0);
+  assert.equal(win._latestMonthlyPlan,plan);
+  const html=node('plTable').innerHTML;
+  assert.equal((html.match(/pl-month-impact/g)??[]).length,6);
+  assert.match(html,/of which <span>−434 kr/);
+  assert.match(html,/of which <span>\+347 kr/);
+  assert.match(html,/50 cust\./);
+  assert.match(html,/lost cust\./);
+  node('plExistingPhase').value='0';
+  app.onExistingRetentionChange();
+  close(win._latestMonthlyPlan.monthlyBridge[0].existingRevenue,500000/12);
+  close(win._latestMonthlyPlan.years[0].originalEndARR,475000);
+  assert.equal(node('plExistingPhaseValue').textContent,'0%');
 });
 
 test('BACK responds after explicit FRONT year phasing, without changing Existing A retention or revenue',()=>{

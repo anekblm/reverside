@@ -122,7 +122,7 @@ function firstInvoiceWeights(input) {
 }
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
-  const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv}=input;
+  const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv,existingRetention}=input;
   const openingCustomers=input.openingCustomers??openingARR/acv;
   const newACVByMonth=input.newACVByMonth??Array(months).fill(acv);
   const width=periodMonths(granularity);
@@ -130,15 +130,29 @@ function makeARRRows(input, monthlySignedARR) {
   const annualNRR=annualGrossRetention+annualExpansionComp;
   const cohorts=[{firstInvoiceMonth:-1,arr:openingARR,count:openingCustomers}];
   const rows=[];
+  let yearOpeningARR=0, priorExistingChurn=0, priorExistingExpansion=0;
   for(let m=0;m<months;m++) {
+    const monthOfYear=m%12;
+    const yearStart=m-monthOfYear;
+    const existingWeight=existingRetention?.weights[monthOfYear];
+    if(existingRetention && monthOfYear===0) {
+      yearOpeningARR=0;
+      priorExistingChurn=0;
+      priorExistingExpansion=0;
+      for(const c of cohorts) {
+        c.yearOpeningARR=c.arr;
+        c.yearOpeningCustomers=c.count;
+        yearOpeningARR+=c.arr;
+      }
+    }
     const periodStart=Math.floor(m/width)*width;
     const periodLength=Math.min(width,months-periodStart);
     if(m===periodStart) {
-      // Apply retention ONCE to opening CARR of the selected budget period.
-      // Changes are allocated evenly to months, not recomputed monthly.
+      // Current-year acquisitions use the selected budget-period retention.
       const grossRetention=Math.pow(annualGrossRetention,periodLength/12);
       const netRetention=Math.pow(annualNRR,periodLength/12);
       for(const c of cohorts) {
+        if(existingRetention && c.firstInvoiceMonth<yearStart) continue;
         const eligible=c.firstInvoiceMonth<periodStart;
         c.periodChurnPerMonth=eligible?c.arr*(1-grossRetention)/periodLength:0;
         c.periodExpansionPerMonth=eligible?c.arr*(netRetention-grossRetention)/periodLength:0;
@@ -152,13 +166,18 @@ function makeARRRows(input, monthlySignedARR) {
     const vintageRows=[];
     let startARR=0,churnARR=0,expansionARR=0,endARR=0;
     let startCustomers=0,churnCustomers=0,endCustomers=0;
+    let existingChurn=0, existingExpansion=0;
     for(const c of cohorts) {
       const newlyAdded=c.firstInvoiceMonth===m;
       const before=newlyAdded?0:c.arr;
       const beforeCustomers=newlyAdded?0:c.count;
-      const churn=newlyAdded?0:c.periodChurnPerMonth;
-      const expansion=newlyAdded?0:c.periodExpansionPerMonth;
-      const lostCustomers=newlyAdded?0:c.periodLostCustomersPerMonth;
+      const useYearOpening=existingRetention && c.firstInvoiceMonth<yearStart;
+      const churn=useYearOpening
+        ? c.yearOpeningARR*annualChurn*existingWeight : c.periodChurnPerMonth;
+      const expansion=useYearOpening
+        ? c.yearOpeningARR*annualExpansionComp*existingWeight : c.periodExpansionPerMonth;
+      const lostCustomers=useYearOpening
+        ? c.yearOpeningCustomers*annualChurn*existingWeight : c.periodLostCustomersPerMonth;
       if(!newlyAdded) {
         c.arr=before-churn+expansion;
         c.count=beforeCustomers-lostCustomers;
@@ -171,27 +190,45 @@ function makeARRRows(input, monthlySignedARR) {
       churnARR+=churn;
       expansionARR+=expansion;
       endARR+=c.arr;
+      let recognizedRevenue=c.arr/12;
+      if(useYearOpening) {
+        recognizedRevenue=(before+(expansion-churn)*existingRetention.phase)/12;
+        existingChurn+=churn;
+        existingExpansion+=expansion;
+      }
       vintageRows.push({
         firstInvoiceMonth:c.firstInvoiceMonth,
         startARR:before,churnARR:churn,expansionARR:expansion,
         startCustomers:beforeCustomers,churnCustomers:lostCustomers,
         newCustomers:newlyAdded?c.count:0,endCustomers:c.count,
-        newARR:newlySigned,endARR:c.arr,recognizedRevenue:c.arr/12,
+        newARR:newlySigned,endARR:c.arr,recognizedRevenue,
       });
     }
     const newARR=monthlySignedARR[m];
-    const recognizedRevenue=endARR/12;
+    const existingRevenue=sum(vintageRows.filter(c=>c.firstInvoiceMonth<yearStart).map(c=>c.recognizedRevenue));
+    const newRevenue=sum(vintageRows.filter(c=>c.firstInvoiceMonth>=yearStart).map(c=>c.recognizedRevenue));
+    let originalRevenueBridge;
+    if(existingRetention) {
+      const originalChurnThisMonth=-existingChurn*existingRetention.phase/12;
+      const originalExpansionThisMonth=existingExpansion*existingRetention.phase/12;
+      originalRevenueBridge={
+        originalBaseRevenue:yearOpeningARR/12,
+        originalChurnRevenueImpact:originalChurnThisMonth-priorExistingChurn/12,
+        originalExpansionRevenueImpact:originalExpansionThisMonth+priorExistingExpansion/12,
+        originalChurnThisMonth,
+        originalExpansionThisMonth,
+      };
+      priorExistingChurn+=existingChurn;
+      priorExistingExpansion+=existingExpansion;
+    }
     rows.push({
-      index:m,month:m+1,year:Math.floor(m/12),quarter:Math.floor((m%12)/3),
+      index:m,month:m+1,year:Math.floor(m/12),quarter:Math.floor(monthOfYear/3),
       budgetPeriod:Math.floor(m/width),
       startARR,churnARR,expansionARR,newARR,endARR,
       startCustomers,churnCustomers,endCustomers,
       newCustomers:newARR/newACVByMonth[m],newACV:newACVByMonth[m],
-      recognizedRevenue,
-      // "Existing" resets at the calendar year boundary, just like A in
-      // the displayed Revenue Bridge. Prior year's new customers are base now.
-      existingRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth<Math.floor(m/12)*12).map(c=>c.recognizedRevenue)),
-      newRevenue:sum(vintageRows.filter(c=>c.firstInvoiceMonth>=Math.floor(m/12)*12).map(c=>c.recognizedRevenue)),
+      recognizedRevenue:existingRevenue+newRevenue,
+      existingRevenue,newRevenue,originalRevenueBridge,
       cohortFlows:vintageRows,
     });
   }
@@ -209,6 +246,7 @@ export function buildRevenueBridge(monthly, view = "quarter") {
   for(let start=0;start<monthly.length;start+=width) {
     const slice=monthly.slice(start,start+width), first=slice[0],last=slice.at(-1);
     const yearStart=Math.floor(start/12)*12;
+    const hasYearOpeningBridge=first.originalRevenueBridge!=null;
     const metrics={
       originalBaseRevenue:0,originalChurnRevenueImpact:0,originalExpansionRevenueImpact:0,
       earlierNewBaseRevenue:0,earlierNewChurnRevenueImpact:0,earlierNewExpansionRevenueImpact:0,
@@ -216,28 +254,30 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       currentNewRevenue:0,currentNewChurnRevenueImpact:0,currentNewExpansionRevenueImpact:0,
       currentNewRealizationImpact:0,
     };
-    // Reconcile earned revenue from the SAME opening CARR shown in the
-    // matrix. The effect of each monthly CARR change persists through all
-    // remaining months of the selected DISPLAY period, including that month.
-    //
-    // Base earned revenue = opening contracted ARR × displayed months / 12.
-    // Churn/expansion earned impact = change in ARR × remaining months / 12.
-    // New first invoices use the same remaining-month rule. These are flows,
-    // not annualized ARR stocks, and no hidden revenue-phasing multiplier exists.
+    // The year-opening bridge for A is additive across every view.
+    // B/C and legacy A reconcile against the displayed period's opening CARR.
     const classifyRevenue = vintage => vintage<yearStart
       ? "original" : vintage<start ? "earlier" : "current";
     for(const c of first.cohortFlows) {
       const bucket=classifyRevenue(c.firstInvoiceMonth);
-      if(bucket==="original") metrics.originalBaseRevenue+=c.startARR*slice.length/12;
+      if(bucket==="original" && !hasYearOpeningBridge) metrics.originalBaseRevenue+=c.startARR*slice.length/12;
       if(bucket==="earlier") metrics.earlierNewBaseRevenue+=c.startARR*slice.length/12;
     }
     slice.forEach((month,i)=>{
+      if(hasYearOpeningBridge) {
+        const bridge=month.originalRevenueBridge;
+        metrics.originalBaseRevenue+=bridge.originalBaseRevenue;
+        metrics.originalChurnRevenueImpact+=bridge.originalChurnRevenueImpact;
+        metrics.originalExpansionRevenueImpact+=bridge.originalExpansionRevenueImpact;
+      }
       const revenueWeight=(slice.length-i)/12;
       for(const c of month.cohortFlows) {
         const bucket=classifyRevenue(c.firstInvoiceMonth);
         if(bucket==="original") {
-          metrics.originalChurnRevenueImpact-=c.churnARR*revenueWeight;
-          metrics.originalExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+          if(!hasYearOpeningBridge) {
+            metrics.originalChurnRevenueImpact-=c.churnARR*revenueWeight;
+            metrics.originalExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+          }
         } else if(bucket==="earlier") {
           metrics.earlierNewChurnRevenueImpact-=c.churnARR*revenueWeight;
           metrics.earlierNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
@@ -323,6 +363,10 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       existingRevenue:originalNet,newRevenue:earlierNet+currentNet,
       originalNetRevenue:originalNet,earlierNewNetRevenue:earlierNet,currentNewNetRevenue:currentNet,
       ...metrics,
+      ...(view==="month" && hasYearOpeningBridge ? {
+        originalChurnThisMonth:first.originalRevenueBridge.originalChurnThisMonth,
+        originalExpansionThisMonth:first.originalRevenueBridge.originalExpansionThisMonth,
+      } : {}),
       signedMRR:flow("newARR")/12,closingMRR:last.endARR/12,
       cashCollected:flow("cashCollected"),cogsPaid:flow("cogsPaid"),
       smPaid:flow("smPaid"),otherOpexPaid:flow("otherOpexPaid"),
@@ -355,10 +399,9 @@ export function buildRevenueBridge(monthly, view = "quarter") {
  * Full monthly SaaS plan. Budget level changes input assumptions; view level
  * only re-groups the SAME saved monthly cohort ledger.
  *
- * phasePercent/phaseByPeriod are only applicable to year/quarter budgets.
- * For monthly planning, a new invoice always yields full month's MRR.
- * For quarter/year, phase acts by modifying auto first-invoice month weights,
- * never by discounting recognized revenue or imposing fictitious delays.
+ * phasePercent/phaseByPeriod apply to new cohorts in their acquisition budget period.
+ * existingRetention allocates start-of-year cohorts' annual changes over 12 months
+ * and sets the fraction of each change earned in its first month.
  */
 export function forecastSaaS(input) {
   const months=finite(input.months,"months",1);
@@ -390,6 +433,15 @@ export function forecastSaaS(input) {
   const factor=nrrAnnual/(1-annualChurn);
   const newACV=Array.from({length:months},(_,m)=>
     acv*Math.pow(factor,Math.floor(m/12)+(input.priceNewOnExpansion?1:0)));
+  let existingRetention;
+  if(input.existingRetention) {
+    const {pattern="EVEN",phasePercent=50}=input.existingRetention;
+    finite(phasePercent,"Existing customer revenue phasing");
+    if(phasePercent>100) throw new RangeError("Existing customer revenue phasing must be <= 100%");
+    existingRetention={weights:monthlyTemplateWeights(12,[],pattern),phase:phasePercent/100};
+  }
+  const retentionInput={months,openingARR,openingCustomers:input.openingCustomers,acv,
+    annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV,existingRetention};
   let newCustomersNeeded;
   let monthNewARR;
   if(input.newARRByPeriod != null) {
@@ -397,16 +449,16 @@ export function forecastSaaS(input) {
     newCustomersNeeded=sum(monthNewARR.map((arr,m)=>arr/newACV[m]));
   } else {
     const zeros=Array(months).fill(0);
-    const baseline=makeARRRows({months,openingARR,openingCustomers:input.openingCustomers,acv,annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV},zeros).at(-1).endARR;
+    const baseline=makeARRRows(retentionInput,zeros).at(-1).endARR;
     const unitARR=weights.map((w,m)=>w*newACV[m]);
-    const withOne=makeARRRows({months,openingARR,openingCustomers:input.openingCustomers,acv,annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV},unitARR).at(-1).endARR;
+    const withOne=makeARRRows(retentionInput,unitARR).at(-1).endARR;
     const endingContribution=withOne-baseline;
     newCustomersNeeded=targetARR>baseline?
       Math.ceil((targetARR-baseline)/endingContribution-1e-10):0;
     if(!Number.isSafeInteger(newCustomersNeeded)||newCustomersNeeded>1e8)throw new RangeError("Target requires too many customers");
     monthNewARR=unitARR.map(v=>v*newCustomersNeeded);
   }
-  const monthly=makeARRRows({months,openingARR,openingCustomers:input.openingCustomers,acv,annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV},monthNewARR);
+  const monthly=makeARRRows(retentionInput,monthNewARR);
   monthly.forEach((m,i)=>{
     m.newACV=newACV[i];
     m.newCustomers=m.newARR/newACV[i];
@@ -425,7 +477,7 @@ export function forecastSaaS(input) {
     const signed=sum(budget.map(row=>row.newARR));
     const unphased=sum(budget.flatMap(row=>row.cohortFlows
       .filter(c=>c.firstInvoiceMonth>=begin&&c.firstInvoiceMonth<end)
-      .map(c=>c.endARR/12)));
+      .map(c=>c.recognizedRevenue)));
     const target=signed*(end-begin)/12*phase[p]/100;
     if(target>unphased+1e-7*Math.max(1,unphased))throw new Error(
       "Period "+(p+1)+" cannot recognize more new revenue than signed-month activity");
@@ -433,7 +485,7 @@ export function forecastSaaS(input) {
     for(const row of budget){
       for(const c of row.cohortFlows){
         const currentBudgetCohort=c.firstInvoiceMonth>=begin&&c.firstInvoiceMonth<end;
-        const raw=c.endARR/12;
+        const raw=c.recognizedRevenue;
         c.recognizedRevenue=currentBudgetCohort?raw*scale:raw;
         c.realizationAdjustment=c.recognizedRevenue-raw;
       }
@@ -479,6 +531,7 @@ export function forecastSaaS(input) {
   });
   const quarters=buildRevenueBridge(monthly,"quarter");
   const years=buildRevenueBridge(monthly,"year");
+  const monthlyBridge=buildRevenueBridge(monthly,"month");
   const total=key=>sum(monthly.map(m=>m[key]));
   const minimumCash=Math.min(openingCash,...monthly.map(m=>m.endCash));
   const summary={
@@ -492,7 +545,7 @@ export function forecastSaaS(input) {
     targetGap:monthly.at(-1).endARR-targetARR,
   };
   return{
-    months:monthly,quarters,years,summary,
+    months:monthly,monthlyBridge,quarters,years,summary,
     annualCustomers,annualSM,quarterSM,
     signingPattern:input.signingPattern||"EVEN",
     monthlySigningPattern:input.monthlySigningPattern||"EVEN",

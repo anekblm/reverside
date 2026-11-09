@@ -1,6 +1,6 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
-import { forecastSaaS, buildRevenueBridge } from "./engine/cohort-budget.js";
+import { forecastSaaS } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
@@ -642,6 +642,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plQtrScenario = 'EVEN'; // New CARR between quarters
   let plMonthScenario = 'EVEN'; // New CARR between months INSIDE each quarter
   let plQuarterPhasing = null; // null = implied phase in the selected budget period
+  let plExistingRetention = { pattern: 'EVEN', phasePercent: 50 };
   let plBudgetGranularity = 'quarter';
   let plPeriodOverride = null; // explicit New Contracted ARR per budget period
   let plPeriodInputsOpen = false;
@@ -672,8 +673,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     switchStep(3);
     // Render P&L immediately without waiting for strategy selection
     const fmt = currencyFormats[state.currency];
-    buildPL(years, 0, fmt);
-    if (window._latestMonthlyPlan) renderPlanToolbar(window._latestMonthlyPlan);
+    buildPL(years, fmt);
   }
 
   function populateStrategyCards() {
@@ -824,9 +824,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const fmt = currencyFormats[state.currency];
     const years = Math.max(1, Math.round(state.timeframe / 12));
     // Always render P&L first (sets state.newCustomersNeeded dynamically)
-    const fmt_ = currencyFormats[state.currency];
-    const years_ = Math.max(1, Math.round(state.timeframe / 12));
-    buildPL(years_, 0, fmt_);  // budgetCAC=0 for PL-only pass, strategy sections below
+    buildPL(years, fmt);
 
     if (!selectedStrategy) return;
 
@@ -877,8 +875,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         : 'CAC payback: ' + paybackMonths + ' months (benchmark for ' + state.animal + ': ' + benchPayback_ + ' months)' + (paybackMonths > benchPayback_ ? ' — above benchmark.' : ' — within benchmark.');
     document.getElementById('s3Payback').textContent = paybackLabel;
 
-    // Re-render P&L with actual budgetCAC (S&M spend from annual plan)
-    buildPL(years, budgetCAC, fmt);
     buildAnnualTable(years, budgetCAC, fmt);
     buildWaterfall(years, fmt);
     generateRecommendations();
@@ -1139,6 +1135,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
+  function onExistingRetentionChange() {
+    const pattern = document.getElementById('plExistingPattern').value;
+    const phasePercent = Number(document.getElementById('plExistingPhase').value);
+    if (!['EVEN','FRONT','BACK'].includes(pattern) ||
+        !Number.isFinite(phasePercent) || phasePercent < 0 || phasePercent > 100) return;
+    plExistingRetention = { pattern, phasePercent };
+    updateStep3Display();
+  }
+
   function updatePLSliderDisplay() {
     const cd = document.getElementById('plChurnDisplay');
     const ed = document.getElementById('plExpansionDisplay');
@@ -1188,6 +1193,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   function resetPL() {
     plQuarterPhasing = null;
+    plExistingRetention = { pattern: 'EVEN', phasePercent: 50 };
     const slider = document.getElementById('plQuarterPhasingSlider');
     if (slider) slider.value = '66.7';
     initPLSliders();
@@ -1446,6 +1452,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   function renderPlanToolbar(model) {
     const select=document.getElementById('planBudgetGranularity');
     if(select) select.value=plBudgetGranularity;
+    const existingPattern=document.getElementById('plExistingPattern');
+    if(existingPattern) existingPattern.value=plExistingRetention.pattern;
+    const existingPhase=document.getElementById('plExistingPhase');
+    if(existingPhase) existingPhase.value=String(plExistingRetention.phasePercent);
+    const existingPhaseValue=document.getElementById('plExistingPhaseValue');
+    if(existingPhaseValue) existingPhaseValue.textContent=plExistingRetention.phasePercent+'%';
     const presetsEnabled=plBudgetGranularity!=='month' && plPeriodOverride===null;
     for(const pattern of ['EVEN','FRONT','BACK']) {
       const btn=document.getElementById('planPattern'+pattern);
@@ -1499,20 +1511,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       ? max.toFixed(1)+'% · maximum from signed months' : 'No new customers';
     const modeNote=document.getElementById('planBudgetGranularityNote');
     if(modeNote) {
-      const churn=plChurn??state.churn??0.25;
-      const expansion=plExpansion??churn;
-      const grr=Math.pow(1-churn,width/12);
-      const nrr=Math.pow(1-churn+expansion,width/12);
-      const fmtPct=v=>new Intl.NumberFormat('sv-SE',{maximumFractionDigits:2}).format(v*100)+'%';
-      const scope=plBudgetGranularity==='year'?'year':'quarter';
-      const period=plBudgetGranularity==='month'?'month':scope;
       modeNote.textContent=
-        'Budget: '+(plBudgetGranularity==='year'?'YEAR':plBudgetGranularity==='quarter'?'QUARTER':'MONTH')+
-        '. Churn '+fmtPct(churn)+' annually → '+fmtPct(1-grr)+
-        ' of opening CARR per '+period+'. Expansion '+fmtPct(expansion)+
-        ' annually → '+fmtPct(nrr-grr)+' of opening CARR per '+period+
-        '. Each is calculated ONCE per budget period and then allocated evenly to its months.'+
-        ' Changing expanded columns never recalculates retention. '+
+        'New ARR budget: '+plBudgetGranularity.toUpperCase()+'. '+
         (!hasNewCARR?(plPeriodOverride
           ?'Manually budgeted New CARR is zero; revenue phasing is inactive. '
           :'Existing cohorts already achieve the CARR target; no New CARR is needed and phasing is inactive. '): '')+
@@ -1597,26 +1597,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     cashPanel.innerHTML = renderCashPanel(model, fmt);
   }
 
-  function buildPL(years, budgetCAC, fmt) {
-    const el = document.getElementById('plTable');
-    if (!el) return;
-
+  function buildPL(years, fmt) {
+    if (!document.getElementById('plTable')) return;
     const acv         = state.acv || 0;
     const grossMargin = state.grossMargin ?? 0.80;
     const churnRate   = plChurn !== null ? plChurn : (state.churn ?? 0.25);
     const expRate     = plExpansion !== null ? plExpansion : churnRate; // default NRR=100%
-    const nrr         = 1 - churnRate + expRate; // resulting NRR
-
-    // One authoritative monthly model for ARR, recognized revenue and cash.
-    // Quarterly S&M cash timing is independent of quarterly signing timing.
-    const grr = Math.max(0.001, 1 - churnRate);
-    const acvGrowthFactor = nrr / grr;
-    const yearACVentry = [acv], yearACVexpanded = [];
-    for (let y = 0; y < years; y++) {
-      const expanded = yearACVentry[y] * acvGrowthFactor;
-      yearACVexpanded.push(expanded);
-      yearACVentry.push(expanded);
-    }
     const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
     const smBudgetPercentByYear = Array.from({ length: years }, (_, y) => {
       const alloc = yearAllocs[y] || defs;
@@ -1628,6 +1614,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       openingARR: state.revenue, openingCustomers: state.customers,
       acv, targetARR: state.targetRevenue, granularity: plBudgetGranularity,
       phasePercent: plQuarterPhasing,
+      existingRetention: plExistingRetention,
       newARRByPeriod: plPeriodOverride,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
       yearShares: yearSplit, signingPattern: plQtrScenario,
@@ -1641,10 +1628,19 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       collectionLagMonths: Number(document.getElementById('cashCollectionLag')?.value || 0),
     });
     window._latestMonthlyPlan = model;
-    const phaseOutput = document.getElementById('plQuarterPhasingDisplay');
-    if (phaseOutput) phaseOutput.textContent = (plQuarterPhasing ?? model.periodPhasing[0]).toFixed(1) + '%';
-    const newCustPerYear = model.annualCustomers;
     state.newCustomersNeeded = model.summary.newCustomersNeeded;
+    renderPL(model, fmt);
+    renderMonthlyCashControls(model, fmt);
+    renderPlanToolbar(model);
+  }
+
+  function renderPL(model, fmt) {
+    const el = document.getElementById('plTable');
+    if (!el || !model) return;
+    const years = model.years.length;
+    const acv = state.acv || 0;
+    const grossMargin = state.grossMargin ?? 0.80;
+    const churnRate = plChurn ?? state.churn ?? 0.25;
     let cumulativeResult = 0, breakEvenYear = null;
     const rows = model.years.map((r, y) => {
       const opResult = r.operatingContribution;
@@ -1673,7 +1669,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!window._plMonths) window._plMonths = {};
 
     // Desktop layout — fixed px widths, no global total column
-    const LBL  = 160; // label px
+    const LBL  = 148; // label px
     const YCOL = 110; // year column px (collapsed)
     const QCOL = 72;  // quarter column px
     const MCOL = 70;  // month column px
@@ -1730,7 +1726,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       newARR: q.newARR, arrEnd: q.endARR
     })));
     const _qtrTotalRev = modelQuarterByYear.map(qs => qs.map(q => q.recognizedRevenue));
-    const monthlyRevenueBridge = buildRevenueBridge(model.months, 'month');
     // Column definitions describe one displayed period; all monetary rows reuse them.
     const visiblePeriods = y => {
       if (!window._qtr[y]) return [{kind:'year', period:model.years[y]}];
@@ -1739,7 +1734,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         if(window._plMonths[y]?.[q]) {
           for(let m=0;m<3;m++) {
             const index=y*12+q*3+m;
-            if(index<model.months.length) cols.push({kind:'month',period:monthlyRevenueBridge[index],monthIndex:index,q});
+            if(index<model.months.length) cols.push({kind:'month',period:model.monthlyBridge[index],monthIndex:index,q});
           }
         }
         cols.push({kind:'quarter',period:modelQuarterByYear[y][q],q});
@@ -1787,7 +1782,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       periodCell(period.grossProfit??0,kind,{color:'#555'}));
 
     const label = (text, indent=false, bold=false, color='') =>
-      `<div style="font-size:11px;color:${color||(bold?'#333':'#666')};font-weight:${bold?'600':'400'};display:flex;align-items:center;padding:${indent?'0 0 0 0.75rem':'0'};min-height:28px;">${text}</div>`;
+      `<div style="font-size:11px;line-height:1.25;color:${color||(bold?'#333':'#666')};font-weight:${bold?'600':'400'};display:flex;align-items:center;padding:${indent?'0 0 0 0.55rem':'0'};min-height:28px;">${text}</div>`;
 
     const divider = () => `<div style="grid-column:1/-1;border-top:0.5px solid #e0e0e0;margin:2px 0;"></div>`;
 
@@ -1831,7 +1826,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const acvAtStart = model.years.map(r => r.startACV);
 
     // Keep the original first row (opening Contracted ARR, customers and ACV).
-    html += label('Contracted ARR (start of period)', false, true);
+    html += label('Opening CARR', false, true);
     for (let y = 0; y < years; y++) {
       const acvStr = fmt(Math.round(acvAtStart[y]));
       html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
@@ -1865,25 +1860,29 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         });
       });
     };
-    const recognizedRow = (name,key,{bold=true,indent=false,color='#555'}={}) => {
+    const recognizedRow = (name,key,{bold=true,indent=false,color='#555',monthNoteKey=null}={}) => {
       html += label(name,indent,bold);
-      for(let y=0;y<years;y++)
-        html += yearQuarterCells(y,key,1,bold,color,bold?'#fafafa':'white');
+      for(let y=0;y<years;y++) html += eachPeriod(y,(period,kind)=>{
+        let note='';
+        if(kind==='month' && monthNoteKey) {
+          const amount=Math.round(Math.abs(period[monthNoteKey]));
+          const sign=amount===0?'':period[monthNoteKey]<0?'−':'+';
+          note=`<span class="pl-month-impact">of which <span>${sign}${fmt(amount)}</span></span>`;
+        }
+        return periodCell(period[key]??0,kind,{bold,color,bg:bold?'#fafafa':'white',note});
+      });
     };
 
-    cohortHeading('A. Existing Customers – Start of Year');
-    cohortARRRow('Of which: Opening CARR – Existing (A)','original','StartARR',{noteKey:'StartCustomers'});
-    cohortARRRow('− Churn CARR – A','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-    cohortARRRow('+ Expansion CARR – A','original','ExpansionARR');
-    cohortARRRow('Closing CARR – A','original','EndARR',{bold:true});
-    // Earned revenue is NOT the annualized CARR closing stock.
-    // Opening CARR earns through the entire displayed period; each ARR change
-    // changes earned MRR for the remaining months, including the change month.
-    recognizedRow('Revenue · Opening CARR × period / 12 (A)','originalBaseRevenue',{bold:false,indent:true});
-    recognizedRow('− Revenue impact · churn (A)','originalChurnRevenueImpact',
-      {bold:false,indent:true,color:'#E24B4A'});
-    recognizedRow('+ Revenue impact · expansion (A)','originalExpansionRevenueImpact',
-      {bold:false,indent:true,color:'#3B6D11'});
+    cohortHeading('A. Existing Customers');
+    cohortARRRow('Opening CARR · A','original','StartARR',{noteKey:'StartCustomers'});
+    cohortARRRow('− Churn CARR','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+    cohortARRRow('+ Expansion CARR','original','ExpansionARR');
+    cohortARRRow('Closing CARR · A','original','EndARR',{bold:true,noteKey:'EndCustomers'});
+    recognizedRow('Revenue before changes','originalBaseRevenue',{bold:false,indent:true});
+    recognizedRow('− Churn impact','originalChurnRevenueImpact',
+      {bold:false,indent:true,color:'#E24B4A',monthNoteKey:'originalChurnThisMonth'});
+    recognizedRow('+ Expansion impact','originalExpansionRevenueImpact',
+      {bold:false,indent:true,color:'#3B6D11',monthNoteKey:'originalExpansionThisMonth'});
 
     cohortHeading('B. New Customers – Earlier This Year');
     cohortARRRow('Of which: Opening CARR – Earlier New (B)','earlier','StartARR',{noteKey:'StartCustomers'});
@@ -1914,12 +1913,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       {bold:false,indent:true,color:'#E24B4A'});
 
     html += divider();
-    recognizedRow('Recognized Revenue – Existing (A)','existingRevenue');
+    recognizedRow('Recognized Revenue · A','existingRevenue');
     recognizedRow('Recognized Revenue – New (B+C)','newRevenue');
     recognizedRow('Total Recognized Revenue','recognizedRevenue');
 
     html += divider();
-    html += label('Contracted ARR (end of period) = A + B + C',false,true);
+    html += label('Closing CARR · A + B + C',false,true);
     for(let y=0;y<years;y++){
       html += eachPeriod(y,(period,kind)=>periodCell(period.endARR??0,kind,{
         bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
@@ -1933,15 +1932,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Revenue impact and annualized CARR change are different units. The
     // recognized revenue lines cannot be added to the CARR closing stock.
     html += `<div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
-      CARR is an annualized contract run rate (a stock). Recognized revenue is
-      earned during the period (a flow). Within each A/B/C group, opening CARR
-      contributes opening CARR × months in the displayed period / 12.
-      Churn and expansion change revenue for the remaining months of that period;
-      new signed CARR is shown separately from revenue phasing, which may defer
-      current-budget-period recognition without changing Contracted ARR.
-      The phasing impact is recognized ONLY once on its original input budget
-      period and carried in the underlying monthly ledger.
-      "Of which" rows describe the opening CARR split; do not add them again to Opening CARR.
+      CARR is annualized. Recognized revenue is earned during the period.
+      A uses the year-opening CARR as its revenue base. Its churn and expansion
+      rows include the effect of changes from earlier months in the year.
+      In a monthly cell, “of which” shows the portion from that month's own change.
+      New customer phasing applies once in the acquisition budget period.
       Opening CARR - A/B/C churn + A/B/C expansion + new CARR = Closing CARR.
       Recognized Existing (A) + Recognized New (B+C) = Total Recognized Revenue.
       Earlier New (B) includes only customers first invoiced earlier in the current year;
@@ -2027,7 +2022,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
 
     html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
-      + 'ⓘ New customers enter ARR and generate full MRR from their first invoicing month. '
+      + 'ⓘ New CARR and the recognition of new customer revenue are shown separately. '
       + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
 
     // ── BREAK-EVEN ──
@@ -2142,8 +2137,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
     el.innerHTML = html;
-    renderMonthlyCashControls(model, fmt);
-    renderPlanToolbar(model);
   }
 
 
@@ -2184,13 +2177,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!window._plMonths) window._plMonths = {};
     if (!window._plMonths[y]) window._plMonths[y] = {};
     window._plMonths[y][q] = !window._plMonths[y][q];
-    updateStep3Display();
+    renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
   }
 
   function togglePlQtr(y) {
     if (!window._qtr) window._qtr = {};
     window._qtr[y] = !window._qtr[y];
-    updateStep3Display();
+    renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
   }
 
 // Transitional bridge for inline HTML event handlers. Step-by-step, handlers will
@@ -2205,6 +2198,7 @@ Object.assign(window, {
   goToStep3,
   resetPL,
   onPLSlider,
+  onExistingRetentionChange,
   onQuarterPhasingChange,
   onPlanBudgetGranularityChange,
   togglePlanPeriodInputs,

@@ -23,6 +23,31 @@ supports input at three levels and read-only aggregation into three view levels.
 
 ## Independent controls
 
+### A. Customers present at the start of the year
+
+PLAN calculates annual churn CARR, expansion CARR and customer losses from
+the year-opening balances. A shared timing pattern allocates those amounts
+to months. EVEN uses equal monthly weights. FRONT uses 35/30/20/15% across
+quarters and BACK uses 15/20/25/40%, split evenly within each quarter.
+Partial years use the elapsed months' weights from the same annual schedule.
+
+The separate A phasing control sets the fraction of each change that affects
+recognized revenue in its first month. Later months recognize the full
+monthly effect. The A bridge starts from year-opening CARR / 12 each month
+and shows prior months' full churn and expansion effects plus the phased
+current-month effects. Monthly cells show the current-month share below each
+total. Quarter and year cells sum the monthly revenue flows. CARR and
+customer counts roll forward from the prior period's closing balances.
+
+Reference case: opening CARR 500,000, annual churn 25%, expansion 20%,
+EVEN and 50% first-month effect. Closing CARR is 475,000. The annual
+revenue bridge is 500,000 − 62,500 + 50,000 = 487,500. February churn impact
+is −1,302.08, of which −434.03 comes from February's CARR change.
+
+This rule supersedes earlier period-opening retention and full-first-month
+examples for A in PLAN. The budget granularity and New ARR phasing below
+apply to current-year acquisitions until they join A at the next year start.
+
 ### Budget granularity
 
 - Year: one year-specific new-ARR budget. Optional annual phasing chooses

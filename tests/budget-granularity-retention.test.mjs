@@ -11,6 +11,43 @@ const input=(extra={})=>({
   grossMargin:0.8,granularity:'year',signingPattern:'EVEN',
   newARRByPeriod:[0],cacByYear:[0],...extra
 });
+
+test('start-of-year retention has fixed annual amounts and timing independent of the acquisition budget',()=>{
+  for(const granularity of ['year','quarter','month']) {
+    const width={year:12,quarter:3,month:1}[granularity];
+    const newARRByPeriod=Array(12/width).fill(0);
+    const revenues=[];
+    for(const [pattern,q1Share] of [['FRONT',0.35],['EVEN',0.25],['BACK',0.15]]) {
+      const plan=forecastSaaS(input({granularity,newARRByPeriod,
+        annualExpansionComp:0.2,existingRetention:{pattern,phasePercent:50}}));
+      const year=plan.years[0];
+      approx(year.originalChurnARR,125000);
+      approx(year.originalExpansionARR,100000);
+      approx(year.originalEndARR,475000);
+      approx(plan.quarters[0].originalChurnARR,125000*q1Share);
+      for(const key of ['originalBaseRevenue','originalChurnRevenueImpact','originalExpansionRevenueImpact']) {
+        approx(plan.monthlyBridge.reduce((n,m)=>n+m[key],0),year[key]);
+        approx(plan.quarters.reduce((n,q)=>n+q[key],0),year[key]);
+      }
+      revenues.push(year.existingRevenue);
+    }
+    assert.ok(revenues[0]<revenues[1] && revenues[1]<revenues[2]);
+  }
+});
+
+test('start-of-year retention includes last year’s acquisitions and keeps acquisition phasing separate',()=>{
+  const plan=forecastSaaS(input({months:24,granularity:'quarter',
+    newARRByPeriod:[40000,0,0,0,0,0,0,0],phaseByPeriod:[25],
+    annualExpansionComp:0.2,existingRetention:{pattern:'EVEN',phasePercent:0}}));
+  approx(plan.quarters[0].newRevenue,2500);
+  const [first,second]=plan.years;
+  approx(second.originalStartARR,first.endARR);
+  approx(second.originalStartCustomers,first.endCustomers);
+  approx(second.originalChurnARR,first.endARR*0.25);
+  approx(second.originalExpansionARR,first.endARR*0.2);
+  approx(plan.monthlyBridge[12].existingRevenue,first.endARR/12);
+  approx(plan.monthlyBridge[12].originalChurnRevenueImpact,0);
+});
 test('YEAR budget: 25% churn and 51% expansion are each computed once on opening CARR',()=>{
   const r=forecastSaaS(input());
   const p=r.years[0];
