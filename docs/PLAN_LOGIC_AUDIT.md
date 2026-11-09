@@ -1,4 +1,10 @@
-# ReverSide PLAN – audit against the agreed financial model
+# ReverSide PLAN audit — historical snapshot
+
+This audit records the earlier model and its fixes. For the current A
+calculation and acceptance scenario, see the [financial
+specification](FINANCIAL_MODEL.md#a-customers-present-at-the-start-of-the-year).
+For current-year acquisitions, use the [PLAN Budget & Phasing
+Contract](PLAN_BUDGET_PHASING_CONTRACT.md).
 
 > **IMPORTANT — source priority (2026-11-06).** For **budget/view granularity, New Contracted ARR distribution, Revenue Phasing and monthly allocation for TRACK**, the later user-approved [PLAN Budget & Phasing Contract](PLAN_BUDGET_PHASING_CONTRACT.md) and the [verbatim thread excerpt](source-thread-budget-phasing-2026-11-06.md) are authoritative. Earlier claims in this document that month-level phasing is forbidden, 25% quarter phasing is impossible, or FRONT/EVEN/BACK conflates signed ARR with realization reflect **old implementation assumptions**, not the approved requirements. Preserve any unrelated rules; do not silently make the old assumptions normative.
 

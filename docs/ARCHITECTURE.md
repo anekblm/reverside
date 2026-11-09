@@ -2,6 +2,28 @@
 
 Branch: `feat/vc-startup-v2`. PLAN (steps 1–3) first; TRACK (step 4) later. Production `main` remains unchanged until tested and approved.
 
+## Before changing PLAN
+
+| Area | Source of truth | Acceptance |
+| --- | --- | --- |
+| A. Customers present at the start of the year | [Financial specification](FINANCIAL_MODEL.md#a-customers-present-at-the-start-of-the-year) | [Retention tests](../tests/budget-granularity-retention.test.mjs) and [matrix tests](../tests/plan-ui-drilldown.test.mjs) |
+| B/C. Current-year acquisitions and New ARR phasing | [Budget and phasing contract](PLAN_BUDGET_PHASING_CONTRACT.md) | [Phasing acceptance tests](../tests/approved-phasing-contract.test.mjs) |
+| Matrix layout, drilldown and counts | [PLAN matrix below](#plan-matrix-and-budget-input-controls-november-2026) | [Matrix tests](../tests/plan-ui-drilldown.test.mjs) and browser review |
+
+The [audit](PLAN_LOGIC_AUDIT.md) and [source thread](source-thread-budget-phasing-2026-11-06.md)
+preserve earlier decisions and examples.
+
+1. Identify the governing rule and its reference scenario before editing.
+   Record any changed rule and expected result with the corresponding test.
+2. Review financial and layout changes separately. A layout-only change must
+   keep the existing rows, controls, customer counts and period totals except
+   where the change was requested. Drilldown renders saved results without
+   running the forecast again.
+3. Run `npm test` and verify changed browser interactions and layout on the
+   development branch before production approval. Record pending browser
+   checks explicitly. The repository currently has no CI workflow that
+   requires `npm test` before a preview can deploy.
+
 ## Phase 1: separated assets (implemented)
 
 - `index.html`: existing PLAN markup and inline event attributes; visual appearance intentionally preserved.
@@ -40,14 +62,14 @@ Extract state, calculations and UI into modules without changing existing output
 
 1. `Ending ARR`, `recognized revenue`, `billings`, and `cash collections` are separate quantities, never interchangeable.
 2. Monthly calculations are the source of truth; quarters and years aggregate the same monthly results.
-3. Signing pattern controls timing of new customers. Eliminate the separate revenue phasing slider when the new monthly model is implemented to avoid contradictory user inputs.
+3. Acquisition signing weights, acquisition revenue phasing and A retention timing have separate inputs and definitions.
 4. S&M spend timing is configurable independently from customer-signing timing, initially quarterly in PLAN; cash movement runs monthly.
 5. Cash-neutral S&M capacity is based on actual projected collections less **all other operating payments** in the same months, not ARR minus S&M.
 6. PLAN maintains editable scenarios; a final approved baseline is immutable to TRACK. TRACK adds actuals without overwriting the baseline.
 7. VC / fundraising cash runway is a separate view, not a proxy for operating profit.
 8. Preserve a legacy preview until new engine outputs reconcile and user-facing PLAN is accepted.
 
-## Pending QA
+## Initial migration QA (historical)
 
 - Complete browser click-through of steps 1–3 after extraction, including pre-revenue and yearly/quarterly toggles.
 - Verify all static JS imports and loaded asset paths in Vercel Preview.
@@ -55,7 +77,7 @@ Extract state, calculations and UI into modules without changing existing output
 
 **Note:** This commit is a structural refactor; it does not yet implement quarterly S&M allocations, the cash-flow engine, or TRACK.
 
-## 2026-10-30 — Monthly PLAN engine integrated (experimental)
+## 2026-10-30 — Monthly PLAN engine integrated (historical)
 
 - `src/engine/monthly-plan.js` now derives closing ARR, new customer cohorts,
   monthly recognized revenue, quarterly S&M cash out and monthly operating cash.
@@ -95,6 +117,9 @@ source ledger.
 1. Contracted ARR (opening stock).
 2. Cohort A: customers present at the beginning of the calendar year —
    their share of opening CARR, churn ARR, expansion ARR and closing CARR.
+   Opening, churn and closing rows show customer counts. The revenue rows
+   show the complete churn and expansion effects. Expanded months show
+   their own contribution as “of which” in the same cells.
 3. Cohort B: customers first invoiced in **earlier displayed periods within
    the same calendar year** — their opening CARR, churn ARR, expansion ARR and
    closing CARR.
@@ -110,33 +135,25 @@ never be added a second time. Annual CARR is a stock, not revenue. Within-year
 B is zero in a whole-year display, because acquisitions during that entire
 displayed year belong to C; expanding into quarters/months exposes B properly.
 
-**Budget granularity** (Year, Quarter, Month) is an independent input selector
-above the matrix and changes how churn, expansion and new-invoice phasing are
-calculated. The engine always emits a reconciled monthly ledger.
+**Acquisition budget granularity** (Year, Quarter, Month) sets the period
+for new CARR inputs, acquisition phasing and retention of eligible
+current-year acquisitions. Cohort A has separate annual timing and
+first-month revenue controls. The engine emits a reconciled monthly ledger.
 Users can override New Contracted ARR per **budget period**; when they do,
 closing CARR is an output rather than a forced target.
 **View granularity** is solely the existing expand/collapse presentation.
-Presets EVEN/FRONT/BACK stay in a permanent toolbar: enabled in target-driven
-yearly/quarterly planning, visibly greyed out in monthly/manual mode. They are
-never conditionally injected into grid rows when a year is expanded.
+The New CARR presets are enabled in target-driven yearly/quarterly planning
+and greyed out in monthly/manual mode. The A timing control is independent.
 
 The original cash controls remain separate from revenue and CARR stocks.
 The legacy engine `src/engine/monthly-plan.js` remains for comparison,
 but the displayed PLAN matrix uses `src/engine/cohort-budget.js`.
 
-**Financial correctness regression fixed:** churn and expansion are
-computed ONCE on each selected budget period's opening CARR. Only the
-resulting signed amounts are distributed to months; they are NOT
-recomputed monthly unless budget granularity itself is Month. The
-customer-based annual/quarterly/monthly retention formulas, first-invoice
-recognition rules, and cross-year cohort classifications are documented
-in `FINANCIAL_MODEL.md` and `PLAN_LOGIC_AUDIT.md`.
-
-Year phasing is constrained to first-invoice timing WITHIN each fixed
-FRONT/EVEN/BACK quarter share (and can reject incompatible settings).
-The phasing slider is disabled when no New CARR is modeled. The ACV row
-shows actual contracted CARR divided by closing customer count, never
-"recognized ACV" inferred from annual earnings over a closing stock.
+The cohort engine calculates A churn and expansion on year-opening CARR,
+allocates them to months and prepares all three period views. The matrix
+reuses these results when expanded or collapsed. The acquisition phasing
+slider is disabled when no new CARR is modeled. The ACV row divides closing
+CARR by closing customer count.
 
 The financial specification is in `FINANCIAL_MODEL.md`, and regression tests
 cover original row structure, granularity controls and A/B/C reconciliation.

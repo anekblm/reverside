@@ -5,17 +5,19 @@
 **Primärkälla:** [Ordagrann, oförändrad trådsammanställning](source-thread-budget-phasing-2026-11-06.md).
 **Omfattning:** Nyförsäljning, New Contracted ARR, budget-/visningsgranularitet, Revenue Phasing, månadsallokering och TRACK. Dokumentet ersätter motstridiga tekniska antaganden på *dessa områden* i tidigare implementation och dokumentation. Det avgör inte andra ospecificerade affärsregler.
 
+Kohort A har en separat [finansiell regel för årsbaserad churn, expansion
+och intäkt](FINANCIAL_MODEL.md#a-customers-present-at-the-start-of-the-year).
+Budgetnivån nedan gäller nykundernas beräkning.
+
 ## Implementation på utvecklingsgrenen (denna iteration)
 
 **Implementerat och regressionstestat:** Separat FRONT/EVEN/BACK för kontrakterad New ARR mellan kvartalen och inom deras månader; dessa två nivåer ändrar inte varandras periodtotaler. Revenue Phasing styr separat redovisad intäkt från NYA kohorter på exakt vald inputnivå (Year/Quarter/Month), appliceras en gång och lagras per månad. Acceptansfallet 100 New CARR Q1, 25 % kvartalsphasing är nu 6,25 / 25 / 25 / 25 = 81,25 för året. A/B/C-intäktsbryggan har uttryckliga rader för intäktseffekt av phasing. Visning på en annan nivå räknar aldrig om phasing.
 
 **Preliminärt, INTE godkänd procentsats:** Källan anger FRONT/EVEN/BACK för kvartalen (35/30/20/15, 25/25/25/25, 15/20/25/40) men inga exakta månadsprocent för FRONT/BACK. Provisoriska standardmönster för val nummer två är **FRONT 50/30/20, EVEN 1/3–1/3–1/3, BACK 20/30/50**. Dessa ska endast betraktas som implementationsexempel till dess att användaren har fastställt dem.
 
-**UI-begränsning:** Det andra valet i toolbar gäller för närvarande alla kvartal som grupp. Motorn kan redan läsa `monthlyPatternsByQuarter` för separata kvartalsmönster, men individuell UI-inställning och CUSTOM har ännu inte byggts. Ingen ytterligare ändring görs före överenskommelse.
+**UI-begränsning:** Det andra valet i toolbar är utformat för alla kvartal som grupp. Knapparna refererar till `setMonthScenario` i HTML, men ES-modulen exponerar för närvarande inte funktionen på `window`. Motor- och simulerade UI-tester täcker funktionen. Knapptrycken behöver åtgärdas och verifieras i webbläsare. Motorn kan läsa `monthlyPatternsByQuarter` för separata kvartalsmönster. Individuell UI-inställning och CUSTOM återstår.
 
 **Intäktsallokeringens status:** Periodens phasing ger en explicit intäktsjustering för kohorter som kontrakterats under samma inputbudgetperiod, med månatlig fördelning som inte kan uppstå före kontraktet. Eventuellt tidigarelagd intäkt som inte går att förena med de valda kontraktsmånaderna avvisas i stället för att justera kontraktssiffrorna. Dessa allokerade intäkter är **inte en full kontraktsspecifik faktureringskalender**. En fryst TRACK-baseline och faktisk fakturering/aktiveringsschema återstår.
-
-## Historiska avvikelser dokumenterade före denna implementation
 
 ## Beslutade funktionella regler
 
@@ -95,4 +97,6 @@ Följande avstämningar är invarianta:
 
 **Arkitekturkrav:** rätta dessa brister genom separerad input/engine/result/presentation. Skriv först referens-/acceptanstester från detta kontrakt, sedan implementering. Ändra inte andra finansiella regler av misstag. Behåll originalets drill-down-matris. Ändra endast utvecklingsgrenen tills finansiella och visuella acceptansprov passerar.
 
-**Viktig avgränsning:** Den bifogade primärkällan avser främst nyförsäljning, Revenue Phasing, fördelning och TRACK. Den innehåller inte ett självständigt fullständigt facit för tidsfördelning av churn och expansion i A; sådana regler ska hämtas från övriga uttryckliga beslut, inte antas härifrån.
+Den bifogade primärkällan beskriver nyförsäljning, Revenue Phasing,
+fördelning och TRACK. A:s referensscenario och tidsfördelning finns i den
+separata finansiella regeln som länkas ovan.

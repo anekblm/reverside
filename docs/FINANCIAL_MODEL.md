@@ -1,6 +1,10 @@
-# ReverSide PLAN – Cohort Financial Model (working specification)
+# ReverSide PLAN financial specification
 
-> **IMPORTANT — source priority (2026-11-06).** For **budget/view granularity, New Contracted ARR distribution, Revenue Phasing and monthly allocation for TRACK**, the later user-approved [PLAN Budget & Phasing Contract](PLAN_BUDGET_PHASING_CONTRACT.md) and the [verbatim thread excerpt](source-thread-budget-phasing-2026-11-06.md) are authoritative. Earlier claims in this document that month-level phasing is forbidden, 25% quarter phasing is impossible, or FRONT/EVEN/BACK conflates signed ARR with realization reflect **old implementation assumptions**, not the approved requirements. Preserve any unrelated rules; do not silently make the old assumptions normative.
+The [A rules below](#a-customers-present-at-the-start-of-the-year) govern
+customers present at the start of the year. The [PLAN Budget & Phasing
+Contract](PLAN_BUDGET_PHASING_CONTRACT.md) governs current-year acquisitions,
+budget and view controls, and the monthly baseline requirement for TRACK.
+The [November 5 audit](PLAN_LOGIC_AUDIT.md) records earlier behavior.
 
 This document specifies the cohort calculation engine in `src/engine/cohort-budget.js`, which now feeds the approved single collapsible PLAN matrix. The original `src/engine/monthly-plan.js` remains for comparison. **Yearly, quarterly and monthly budget input levels are available separately from the year/quarter/month viewing drilldown.**
 
@@ -11,12 +15,11 @@ supports input at three levels and read-only aggregation into three view levels.
 
 - **New ARR (first invoiced):** annualized recurring subscription value first
   invoiced this month. There is no earlier signed-but-not-active booking bucket.
-- **Signed & Realized MRR:** New ARR / 12, earned in that first invoice month.
-  No first-month discount or monthly revenue phasing is applied.
+- **Signed MRR:** New ARR / 12. The acquisition phasing rule determines
+  recognized revenue for those cohorts during their acquisition budget period.
 - **Closing ARR:** stock of annualized recurring value remaining at period end.
 - **Recognized Revenue:** revenue earned during the displayed accounting period,
-  not the annualized ARR stock; for monthly-billed subscriptions it equals the
-  total active monthly MRR in each month under current assumptions.
+  after applying the relevant cohort timing rules to the monthly run rate.
 - **Cash collections:** the monthly invoices actually collected at the specified
   delay. No annual-upfront billing is implemented in this iteration.
 - All money uses one selected currency (FX conversion happens outside the engine).
@@ -25,54 +28,49 @@ supports input at three levels and read-only aggregation into three view levels.
 
 ### A. Customers present at the start of the year
 
-PLAN calculates annual churn CARR, expansion CARR and customer losses from
-the year-opening balances. A shared timing pattern allocates those amounts
-to months. EVEN uses equal monthly weights. FRONT uses 35/30/20/15% across
-quarters and BACK uses 15/20/25/40%, split evenly within each quarter.
-Partial years use the elapsed months' weights from the same annual schedule.
+Annual churn CARR equals year-opening CARR × annual churn. Annual expansion
+CARR equals year-opening CARR × annual expansion. Expected customer losses
+equal year-opening customers × annual churn. Use the same timing pattern
+for all three. EVEN uses equal monthly weights. The implemented FRONT
+weights are 35/30/20/15% across quarters and BACK uses 15/20/25/40%, split
+evenly within each quarter. These reuse the acquisition presets as an
+implementation choice for A. Partial years use the elapsed months' weights
+from the annual schedule.
 
-The separate A phasing control sets the fraction of each change that affects
-recognized revenue in its first month. Later months recognize the full
-monthly effect. The A bridge starts from year-opening CARR / 12 each month
-and shows prior months' full churn and expansion effects plus the phased
-current-month effects. Monthly cells show the current-month share below each
-total. Quarter and year cells sum the monthly revenue flows. CARR and
+The separate A phasing control defaults to 50%. For each month, the
+revenue baseline is year-opening CARR / 12. Each signed revenue effect is
+`(prior months’ CARR changes + this month’s CARR change × first-month phase) / 12`.
+Monthly cells show the current-month share below the total, marked
+“of which”. Quarter and year cells sum the monthly revenue flows. CARR and
 customer counts roll forward from the prior period's closing balances.
+The model retains unrounded expected counts and rounds only for display.
 
 Reference case: opening CARR 500,000, annual churn 25%, expansion 20%,
 EVEN and 50% first-month effect. Closing CARR is 475,000. The annual
 revenue bridge is 500,000 − 62,500 + 50,000 = 487,500. February churn impact
-is −1,302.08, of which −434.03 comes from February's CARR change.
+is −1,302.08, of which −434.03 comes from February's CARR change. January
+recognized revenue is 41,579.86 and Q1 is 124,218.75.
 
 This rule supersedes earlier period-opening retention and full-first-month
 examples for A in PLAN. The budget granularity and New ARR phasing below
 apply to current-year acquisitions until they join A at the next year start.
+See the [retention tests](../tests/budget-granularity-retention.test.mjs)
+and [matrix tests](../tests/plan-ui-drilldown.test.mjs) for the acceptance
+values, customer counts and year/quarter/month reconciliation.
 
 ### Budget granularity
 
-- Year: one year-specific new-ARR budget. Optional annual phasing chooses
-  the implied first-invoice timing within that year.
-- Quarter: one quarter-specific new-ARR budget. Optional quarterly phasing
-  chooses the implied first-invoice timing within the quarter.
-- Month: one month-specific new-ARR budget. No monthly revenue phasing;
-  first-invoice MRR earns immediately.
+- Year, Quarter or Month sets the input period for new CARR and for its
+  acquisition revenue phasing. A uses the annual schedule defined above.
 
 When planning a full year, Front/Even/Back set **quarterly New Contracted ARR shares**:
 35/30/20/15, 25/25/25/25 or 15/20/25/40. Within each quarter the default
 distribution is EVEN across its three months, independently of the full-year
 quarter pattern.
 
-A manually selected YEAR revenue phasing must preserve each quarter's
-Front/Even/Back share. The engine changes the first-invoice distribution
-**only within quarters** and rejects a phasing outside that preset's
-feasible range rather than moving planned ARR between quarters silently.
-For full twelve-month years, the allowed annual first-invoice phasing
-intervals are FRONT **54.58%–71.25%**, EVEN **45.83%–62.50%**, and
-BACK **35.83%–52.50%**. Therefore a desired annual phase of 25% is
-mathematically incompatible with all three fixed quarterly presets: it
-requires a different quarterly ARR allocation or different invoice-start
-assumptions. QUARTER phasing can range 33.33%–100% because it preserves
-the quarter total and adjusts only the three months within it.
+Revenue phasing preserves the selected signing distribution and signed
+CARR for every period. The [acquisition contract](PLAN_BUDGET_PHASING_CONTRACT.md)
+documents the requirements and current UI gaps.
 
 Manual period ARR inputs override target-derived new customer amounts;
 closing CARR then becomes an output, not a forced target.
@@ -107,7 +105,17 @@ The ARR Bridge separately reconciles:
 ARR/MRR at year or quarter end is the *last month's stock*, never a sum of
 monthly ARR/MRR values. Recognized revenue and cashflows *are* summed.
 
-## Exact phasing and feasibility
+## Acquisition phasing and feasibility
+
+For a budget period of `L` months, the maximum before timing constraints
+is `new CARR × L / 12`. Acquisition-period recognized revenue equals
+that maximum × the selected phase. The engine caps the phase at the amount
+that can be earned from the selected signing months. It allocates recognized
+revenue across eligible signed-cohort months without moving CARR. The
+reference case of 100 new CARR and 25% phasing in Q1 gives 6.25 in Q1.
+
+<details>
+<summary>Historical first-invoice phasing model (superseded)</summary>
 
 For a budget period containing `L` whole months, with new ARR share `w_i`
 first invoiced in month `i` of the period (indexed 0..L−1):
@@ -137,9 +145,12 @@ template. No explicit phase means the natural implied phasing of the template
 applies an additional phase. A partial final year/quarter has a tighter
 feasible range depending on actual months.
 
+</details>
+
 ## Retention timing and cash
 
-- **Budget period is the calculation scope**, not a display mode. Annual
+- **For current-year acquisitions**, the budget period is the retention
+  calculation scope. Annual
   churn `c` and annual expansion `e` are INPUT rates. For a full input
   period of `L` months (12 year, 3 quarter, 1 month), calculate ONCE on
   each eligible cohort's opening CARR:
@@ -148,23 +159,15 @@ feasible range depending on actual months.
   `churnCARR=openingCARR*(1-grossRetention)`;
   `expansionCARR=openingCARR*(netRetention-grossRetention)`.
   These same-period amounts must not be recomputed from month to month.
-- **Yearly planning:** With 500,000 opening CARR, 25% annual churn and
-  51% annual expansion, Year 1 churn is EXACTLY 125,000, expansion is
-  EXACTLY 255,000 and closing CARR is 630,000 before new customers.
-  Quarterly planning instead uses quarter-specific rates applied to each
-  QUARTER opening CARR. Monthly planning is the only mode recalculating
-  retention at each month opening. A yearly view of a quarterly budget must
-  preserve the original four quarterly churn/expansion calculations.
 - After the selected budget-period churn and expansion amounts are computed,
   each is **allocated evenly over that period's months**, as an estimated
   forecast, without recalculating the amounts. Recognized monthly revenue
   earns the new active MRR IN that month, including its assigned retention
   changes. The monthly allocation can be viewed but never silently treated
   as a revised monthly-budget forecast.
-- Newly acquired cohorts are eligible for churn/expansion **only after their
-  first input budget period** (following month/quarter/year) ends.
-  Within that period they receive a full MRR in the first invoice month,
-  but no churn or expansion.
+- Newly acquired cohorts become eligible for churn and expansion after
+  their acquisition budget period. During that period their revenue follows
+  acquisition phasing.
 - COGS cash proxy = recognized revenue × (1 − gross margin), paid in the
   same month. Other OPEX cash payments are a separately entered monthly value.
 - Monthly cash collection = monthly earned subscription revenue shifted by
@@ -205,9 +208,9 @@ and expansion ARR by measurement units and timing. The full revenue bridge
 separately verifies A base revenue + A churn/expansion revenue impact = A net
 recognized revenue, and equivalent B movement recognition.
 
-The EVEN/FRONT/BACK controls are always present in a fixed toolbar, not inserted
-into the forecast grid on expansion. They are greyed out in monthly and manual
-budget modes. Users can override New Contracted ARR values per input budget
+The EVEN/FRONT/BACK controls are always present in fixed toolbars. The
+acquisition presets are greyed out in monthly and manual budget modes.
+Users can override New Contracted ARR values per input budget
 period; then closing CARR is an output and the previous target remains a
 reference only.
 
@@ -215,7 +218,8 @@ reference only.
 and recognized-revenue reconciliations across Year/Quarter/Month budgeting,
 every display granularity, FRONT/EVEN/BACK, and 12/24/36-month horizons.
 
-## Recognition from the same visible CARR bridge
+<details>
+<summary>Historical A recognition example with full first-month effect (superseded)</summary>
 
 Within a displayed period of `D` months, annualized opening CARR earns
 `openingCARR * D/12` before any changes. If a CARR change is allocated to
@@ -242,6 +246,8 @@ classification at the beginning of EACH budget year, matching A/B/C in the
 displayed bridge. Phasing applies ONLY to first-invoiced New CARR; it
 cannot change churn or expansion in the existing base. If no New CARR
 is required, the phasing slider is greyed out and explicitly says why.
+
+</details>
 
 ## Guarantees and acceptance
 
