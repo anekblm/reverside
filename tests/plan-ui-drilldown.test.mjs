@@ -67,6 +67,20 @@ test('36 months starts with 3 year columns; Y2 Q3 expands only Jul–Sep, then c
   app.togglePlQtr(1);
   assert.equal(width(node),4);
 });
+test('A six-month plan displays only modeled quarters and no premature break-even marker',()=>{
+  const {app,node,win}=createApp(6);
+  const plan=win._latestMonthlyPlan;
+  assert.equal(width(node),2);
+  assert.doesNotMatch(node('plTable').innerHTML,/Year 1 ✓/);
+  app.togglePlQtr(0);
+  assert.equal(width(node),4);
+  assert.doesNotMatch(node('plTable').innerHTML,/Y1 Q[34]/);
+  app.togglePlMonth(0,1);
+  assert.equal(width(node),7);
+  assert.match(node('plTable').innerHTML,/>Jun<\/div>/);
+  assert.doesNotMatch(node('plTable').innerHTML,/>Jul<\/div>/);
+  assert.equal(win._latestMonthlyPlan,plan);
+});
 test('quarter phasing slider modifies the same cohort engine while preserving open month columns',()=>{
   const {app,node,win}=createApp(36);
   app.togglePlQtr(0);
@@ -168,7 +182,7 @@ test('budget granularity Year/Quarter/Month changes the input engine, not the di
   app.onPlanBudgetGranularityChange('year');
   assert.equal(win._latestMonthlyPlan.granularity,'year');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,3);
-  assert.equal(node('plQuarterPhasingLabel').textContent,'Revenue phasing · yearly');
+  assert.match(node('plQuarterPhasingNote').textContent,/acquisition year/);
   assert.equal(Number(node('plQuarterPhasingSlider').min),0);
   assert.ok(Number(node('plQuarterPhasingSlider').max)>50);
   const signedBefore=win._latestMonthlyPlan.quarters.map(p=>p.newARR);

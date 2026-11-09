@@ -111,7 +111,13 @@ Do not merge this branch without financial and browser acceptance tests.
 The original collapsible single financial matrix is retained. It opens with
 yearly columns; users can expand individual years into quarters and individual
 quarters into months. Expanding only changes displayed columns, not the monthly
-source ledger.
+source ledger. The grid shows quarters within the forecast horizon. Its
+break-even marker is available after a CAC strategy has been selected.
+
+The controls above the matrix group A's churn, expansion, NRR and timing
+separately from acquisition budget, signing presets and acquisition
+revenue phasing. The Advanced section contains the new customer ACV
+assumption and explains contracted and expansion ACV.
 
 **One integrated bridge**, in the original forecast grid:
 1. Contracted ARR (opening stock).

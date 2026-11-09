@@ -62,7 +62,9 @@
     @media (max-width: 768px) { .metric-grid { grid-template-columns: 1fr 1fr; } }
 
     /* Compact PLAN assumption strip; scoped to the existing forecast controls. */
-    .pl-assumptions-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:1rem; }
+    .pl-forecast-section { margin-bottom:0.85rem; }
+    .pl-forecast-section h3 { margin:0 0 0.45rem; font-size:12px; font-weight:600; color:#333; }
+    .pl-assumptions-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:0.25rem; }
     .pl-assumption-card { min-width:0; padding:10px 12px; background:#fafafa; border:0.5px solid #e0e0e0; border-radius:6px; }
     .pl-assumption-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; min-height:38px; }
     .pl-assumption-heading > div:first-child { min-width:0; }
@@ -72,8 +74,21 @@
     .pl-assumption-card input[type="range"] { display:block; width:100%; margin:8px 0 0; }
     .pl-assumption-note { font-size:10px; color:#999; margin-top:5px; line-height:1.35; }
     .pl-phasing-ends { display:flex; justify-content:space-between; gap:4px; margin-top:5px; color:#888; font-size:9px; }
+    .pl-new-phase { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; max-width:620px; }
+    .pl-new-phase .pl-assumption-heading { grid-row:span 2; min-height:0; }
+    .pl-new-phase input[type="range"] { margin:0; }
+    .pl-advanced { border-top:1px solid #e5e5e5; margin-bottom:0.75rem; padding-top:0.55rem;
+      color:#555; font-size:11px; }
+    .pl-advanced summary { cursor:pointer; font-weight:500; }
+    .pl-advanced-content { padding:0.4rem 0.75rem; line-height:1.5; }
+    .pl-advanced-content p { margin:0 0 0.4rem; }
+    .pl-advanced-price { display:flex; align-items:center; gap:6px; cursor:pointer; }
     @media (max-width:1100px) { .pl-assumptions-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-    @media (max-width:600px) { .pl-assumptions-grid { grid-template-columns:1fr; } }
+    @media (max-width:600px) {
+      .pl-assumptions-grid,.pl-new-phase { grid-template-columns:1fr; }
+      .pl-new-phase .pl-assumption-heading { grid-row:auto; }
+      .pl-new-phase input[type="range"] { margin-top:6px; }
+    }
 
     /* Fixed-height PLAN toolbar: controls do not appear/disappear on year expand. */
     .pl-budget-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;

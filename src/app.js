@@ -1149,7 +1149,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const ed = document.getElementById('plExpansionDisplay');
     const nd = document.getElementById('plNRROutcome');
     const nn = document.getElementById('plNRRNote');
-    const rn = document.getElementById('plRampNote');
     if (!cd) return;
     const churnPct = Math.round((plChurn || 0) * 100);
     const expPct   = Math.round((plExpansion || 0) * 100);
@@ -1163,7 +1162,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (nn) {
       nn.textContent = nrr > 100 ? '— existing base grows' : nrr === 100 ? '— existing base flat (default)' : '— existing base shrinks';
     }
-    if (rn) rn.textContent = 'New MRR starts in the first invoice month';
 
     // Expansion rate per retained customer note under NRR
     const expNoteEl = document.getElementById('plExpansionRateNote');
@@ -1494,17 +1492,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const phaseActive=hasNewCARR;
     const slider=document.getElementById('plQuarterPhasingSlider');
     const card=document.getElementById('plQuarterPhasingCard');
-    const title=document.getElementById('plQuarterPhasingLabel');
     const note=document.getElementById('plQuarterPhasingNote');
     const output=document.getElementById('plQuarterPhasingDisplay');
     if(card) card.style.opacity=phaseActive?'1':'0.55';
-    if(title) title.textContent=phaseActive
-      ? 'Revenue phasing · '+(plBudgetGranularity==='year'?'yearly':plBudgetGranularity==='quarter'?'quarterly':'monthly')
-      : 'Revenue phasing · no new CARR';
     if(note) note.textContent=phaseActive
-      ? 'Share of theoretical full-period new-cohort revenue recognized in the '+
-        (plBudgetGranularity==='year'?'year':plBudgetGranularity==='quarter'?'quarter':'month')
-      : 'No New CARR: phasing cannot affect this forecast';
+      ? 'Share of full-period revenue earned in the acquisition '+plBudgetGranularity
+      : 'Inactive without New CARR';
     if(slider){
       slider.disabled=!phaseActive;
       slider.min=String(min);
@@ -1516,7 +1509,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       : '—';
     const minimumLabel=document.getElementById('plPhasingMinLabel');
     if(minimumLabel) minimumLabel.textContent=phaseActive
-      ? '0% · deferred realization' : 'Not applicable';
+      ? '0% · no revenue in start period' : 'Not applicable';
     const maximumLabel=document.getElementById('plPhasingMaxLabel');
     if(maximumLabel) maximumLabel.textContent=phaseActive
       ? max.toFixed(1)+'% · maximum from signed months' : 'No new customers';
@@ -1656,7 +1649,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const rows = model.years.map((r, y) => {
       const opResult = r.operatingContribution;
       cumulativeResult += opResult;
-      if (breakEvenYear === null && cumulativeResult >= 0) breakEvenYear = y + 1;
+      if (selectedStrategy && breakEvenYear === null && cumulativeResult >= 0) breakEvenYear = y + 1;
       return {
         arrStart: r.startARR, churnAmt: r.churnARR,
         expansionAmt: r.expansionARR, newCustARR: r.newARR,
@@ -1679,31 +1672,27 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!window._qtr) window._qtr = {};
     if (!window._plMonths) window._plMonths = {};
 
-    // Desktop layout — fixed px widths, no global total column
-    const LBL  = 148; // label px
-    const YCOL = 110; // year column px (collapsed)
-    const QCOL = 72;  // quarter column px
-    const MCOL = 70;  // month column px
-    const YTOT = 88;  // year-total px (when expanded)
-    const GAP  = 5;
-
-    // Build column template dynamically based on expansion state
-    const colDefs = [LBL + 'px'];
-    for (let y = 0; y < years; y++) {
-      if (window._qtr[y]) {
-        for (let q = 0; q < 4; q++) {
-          if (window._plMonths[y]?.[q]) {
-            for (let m = 0; m < 3 && y*12+q*3+m<state.timeframe; m++) colDefs.push(MCOL+'px');
+    // The grid template, headers and rows share the same visible periods.
+    const visiblePeriods = model.years.map((period,y)=>{
+      if (!window._qtr[y]) return [{kind:'year',period}];
+      const cols=[];
+      for (const quarter of model.quarters.filter(q=>q.year===y)) {
+        const q=quarter.quarter;
+        if (window._plMonths[y]?.[q]) {
+          for (let index=quarter.startMonth-1; index<quarter.endMonth; index++) {
+            cols.push({kind:'month',period:model.monthlyBridge[index],monthIndex:index,q});
           }
-          colDefs.push(QCOL+'px');
         }
-        colDefs.push(YTOT+'px');
-      } else {
-        colDefs.push(YCOL+'px');
+        cols.push({kind:'quarter',period:quarter,q});
       }
-    }
-    const colTemplate = colDefs.join(' ');
-    const totalGridW = colDefs.reduce((s,c) => s + parseInt(c), 0) + (colDefs.length - 1) * GAP;
+      cols.push({kind:'yearTotal',period});
+      return cols;
+    });
+    const widths = {year:110,quarter:72,month:70,yearTotal:88};
+    const GAP  = 5;
+    const colDefs = [148, ...visiblePeriods.flatMap(cols=>cols.map(col=>widths[col.kind]))];
+    const colTemplate = colDefs.map(width=>width+'px').join(' ');
+    const totalGridW = colDefs.reduce((s,width)=>s+width, 0) + (colDefs.length - 1) * GAP;
 
     const empty = `<div></div>`;
 
@@ -1718,47 +1707,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#888;margin-top:1px;">${note}</div>` : ''}
       </div>`;
 
-    // Quarterly P&L values are aggregated from exactly the same monthly rows.
-    const modelQuarterByYear = rows.map((_, y) => {
-      const found = model.quarters.filter(q => q.year === y);
-      const endARR = found.length ? found[found.length-1].endARR : rows[y].arrEnd;
-      while (found.length < 4) found.push({
-        startARR: endARR, endARR, churnARR: 0, expansionARR: 0,
-        newARR: 0, recognizedRevenue: 0, grossProfit: 0,
-        originalNetRevenue: 0, earlierNewNetRevenue: 0, currentNewNetRevenue: 0,
-        signedMRR: 0,
-        newCustomers: 0, churnCustomers: 0,
-        smPaid: 0, operatingContribution: 0
-      });
-      return found;
-    });
-    const _qtrStock = modelQuarterByYear.map(qs => qs.map(q => ({
-      arrStart: q.startARR, churn: q.churnARR, expansion: q.expansionARR,
-      newARR: q.newARR, arrEnd: q.endARR
-    })));
-    const _qtrTotalRev = modelQuarterByYear.map(qs => qs.map(q => q.recognizedRevenue));
-    // Column definitions describe one displayed period; all monetary rows reuse them.
-    const visiblePeriods = y => {
-      if (!window._qtr[y]) return [{kind:'year', period:model.years[y]}];
-      const cols=[];
-      for(let q=0;q<4;q++) {
-        if(window._plMonths[y]?.[q]) {
-          for(let m=0;m<3;m++) {
-            const index=y*12+q*3+m;
-            if(index<model.months.length) cols.push({kind:'month',period:model.monthlyBridge[index],monthIndex:index,q});
-          }
-        }
-        cols.push({kind:'quarter',period:modelQuarterByYear[y][q],q});
-      }
-      cols.push({kind:'yearTotal',period:model.years[y]});
-      return cols;
-    };
     const periodCell = (value,kind,{bold=false,color='#555',bg='white',note=''}={}) => {
       if(kind==='yearTotal') return ycell(value,bold,color,bg,note);
       if(kind==='year') return cell(value,bold,color,bg,note);
       return `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(value))}${note?`<div style="font-size:9px;color:#aaa;">${note}</div>`:''}</div>`;
     };
-    const eachPeriod = (y,fn) => visiblePeriods(y).map(col=>fn(col.period,col.kind,col)).join('');
+    const eachPeriod = (y,fn) => visiblePeriods[y].map(col=>fn(col.period,col.kind,col)).join('');
 
     // Every row renders the same visible period columns, whether year, quarter or month.
     const yearQuarterCells = (y,key,sign=1,bold=false,color='#333',bg='white') =>
@@ -1807,15 +1761,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       const exp = window._qtr && window._qtr[y];
       if (exp) {
         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        for(let q=0;q<4;q++) {
-          const opened=!!window._plMonths[y]?.[q];
-          if(opened) for(let m=0;m<3;m++) {
-            const absolute=y*12+q*3+m;
-            if(absolute<model.months.length) {
-              html += `<div style="font-size:10px;font-weight:500;color:#777;text-align:center;padding:0.25rem;background:#f9f9f9;border-radius:5px;">${monthNames[q*3+m]}</div>`;
-            }
+        for(const {kind,q,monthIndex} of visiblePeriods[y]) {
+          if(kind==='month') {
+            html += `<div style="font-size:10px;font-weight:500;color:#777;text-align:center;padding:0.25rem;background:#f9f9f9;border-radius:5px;">${monthNames[monthIndex%12]}</div>`;
+          } else if(kind==='quarter') {
+            const opened=!!window._plMonths[y]?.[q];
+            html += `<div style="font-size:10px;font-weight:600;color:${opened?'#185FA5':'#666'};text-align:center;padding:0.25rem;background:${opened?'#EDF4FB':'#f5f5f5'};border-radius:5px;cursor:pointer;" role="button" tabindex="0" onclick="togglePlMonth(${y},${q})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePlMonth(${y},${q});}" title="${opened?'Collapse months':'Expand months'}">Y${y+1} Q${q+1} ${opened?'▲':'▼M'}</div>`;
           }
-          html += `<div style="font-size:10px;font-weight:600;color:${opened?'#185FA5':'#666'};text-align:center;padding:0.25rem;background:${opened?'#EDF4FB':'#f5f5f5'};border-radius:5px;cursor:pointer;" role="button" tabindex="0" onclick="togglePlMonth(${y},${q})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePlMonth(${y},${q});}" title="${opened?'Collapse months':'Expand months'}">Y${y+1} Q${q+1} ${opened?'▲':'▼M'}</div>`;
         }
         html += `<div style="font-size:11px;font-weight:700;color:#185FA5;text-align:center;padding:0.25rem 0.4rem;background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:5px;cursor:pointer;" onclick="togglePlQtr(${y})" title="Collapse">
           Year ${y+1}${breakEvenYear===y+1?' ✓':''} ▲
@@ -2048,7 +2000,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // ── HEALTH CHECK ──
     // Per-year metrics based on actual P&L
     html += `<div style="margin-top:1.5rem;">`;
-    html += `<div style="font-size:12px;font-weight:500;color:#333;margin-bottom:0.25rem;">Unit Economics — per year</div><div style="font-size:10px;color:#999;margin-bottom:0.75rem;">All metrics based on Realized ACV</div>`;
+    html += `<div style="font-size:12px;font-weight:500;color:#333;margin-bottom:0.25rem;">Unit Economics — per year</div><div style="font-size:10px;color:#999;margin-bottom:0.75rem;">LTV and CAC payback use closing contracted ACV.</div>`;
     const ueColW = 90;
     const ueLabelW = 140;
     const ueTotW = 90;
@@ -2061,7 +2013,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">Avg</div>`;
 
-    // LTV — two versions: Contracted (expanded ACV) and Realized
+    // LTV uses closing contracted ACV.
     html += label('LTV (contracted ACV × GM / annual churn)', false, true);
     const ltvVals = rows.map((r, y) => {
       const rACV = model.years[y].endACV || acv;
@@ -2097,7 +2049,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       <div style="font-size:11px;font-weight:700;color:${avgRatioColor};">${avgRatio}×</div>
     </div>`;
 
-    // CAC Payback — based on Realized ACV
+    // CAC payback uses closing contracted ACV.
     html += label('CAC Payback (CAC / monthly ACV gross profit)', false, true);
     for (let y = 0; y < years; y++) {
       const expACV = model.years[y].endACV || acv;
