@@ -1,6 +1,6 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
-import { forecastSaaS } from "./engine/cohort-budget.js";
+import { forecastSaaS, maximumNewRevenuePhase } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
@@ -1119,7 +1119,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const ranges=window._latestMonthlyPlan?.periodPhaseRanges??[];
     const minimum=ranges.length?Math.max(...ranges.map(r=>r[0])):0;
     const maximum=ranges.length?Math.min(...ranges.map(r=>r[1])):100;
-    if (!Number.isFinite(fraction) || fraction < minimum-1e-7 || fraction > maximum+1e-7) return;
+    if (!Number.isFinite(fraction) || fraction < minimum || fraction > maximum+1e-8) return;
     plQuarterPhasing = fraction;
     const output = document.getElementById('plQuarterPhasingDisplay');
     if (output) output.textContent = fraction.toFixed(1) + '%';
@@ -1387,38 +1387,47 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('waterfallContent').innerHTML = html;
   }
 
-  // Revenue timing lives in engine/monthly-plan.js (no second phasing model).
   function setQtrScenario(s) {
-    if (plBudgetGranularity==='month' || plPeriodOverride!==null) return;
-    if (!['EVEN','FRONT','BACK'].includes(s)) return;
-    if (plQtrScenario !== s) {
-      // Each year-pattern has a DIFFERENT feasible annual phasing interval.
-      // Retaining the previous preset's explicit phasing can make the next
-      // forecast invalid and leave the BACK/FRONT button looking unresponsive.
-      // Restore the new pattern's own naturally implied first-invoice timing.
-      plQuarterPhasing = null;
-    }
-    plQtrScenario = s;
-    const select = document.getElementById('signingPattern');
-    if (select) select.value = s;
-    updateStep3Display();
+    if (['EVEN','FRONT','BACK'].includes(s)) setNewARRDistribution(s, plMonthScenario);
   }
 
-
   function setMonthScenario(s) {
-    if(plBudgetGranularity==='month'||plPeriodOverride!==null)return;
-    if(!['EVEN','FRONT','BACK'].includes(s))return;
-    if(plMonthScenario!==s)plQuarterPhasing=null;
-    plMonthScenario=s;
+    if (['EVEN','FRONT','BACK'].includes(s)) setNewARRDistribution(plQtrScenario, s);
+  }
+
+  function setNewARRDistribution(signingPattern, monthlySigningPattern) {
+    if (plBudgetGranularity==='month' || plPeriodOverride!==null) return;
+    if (signingPattern===plQtrScenario && monthlySigningPattern===plMonthScenario) return;
+    if (plQuarterPhasing!==null) {
+      const maximum=maximumNewRevenuePhase({
+        months:state.timeframe, granularity:plBudgetGranularity, yearShares:yearSplit,
+        signingPattern, monthlySigningPattern,
+      });
+      if (plQuarterPhasing>maximum+1e-8) {
+        const notice=document.getElementById('planNewARRNotice');
+        const limit=Math.floor((maximum+1e-8)*10)/10;
+        notice.textContent='This distribution supports up to '+limit+'% new customer phasing. '+
+          'Lower phasing to '+limit+'% or less before changing the distribution.';
+        return;
+      }
+    }
+    plQtrScenario=signingPattern;
+    plMonthScenario=monthlySigningPattern;
     updateStep3Display();
   }
 
   function onPlanBudgetGranularityChange(value) {
     if (!['year','quarter','month'].includes(value) || plBudgetGranularity===value) return;
+    const resets=[];
+    if (plPeriodOverride!==null) resets.push('clear your manual New ARR amounts');
+    if (plQuarterPhasing!==null) resets.push('reset new customer phasing for the new period');
+    if (resets.length && !window.confirm('Changing the New ARR budget level will '+resets.join(' and ')+'. Continue?')) {
+      document.getElementById('planBudgetGranularity').value=plBudgetGranularity;
+      return;
+    }
     plBudgetGranularity=value;
     plQuarterPhasing=null;
     plPeriodOverride=null; // Never reinterpret an amount set for a different period length.
-    if(value==='month') plQtrScenario='EVEN';
     updateStep3Display();
   }
 
@@ -1450,6 +1459,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function renderPlanToolbar(model) {
+    const notice=document.getElementById('planNewARRNotice');
+    if(notice) notice.textContent='';
     const select=document.getElementById('planBudgetGranularity');
     if(select) select.value=plBudgetGranularity;
     const existingPattern=document.getElementById('plExistingPattern');
@@ -1517,9 +1528,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
           ?'Manually budgeted New CARR is zero; revenue phasing is inactive. '
           :'Existing cohorts already achieve the CARR target; no New CARR is needed and phasing is inactive. '): '')+
         (hasNewCARR
-          ? ' New CARR is distributed between quarters ('+plQtrScenario+
-            ') and within quarters ('+plMonthScenario+
-            '); revenue phasing is calculated separately on the selected budget period, '+
+          ? ' New CARR uses '+(plBudgetGranularity==='month'?'monthly amounts':
+            plQtrScenario+' between quarters and '+plMonthScenario+' within quarters')+
+            '. Revenue phasing is calculated on the selected budget period, '+
             '0–'+max.toFixed(1)+'% with the current signed months. ':'')+
         (plPeriodOverride
           ? 'Custom New CARR overrides the target; closing CARR is an output.'
@@ -1617,8 +1628,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       existingRetention: plExistingRetention,
       newARRByPeriod: plPeriodOverride,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
-      yearShares: yearSplit, signingPattern: plQtrScenario,
-      monthlySigningPattern: plMonthScenario,
+      yearShares: yearSplit, signingPattern: plBudgetGranularity==='month'?'EVEN':plQtrScenario,
+      monthlySigningPattern: plBudgetGranularity==='month'?'EVEN':plMonthScenario,
       priceNewOnExpansion: plUseExpACV,
       cacByYear: Array.from({ length: years }, (_, y) => selectedStrategy ? getCACForYear(y, years) : 0),
       smBudgetPercentByYear,
@@ -2213,6 +2224,7 @@ Object.assign(window, {
   onAllocInput,
   toggleLock,
   setQtrScenario,
+  setMonthScenario,
   togglePlQtr,
   togglePlMonth,
   updateCashAssumptions,

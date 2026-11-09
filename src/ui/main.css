@@ -93,6 +93,8 @@
     .pl-period-edit-toggle { flex:0 0 auto; width:auto; margin-left:auto; padding:6px 10px;
       font-size:11px; border-radius:5px; }
     .pl-budget-note { font-size:10px; color:#999; padding:0 4px 8px; }
+    .pl-budget-warning { font-size:11px; color:#8A4E08; }
+    .pl-budget-warning:not(:empty) { padding:0 4px 8px; }
     .pl-existing-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px;
       padding:7px 4px 10px; font-size:11px; color:#666; }
     .pl-existing-toolbar input[type="range"] { width:100px; }

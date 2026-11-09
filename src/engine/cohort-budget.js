@@ -120,6 +120,14 @@ function firstInvoiceWeights(input) {
   }
   return {weights,phase,phaseRanges,periodTotals,intraPeriodWeights};
 }
+
+export function maximumNewRevenuePhase({months,granularity,yearShares,signingPattern,monthlySigningPattern}) {
+  const {phaseRanges}=firstInvoiceWeights({
+    months,granularity,yearShares,signingPattern,monthlySigningPattern,
+  });
+  return Math.min(...phaseRanges.map(([,maximum])=>maximum));
+}
+
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
   const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv,existingRetention}=input;

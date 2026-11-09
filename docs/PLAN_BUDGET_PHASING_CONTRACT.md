@@ -15,7 +15,15 @@ Budgetnivån nedan gäller nykundernas beräkning.
 
 **Preliminärt, INTE godkänd procentsats:** Källan anger FRONT/EVEN/BACK för kvartalen (35/30/20/15, 25/25/25/25, 15/20/25/40) men inga exakta månadsprocent för FRONT/BACK. Provisoriska standardmönster för val nummer två är **FRONT 50/30/20, EVEN 1/3–1/3–1/3, BACK 20/30/50**. Dessa ska endast betraktas som implementationsexempel till dess att användaren har fastställt dem.
 
-**UI-begränsning:** Det andra valet i toolbar är utformat för alla kvartal som grupp. Knapparna refererar till `setMonthScenario` i HTML, men ES-modulen exponerar för närvarande inte funktionen på `window`. Motor- och simulerade UI-tester täcker funktionen. Knapptrycken behöver åtgärdas och verifieras i webbläsare. Motorn kan läsa `monthlyPatternsByQuarter` för separata kvartalsmönster. Individuell UI-inställning och CUSTOM återstår.
+**UI-begränsning:** Fördelningen inom kvartal gäller alla kvartal som grupp.
+Motorn kan läsa `monthlyPatternsByQuarter` för separata kvartalsmönster.
+Individuell UI-inställning och CUSTOM återstår.
+
+**Ändring av budget eller fördelning:** Ett fördelningsbyte behåller explicit
+phasing så länge värdet ryms inom den nya fördelningens intervall. Om det
+överskrider gränsen visar vyn maxvärdet och väntar på att användaren sänker
+phasingen före bytet. Byte av budgetnivå kräver bekräftelse när manuella
+New ARR-belopp eller explicit phasing återställs.
 
 **Intäktsallokeringens status:** Periodens phasing ger en explicit intäktsjustering för kohorter som kontrakterats under samma inputbudgetperiod, med månatlig fördelning som inte kan uppstå före kontraktet. Eventuellt tidigarelagd intäkt som inte går att förena med de valda kontraktsmånaderna avvisas i stället för att justera kontraktssiffrorna. Dessa allokerade intäkter är **inte en full kontraktsspecifik faktureringskalender**. En fryst TRACK-baseline och faktisk fakturering/aktiveringsschema återstår.
 
