@@ -1,4 +1,4 @@
-/** PLAN cash-flow readout. Presentation only; all numbers come from monthly-plan.js. */
+/** PLAN cash-flow readout from the monthly cohort forecast. */
 const amountCell = (n, format, strong = false) =>
   '<td style="padding:8px;text-align:right;border-bottom:1px solid #e5e7eb;' +
   (strong ? 'font-weight:600;' : '') + '">' + format(Math.round(n)) + '</td>';
@@ -38,7 +38,8 @@ export function renderCashPanel(forecast, format) {
       ${metric('Additional liquidity needed', s.additionalLiquidityRequired, 'To avoid a negative cash balance')}
     </div>
     <div class="form-helper" style="margin-bottom:12px;">
-      Target closing ARR: <strong>${format(s.endingARR)}</strong> ·
+      Forecast closing ARR <strong>${format(s.endingARR)}</strong> ·
+      Target <strong>${format(s.endingARR-s.targetGap)}</strong> ·
       Customers to sign: <strong>${s.newCustomersNeeded.toLocaleString()}</strong> ·
       Months with negative OpCF: <strong>${s.monthsWithNegativeOpCF}</strong>
     </div>
@@ -58,7 +59,7 @@ export function renderCashPanel(forecast, format) {
       </div>
     </details>
     <div class="form-helper" style="margin-top:12px;line-height:1.6;">
-      Assumptions: new subscriptions earn full MRR from their first invoice month; collections lag by the selected number of months;
+      Collections follow forecast recognized revenue and are shifted by the selected number of months.
       COGS are paid in the month of revenue. Opening receivables, financing, taxes and capex
       are not included. ARR is an annualized stock and is <strong>not cash in</strong>.
       Operating cash flow is an estimate until all operating payments are included.

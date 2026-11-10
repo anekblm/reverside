@@ -97,21 +97,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('benchChurn').textContent = Math.round(bench.churn * 100) + '%';
     document.getElementById('benchChurnNum').textContent = Math.round(bench.churn * 100) + '%';
 
-    // Compute benchmark LTV and rec CAC dynamically using animal's benchmark ACV,
-    // current gross margin, and payback benchmarks — so they always match Updated Metrics logic
-    const paybackBenchmarks = { Mice: 7, Rabbits: 12, Deer: 21, Elephants: 27, Whales: 36 };
-    const cacRatios = { Mice: 0.20, Rabbits: 0.25, Deer: 0.30, Elephants: 0.35, Whales: 0.40 };
-    const benchPayback = paybackBenchmarks[state.animal] || 12;
-    const benchCacRatio = cacRatios[state.animal] || 0.25;
-    const grossMarginForBench = state.grossMargin || 0.80;
-
-    const dynamicBenchLTV = Math.round(annualGrossProfitLtv(bench.acv, grossMarginForBench, bench.churn));
-    // Use same ratio logic as Updated Metrics for consistency
-    const benchMaxCAC = Math.round(dynamicBenchLTV / 3.0);  // LTV:CAC ≥ 3× = absolute limit
-    const dynamicBenchRecCAC = Math.round(dynamicBenchLTV / 5.0);  // LTV:CAC ~5× = well-run target
-    const benchEffPayback = grossMarginForBench > 0 && bench.acv > 0
-      ? Math.round(dynamicBenchRecCAC / ((bench.acv / 12) * grossMarginForBench))
-      : 0;
+    const benchmarkMargin=Number(document.getElementById('cogsSlider').value)/100;
+    const benchmarkACV=bench.acv/(toEUR[state.currency]||1);
+    const dynamicBenchLTV=annualGrossProfitLtv(benchmarkACV,benchmarkMargin,bench.churn);
+    const dynamicBenchRecCAC=dynamicBenchLTV/5;
+    const benchEffPayback=Math.round(dynamicBenchRecCAC/(benchmarkACV*benchmarkMargin/12));
 
     document.getElementById('benchLTV').textContent = fmt(dynamicBenchLTV);
     document.getElementById('benchCAC').textContent = fmt(dynamicBenchRecCAC);
@@ -653,7 +643,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   const plCollapsedMonthYears = new Set();
   let planInitialized = false;
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
-  let customCAC = 0;
+  let customCAC = null;
 
 
 
@@ -734,11 +724,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const maxGrowthMonths = growthMaxMonths[state.animal];
 
     document.getElementById('stratEffCAC').textContent = fmt(recCAC);
-    document.getElementById('stratEffPayback').textContent = benchPayback + '-month payback';
+    document.getElementById('stratEffPayback').textContent = benchPayback + '-month profile benchmark';
     document.getElementById('stratGrowCAC').textContent = fmt(growthCAC);
     document.getElementById('stratGrowNote').textContent = 'Max ' + maxGrowthMonths + ' months at this level';
     document.getElementById('customCACInput').placeholder = fmt(recCAC);
     if (!resetSelection) return;
+    customCAC = null;
     document.getElementById('customCACInput').value = '';
 
     // Reset card styles
@@ -768,10 +759,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     });
 
-    if (strategy === 'custom' && resetSplit) {
-      customCAC = parseInt(document.getElementById('customCACInput').value) || recCAC;
-    }
-
     // Timeframe warning
     const years = Math.max(1, Math.round(state.timeframe / 12));
     const minMonths = growthMaxMonths[state.animal] || 18;
@@ -783,12 +770,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         ⚠️ <strong>Timeframe may be too short for aggressive growth.</strong> This strategy requires up to ${minMonths} months at elevated CAC plus time to normalize — ideally ${minMonths + 12}+ months total. Your current timeframe is ${state.timeframe} months. You can proceed, but plan for extended runway.
       </div>`;
     } else if (strategy === 'custom') {
-      const cac = customCAC;
+      const cac = getActiveCACForStrategy();
       const maxCAC = state.newMaxCAC || state.maxCAC;
       if (cac > maxCAC) {
         warningEl.style.display = 'block';
         warningEl.innerHTML = `<div style="background:#FCEBEB;border-left:3px solid #E24B4A;border-radius:0 6px 6px 0;padding:0.75rem 1rem;font-size:12px;color:#A32D2D;line-height:1.6;">
-          ⚠️ <strong>Custom CAC exceeds the absolute maximum (${fmt(maxCAC)}).</strong> At this level, LTV economics break down — you will never recover the acquisition cost from this customer.
+          ⚠️ <strong>Custom CAC exceeds the planned ceiling (${fmt(maxCAC)}).</strong> The projected LTV:CAC ratio is below 3×.
         </div>`;
       } else if (cac > growthCAC) {
         warningEl.style.display = 'block';
@@ -808,8 +795,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function onCustomCACChange(val) {
-    customCAC = parseInt(val) || 0;
-    if (selectedStrategy === 'custom') selectStrategy('custom');
+    const cac=Number(val);
+    if (!Number.isFinite(cac) || cac<0) return;
+    customCAC=String(val).trim()===''?null:cac;
+    if (selectedStrategy === 'custom') selectStrategy('custom',false);
   }
 
   function getActiveCACForStrategy() {
@@ -819,7 +808,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const growthCAC = Math.min(growthCACraw, maxCAC_); // capped at Max CAC
     if (selectedStrategy === 'efficient') return recCAC;
     if (selectedStrategy === 'growth')   return growthCAC;
-    if (selectedStrategy === 'custom')   return customCAC || recCAC;
+    if (selectedStrategy === 'custom')   return customCAC ?? recCAC;
     return recCAC;
   }
 
@@ -875,38 +864,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     if (!selectedStrategy) return;
 
-    const budgetCAC = getActiveCACForStrategy();
-    // For aggressive growth, total budget is sum of per-year (ramping) budgets
-    if (selectedStrategy === 'growth' && years > 1) {
-      let allocSoFar = 0;
-      state.totalBudget = 0;
-      for (let y = 0; y < years; y++) {
-        const pct = yearSplit[y] || 0;
-        const c = y === years - 1
-          ? Math.max(0, state.newCustomersNeeded - allocSoFar)
-          : Math.round(state.newCustomersNeeded * pct / 100);
-        allocSoFar += c;
-        state.totalBudget += c * getCACForYear(y, years);
-      }
-    } else {
-      state.totalBudget = state.newCustomersNeeded * budgetCAC;
-    }
-    const monthlyGP = (state.acv / 12) * state.grossMargin;
-    // For efficient/growth strategies, use the known benchmark payback directly.
-    // For custom, calculate actual payback from the entered CAC.
-    const benchPayback_ = paybackBenchmarks[state.animal] || 12;
-    const growthPayback_ = Math.round(benchPayback_ * (growthMultipliers[state.animal] || 2.0));
-    let paybackMonths;
-    if (selectedStrategy === 'efficient') {
-      paybackMonths = benchPayback_;
-    } else if (selectedStrategy === 'growth') {
-      paybackMonths = growthPayback_;
-    } else {
-      paybackMonths = monthlyGP > 0 ? Math.round(budgetCAC / monthlyGP) : 0;
-    }
-
-    // Use the same spending totals as the monthly cash and P&L model.
-    if (window._latestMonthlyPlan) state.totalBudget = window._latestMonthlyPlan.summary.totalSM;
+    const model=window._latestMonthlyPlan;
+    const budgetCAC=getActiveCACForStrategy();
+    state.totalBudget=model.summary.totalSM;
+    const monthlyGP=state.acv*state.grossMargin/12;
+    const paybackMonths=monthlyGP>0?(budgetCAC/monthlyGP).toFixed(1)+' months':'—';
 
     // Labels
     const stratLabels = { efficient: 'Efficient growth', growth: 'Aggressive growth', custom: 'Custom' };
@@ -915,19 +877,16 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('s3NewCustomers').textContent = state.newCustomersNeeded.toLocaleString();
     document.getElementById('s3TotalBudget').textContent = fmt(state.totalBudget);
     document.getElementById('s3TimeframeLabel').textContent = state.timeframe + ' months';
-    const paybackLabel = selectedStrategy === 'efficient'
-      ? 'CAC payback: ' + paybackMonths + ' months — on benchmark for ' + state.animal + '.'
-      : selectedStrategy === 'growth'
-        ? 'CAC payback: ' + paybackMonths + ' months — above benchmark (' + benchPayback_ + ' months). Plan to normalize within ' + (growthMaxMonths[state.animal] || 18) + ' months.'
-        : 'CAC payback: ' + paybackMonths + ' months (benchmark for ' + state.animal + ': ' + benchPayback_ + ' months)' + (paybackMonths > benchPayback_ ? ' — above benchmark.' : ' — within benchmark.');
-    document.getElementById('s3Payback').textContent = paybackLabel;
+    document.getElementById('s3Payback').textContent =
+      'CAC payback at entry ACV · '+paybackMonths+' (profile benchmark '+paybackBenchmarks[state.animal]+' months)';
 
-    buildAnnualTable(years, budgetCAC, fmt);
-    buildWaterfall(years, fmt);
+    buildAnnualTable(model, fmt);
+    buildWaterfall(model.annualCustomers);
     generateRecommendations();
   }
 
-  function buildAnnualTable(years, budgetCAC, fmt) {
+  function buildAnnualTable(model, fmt) {
+    const years=model.years.length;
     const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
     const el = document.getElementById('annualPlanTable');
     const colW = Math.floor(70 / years);
@@ -935,33 +894,26 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     const cols = [];
     let totCust = 0, totBudget = 0;
-    let allocatedCustSoFar = 0;
     for (let y = 0; y < years; y++) {
       const pct = yearSplit[y] || 0;
-      const cust = window._latestMonthlyPlan?.annualCustomers?.[y] ?? (y === years - 1
-        ? Math.max(0, state.newCustomersNeeded - allocatedCustSoFar)
-        : Math.round(state.newCustomersNeeded * pct / 100));
-      allocatedCustSoFar += cust;
+      const cust = model.annualCustomers[y];
       const yearCAC    = getCACForYear(y, years);                  // strategy-aware, ramps for aggressive
       const maxBudget  = cust * (state.newMaxCAC || state.maxCAC); // absolute ceiling from Step 2
       const allocBudget = cust * yearCAC;                          // actual budget for this year
-      const budget = maxBudget; // used for "Max budget" row display
       const alloc = yearAllocs[y] || { sales: defs.sales, salesact: defs.salesact, mkt: defs.mkt };
-      const salesAmt = Math.round(allocBudget * alloc.sales / 100);
-      const actAmt   = Math.round(allocBudget * alloc.salesact / 100);
-      const mktAmt   = Math.round(allocBudget * alloc.mkt / 100);
-      const unalloc  = allocBudget - salesAmt - actAmt - mktAmt;
-      const fullSalary = state.currency === 'SEK' ? 1500000 : 150000;
+      const salesAmt = allocBudget * alloc.sales / 100;
+      const actAmt   = allocBudget * alloc.salesact / 100;
+      const mktAmt   = allocBudget * alloc.mkt / 100;
+      const fullSalary=(state.currency==='SEK'?1500000:150000)*model.years[y].monthsInPeriod/12;
       let salesperText = '';
       if (state.animal === 'Mice') { salesperText = 'No sales (PLG)'; }
       else if (salesAmt <= 0) { salesperText = 'No budget'; }
       else if (salesAmt < fullSalary * 0.3) { salesperText = 'Part-time (~' + fmt(salesAmt) + ')'; }
-      else if (salesAmt < fullSalary * 0.8) { salesperText = Math.round(salesAmt / fullSalary * 100) + '% of 1 AE'; }
+      else if (salesAmt < fullSalary) { salesperText = Math.round(salesAmt / fullSalary * 100) + '% of 1 AE'; }
       else { salesperText = Math.floor(salesAmt / fullSalary) + ' AE(s)'; }
       totCust += cust;
       totBudget += maxBudget;
-      const totAllocBudget = (typeof totAllocBudget_ !== 'undefined' ? totAllocBudget_ : 0);
-      cols.push({ y, pct, cust, budget: maxBudget, allocBudget, salesAmt, actAmt, mktAmt, unalloc, salesperText, alloc });
+      cols.push({ y, pct, cust, budget: maxBudget, allocBudget, salesAmt, actAmt, mktAmt, salesperText, alloc });
     }
 
     const totalShare = yearSplit.reduce((a,b) => a+b, 0);
@@ -984,7 +936,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += `<div style="font-size:11px;color:#666;font-weight:500;display:flex;align-items:center;">Share %</div>`;
     for (let y = 0; y < years; y++) {
       html += `<div style="background:#E6F1FB;border:0.5px solid #b5d4f4;border-radius:6px;padding:0.35rem 0.45rem;text-align:center;">
-        <input type="number" min="0" max="100" value="${cols[y].pct}" style="width:2.5rem;border:none;background:transparent;font-size:12px;font-weight:500;color:#185FA5;text-align:center;outline:none;" oninput="onSplitChange(${y},this.value)"><span style="font-size:11px;color:#185FA5;">%</span>
+        <input type="number" min="0" max="100" value="${cols[y].pct}" style="width:2.5rem;border:none;background:transparent;font-size:12px;font-weight:500;color:#185FA5;text-align:center;outline:none;" onchange="onSplitChange(${y},this.value)"><span style="font-size:11px;color:#185FA5;">%</span>
       </div>`;
     }
     html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;font-weight:600;color:${shareColor};">${totalShare}%${shareOk?'':' ⚠'}</div>`;
@@ -1043,12 +995,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     let grandTotal = 0;
     let grandOriginal = 0;
     for (let y = 0; y < years; y++) {
-      const allKeys = ['sales','salesact','mkt'];
-      const colAllocBudget = cols[y].allocBudget; // original budget for this year
-      const colTotal = allKeys.reduce((s,k) => {
-        if (yearAllocs['disabled_' + k]) return s;
-        return s + Math.round(colAllocBudget * (cols[y].alloc[k]||0) / 100);
-      }, 0);
+      const colAllocBudget = cols[y].allocBudget;
+      const colTotal = model.annualSM[y];
       grandTotal += colTotal;       // actual allocated
       grandOriginal += colAllocBudget; // original budget
       const diff = colTotal - colAllocBudget; // positive = over, negative = under
@@ -1269,7 +1217,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function onSplitChange(yearIdx, val) {
-    yearSplit[yearIdx] = parseInt(val) || 0;
+    if(!Number.isInteger(yearIdx)||yearIdx<0||yearIdx>=yearSplit.length) return;
+    const share=Number(val);
+    const others=yearSplit.reduce((total,value,i)=>i===yearIdx?total:total+value,0);
+    if(!String(val).trim()||!Number.isFinite(share)||share<0||share>100||others+share<=0){
+      buildAnnualTable(window._latestMonthlyPlan,currencyFormats[state.currency]);
+      return;
+    }
+    yearSplit[yearIdx]=share;
     updateStep3Display();
   }
 
@@ -1374,34 +1329,24 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
-  function buildWaterfall(years, fmt) {
+  function buildWaterfall(annualCustomers) {
+    const years=annualCustomers.length;
     const funnel = funnels[state.animal];
     const steps = funnel.steps;
 
     document.getElementById('waterfallTitle').textContent = 'Conversion Waterfall — ' + funnel.type;
     document.getElementById('waterfallDesc').textContent = funnel.desc;
 
-    // Pre-calculate bottom_up counts per year
-    const yearCounts = [];
-    for (let y = 0; y < years; y++) {
-      const pct = yearSplit[y] || 0;
-      let allocatedWF = 0;
-      for (let yy = 0; yy < y; yy++) allocatedWF += Math.round(state.newCustomersNeeded * (yearSplit[yy]||0) / 100);
-      const custThisYear = y === years - 1
-        ? Math.max(0, state.newCustomersNeeded - allocatedWF)
-        : Math.round(state.newCustomersNeeded * pct / 100);
-      let current = Math.max(1, custThisYear);
-      const bu = [];
-      for (let i = steps.length - 1; i >= 0; i--) {
-        bu.unshift(Math.ceil(current));
-        if (steps[i].rate) current = current / steps[i].rate;
+    const yearCounts=annualCustomers.map(customers=>{
+      let current=Math.max(0,Math.ceil(customers-1e-9));
+      const counts=[];
+      for(let i=steps.length-1;i>=0;i--) {
+        counts.unshift(Math.ceil(current));
+        if(steps[i].rate) current/=steps[i].rate;
       }
-      yearCounts.push(bu);
-    }
-
-    // Same grid proportions as annual plan table
-    const colW = Math.floor(70 / years);
-    const labelW = 30;
+      return counts;
+    });
+    const globalMax=Math.max(1,...yearCounts.map(counts=>counts[0]));
 
     const hcLabelW = 140;
     const hcColW = 90;
@@ -1410,7 +1355,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Year headers
     html += `<div></div>`;
     for (let y = 0; y < years; y++) {
-      const cust = Math.round(state.newCustomersNeeded * (yearSplit[y]||0) / 100);
+      const cust = yearCounts[y].at(-1);
       html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">Year ${y+1}<div style="font-size:9px;font-weight:400;color:#666;">${cust.toLocaleString()} new</div></div>`;
     }
 
@@ -1426,16 +1371,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         ${nextRate ? `<div style="font-size:9px;color:#b5d4f4;margin-top:1px;">${nextRate.toFixed(0)}% →</div>` : ''}
       </div>`;
 
-      // Scale bars against global max (top of funnel, year 1) so volume differences are visible
-      const globalMax = yearCounts[0][0] || 1;
-
       for (let y = 0; y < years; y++) {
         const count = yearCounts[y][i] || 0;
-        const barPct = Math.max(6, Math.round((count / globalMax) * 100));
+        const barPct = count>0?Math.max(6,Math.round(count/globalMax*100)):0;
         html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;">
           <div style="background:#f0f0f0;border-radius:3px;height:20px;margin-bottom:3px;">
-            <div style="width:${barPct}%;background:${isLast?'#378ADD':'#b5d4f4'};border-radius:3px;height:100%;display:flex;align-items:center;padding-left:5px;min-width:28px;">
-              <span style="font-size:10px;font-weight:500;color:${isLast?'white':'#185FA5'};white-space:nowrap;">${count.toLocaleString()}</span>
+            <div style="width:${barPct}%;background:${count===0?'transparent':isLast?'#378ADD':'#b5d4f4'};border-radius:3px;height:100%;display:flex;align-items:center;padding-left:5px;min-width:28px;">
+              <span style="font-size:10px;font-weight:500;color:${isLast&&count>0?'white':'#185FA5'};white-space:nowrap;">${count.toLocaleString()}</span>
             </div>
           </div>
         </div>`;
@@ -1696,7 +1638,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     const cell = (val, bold=false, color='#333', bg='white', note='') =>
       `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:${bold?'600':'400'};color:${color};">
-        ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#bbb;margin-top:1px;">${note}</div>` : ''}
+        ${typeof val==='string'?val:fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#bbb;margin-top:1px;">${note}</div>` : ''}
       </div>`;
 
     const periodCell = (value,kind,{bold=false,color='#555',bg='white',note=''}={}) => {
@@ -1840,16 +1782,18 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         });
       });
     };
-    const recognizedRow = (name,key,{bold=true,indent=false,color='#555',monthNoteKey=null}={}) => {
+    const recognizedRow = (name,key,{bold=true,indent=false,color='#555',yearOpeningImpactKey=null}={}) => {
       html += label(name,indent,bold);
       for(let y=0;y<years;y++) html += eachPeriod(y,(period,kind)=>{
+        const value=period[key]??0;
         let note='';
-        if(kind==='month' && monthNoteKey) {
-          const amount=Math.round(Math.abs(period[monthNoteKey]));
-          const sign=amount===0?'':period[monthNoteKey]<0?'−':'+';
-          note=`<span class="pl-month-impact">of which <span>${sign}${fmt(amount)}</span></span>`;
+        if(yearOpeningImpactKey && Math.round(period[yearOpeningImpactKey])!==Math.round(value)) {
+          const impact=period[yearOpeningImpactKey];
+          const amount=Math.round(Math.abs(impact));
+          const sign=amount===0?'':impact<0?'−':'+';
+          note=`<span class="pl-year-opening-impact">vs. year opening ${sign}${fmt(amount)}</span>`;
         }
-        return periodCell(period[key]??0,kind,{bold,color,bg:bold?'#fafafa':'white',note});
+        return periodCell(value,kind,{bold,color,bg:bold?'#fafafa':'white',note});
       });
     };
 
@@ -1861,11 +1805,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     cohortARRRow('Closing CARR','original','EndARR',{bold:true,noteKey:'EndCustomers'});
     if(expandedA) {
-      recognizedRow('Revenue before changes','originalBaseRevenue',{bold:false,indent:true});
-      recognizedRow('− Churn impact','originalChurnRevenueImpact',
-        {bold:false,indent:true,color:'#E24B4A',monthNoteKey:'originalChurnThisMonth'});
-      recognizedRow('+ Expansion impact','originalExpansionRevenueImpact',
-        {bold:false,indent:true,color:'#3B6D11',monthNoteKey:'originalExpansionThisMonth'});
+      recognizedRow('Revenue before changes','originalOpeningRevenue',{bold:false,indent:true});
+      recognizedRow('− Churn impact','originalMonthlyChurnImpact',
+        {bold:false,indent:true,color:'#E24B4A',yearOpeningImpactKey:'originalChurnRevenueImpact'});
+      recognizedRow('+ Expansion impact','originalMonthlyExpansionImpact',
+        {bold:false,indent:true,color:'#3B6D11',yearOpeningImpactKey:'originalExpansionRevenueImpact'});
     }
     recognizedRow('Recognized Revenue','originalNetRevenue',{indent:true});
 
@@ -1905,9 +1849,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
       Full Year CARR shows annualized amounts. Period CARR scales those amounts by months in the column / 12.
       Opening and closing CARR are measured at the period boundaries. Recognized revenue is earned during the period.
-      A uses the year-opening CARR as its revenue base. Its churn and expansion
-      rows include the effect of changes from earlier months in the year.
-      In a monthly cell, “of which” shows the portion from that month's own change.
+      Revenue before changes uses each month's opening CARR. The main churn and
+      expansion amounts show the effect recognized in the month of change. Quarter and year amounts sum the
+      months. “vs. year opening” shows the impact against the year's starting run rate.
       New customer phasing applies once in the acquisition month.
       Opening CARR - churn + expansion + new CARR = Closing CARR.
       NRR compares closing CARR from the opening customer base with that base's opening CARR.
@@ -1916,7 +1860,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       customers move to B1, or to A at the year boundary. B1's opening balance includes
       transfers at the start of the displayed period. Transfers within the period
       appear separately in B1. Quarterly and annual revenue sum the same monthly split.
-      Amounts are calculated before rounding to the displayed currency.
+      Money and expected customer counts are rounded independently for display.
     </div>`;
 
     const totRev = rows.reduce((sum,r)=>sum+r.totalRevenue,0);
@@ -2001,7 +1945,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // ── BREAK-EVEN ──
     if (selectedStrategy) {
       if (breakEvenYear) {
-        html += `<div style="font-size:11px;color:#3B6D11;margin-top:0.75rem;">✓ Cumulative operating break-even reached in Year ${breakEvenYear}.</div>`;
+        html += `<div style="font-size:11px;color:#3B6D11;margin-top:0.75rem;">✓ Cumulative contribution reached break-even in Year ${breakEvenYear}.</div>`;
       } else {
         html += `<div style="font-size:11px;color:#BA7517;margin-top:0.75rem;">⚠ Cumulative break-even not reached within the plan period.</div>`;
       }
@@ -2027,36 +1971,37 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += label('LTV (contracted ACV × GM / annual churn)', false, true);
     const ltvVals = rows.map((r, y) => {
       const rACV = model.years[y].endACV || acv;
-      return churnRate > 0 ? Math.round((rACV * grossMargin) / churnRate) : 0;
+      return annualGrossProfitLtv(rACV,grossMargin,churnRate);
     });
-    const avgLTV = Math.round(ltvVals.reduce((s,v)=>s+v,0) / years);
-    for (let y = 0; y < years; y++) html += cell(ltvVals[y], false, '#555');
-    html += cell(avgLTV, false, '#555');
+    const avgLTV = churnRate>0 ? ltvVals.reduce((s,v)=>s+v,0)/years : null;
+    const metricCell=value=>cell(value??'—',false,'#555');
+    for (const value of ltvVals) html += metricCell(value);
+    html += metricCell(avgLTV);
 
-    // Actual CAC = S&M spend / new customers
-    html += label('Actual CAC', false, true);
-    const cacVals = rows.map(r => r.newCust > 0 ? Math.round(r.smSpend / r.newCust) : 0);
-    const avgCAC = Math.round(cacVals.reduce((s,v)=>s+v,0) / years);
-    for (let y = 0; y < years; y++) html += cell(cacVals[y], false, '#555');
-    html += cell(avgCAC, false, '#555');
+    html += label('Planned CAC', false, true);
+    const cacVals = rows.map(r => selectedStrategy&&r.newCust>0 ? r.smSpend/r.newCust : null);
+    const avgCAC = selectedStrategy&&model.summary.newCustomersNeeded>0
+      ? model.summary.totalSM/model.summary.newCustomersNeeded : null;
+    for (const value of cacVals) html += metricCell(value);
+    html += metricCell(avgCAC);
 
     // LTV:CAC ratio
     html += label('LTV:CAC', false, true);
     for (let y = 0; y < years; y++) {
-      const ratio = cacVals[y] > 0 ? (ltvVals[y] / cacVals[y]).toFixed(1) : '—';
-      const ratioNum = cacVals[y] > 0 ? ltvVals[y] / cacVals[y] : 0;
-      const color = ratioNum >= 5 ? '#3B6D11' : ratioNum >= 3 ? '#555' : '#E24B4A';
-      const note = ratioNum >= 5 ? 'healthy' : ratioNum >= 3 ? 'ok' : ratioNum > 0 ? 'low' : '—';
+      const ratioNum = ltvVals[y]!==null&&cacVals[y]>0 ? ltvVals[y]/cacVals[y] : null;
+      const ratio = ratioNum===null?'—':ratioNum.toFixed(1)+'×';
+      const color = ratioNum>=5?'#3B6D11':ratioNum===null||ratioNum>=3?'#555':'#E24B4A';
+      const note = ratioNum===null?'':ratioNum>=5?'healthy':ratioNum>=3?'ok':'low';
       html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:600;color:${color};">${ratio}×</div>
+        <div style="font-size:11px;font-weight:600;color:${color};">${ratio}</div>
         <div style="font-size:9px;color:#bbb;">${note}</div>
       </div>`;
     }
-    const avgRatio = avgCAC > 0 ? (avgLTV / avgCAC).toFixed(1) : '—';
-    const avgRatioNum = avgCAC > 0 ? avgLTV / avgCAC : 0;
-    const avgRatioColor = avgRatioNum >= 5 ? '#3B6D11' : avgRatioNum >= 3 ? '#555' : '#E24B4A';
+    const avgRatioNum = avgLTV!==null&&avgCAC>0 ? avgLTV/avgCAC : null;
+    const avgRatio = avgRatioNum===null?'—':avgRatioNum.toFixed(1)+'×';
+    const avgRatioColor = avgRatioNum>=5?'#3B6D11':avgRatioNum===null||avgRatioNum>=3?'#555':'#E24B4A';
     html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:700;color:${avgRatioColor};">${avgRatio}×</div>
+      <div style="font-size:11px;font-weight:700;color:${avgRatioColor};">${avgRatio}</div>
     </div>`;
 
     // CAC payback uses closing contracted ACV.
@@ -2064,10 +2009,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     for (let y = 0; y < years; y++) {
       const expACV = model.years[y].endACV || acv;
       const monthlyGP = (expACV / 12) * grossMargin;
-      const payback = monthlyGP > 0 && cacVals[y] > 0 ? Math.round(cacVals[y] / monthlyGP) : 0;
-      const color = payback > 0 && payback <= 12 ? '#3B6D11' : payback <= 24 ? '#BA7517' : '#E24B4A';
+      const payback = monthlyGP>0&&cacVals[y]!==null ? Math.round(cacVals[y]/monthlyGP) : null;
+      const color = payback===null?'#555':payback<=12?'#3B6D11':payback<=24?'#BA7517':'#E24B4A';
       html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:500;color:${color};">${payback > 0 ? payback + ' mo' : '—'}</div>
+        <div style="font-size:11px;font-weight:500;color:${color};">${payback===null?'—':payback+' mo'}</div>
       </div>`;
     }
     html += `<div></div>`;
@@ -2090,19 +2035,18 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // S&M as % of Gross Profit
     html += label('S&M / GP', false, true);
     for (let y = 0; y < years; y++) {
-      const ratio = rows[y].grossProfit > 0 ? Math.round(rows[y].smSpend / rows[y].grossProfit * 100) : 0;
-      const color = ratio <= 50 ? '#3B6D11' : ratio <= 80 ? '#BA7517' : '#E24B4A';
-      const note = ratio <= 50 ? 'healthy' : ratio <= 80 ? 'growth' : ratio <= 100 ? 'aggressive' : 'burning';
+      const ratio=rows[y].grossProfit>0?Math.round(rows[y].smSpend/rows[y].grossProfit*100):null;
+      const color=ratio===null?'#555':ratio<=50?'#3B6D11':ratio<=80?'#555':ratio<=100?'#BA7517':'#E24B4A';
+      const note=ratio===null?'':ratio<=50?'healthy':ratio<=80?'moderate':ratio<=100?'aggressive':'burning';
       html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:500;color:${color};">${ratio}%</div>
+        <div style="font-size:11px;font-weight:500;color:${color};">${ratio===null?'—':ratio+'%'}</div>
         <div style="font-size:9px;color:#bbb;">${note}</div>
       </div>`;
     }
-    const avgSMGP = rows.reduce((s,r) => s + r.grossProfit, 0) > 0
-      ? Math.round(rows.reduce((s,r)=>s+r.smSpend,0) / rows.reduce((s,r)=>s+r.grossProfit,0) * 100) : 0;
-    const avgSMGPcolor = avgSMGP <= 50 ? '#3B6D11' : avgSMGP <= 80 ? '#BA7517' : '#E24B4A';
+    const avgSMGP=totGP>0?Math.round(totSM2/totGP*100):null;
+    const avgSMGPcolor=avgSMGP===null?'#555':avgSMGP<=50?'#3B6D11':avgSMGP<=80?'#BA7517':'#E24B4A';
     html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:700;color:${avgSMGPcolor};">${avgSMGP}%</div>
+      <div style="font-size:11px;font-weight:700;color:${avgSMGPcolor};">${avgSMGP===null?'—':avgSMGP+'%'}</div>
     </div>`;
 
     html += `</div></div>`;

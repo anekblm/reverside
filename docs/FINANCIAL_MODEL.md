@@ -36,18 +36,21 @@ the elapsed months' weights of the annual retention schedule.
 
 The separate A phasing control defaults to 100% in PLAN. Churn and
 expansion then have their full revenue effect in the month of change.
-The slider can model a partial first month. For each month, the
-revenue baseline is year-opening CARR / 12. Each signed revenue effect is
-`(prior months’ CARR changes + this month’s CARR change × first-month phase) / 12`.
-Monthly cells show the current-month share below the total, marked
-“of which”. Quarter and year cells sum the monthly revenue flows. CARR and
+The slider can model a partial first month. The main bridge shows each
+month's opening CARR / 12 as revenue before changes, then applies this
+month's signed CARR changes × first-month phase / 12. Previous changes
+are included in opening CARR. The secondary “vs. year opening” amount
+shows the impact against the year-opening run rate, including the full
+effect of prior months' changes. Quarter and year cells sum the monthly
+revenue flows. CARR and
 customer counts roll forward from the prior period's closing balances.
 The model retains unrounded expected counts and rounds only for display.
 
 Reference case: opening CARR 500,000, annual churn 25%, expansion 20%,
 EVEN and 50% first-month effect. Closing CARR is 475,000. The annual
-revenue bridge is 500,000 − 62,500 + 50,000 = 487,500. February churn impact
-is −1,302.08, of which −434.03 comes from February's CARR change. January
+recognized revenue is 487,500. In February, revenue before changes is
+41,493.06 and the current churn impact is −434.03. Against the
+year-opening run rate, February's churn impact is −1,302.08. January
 recognized revenue is 41,579.86 and Q1 is 124,218.75. With the 100%
 default, the same CARR movements give 486,458.33 in annual recognized
 revenue.
@@ -174,76 +177,33 @@ feasible range depending on actual months.
 - Operating cashflow = collected cash − COGS paid − other cash OPEX − S&M cash
   paid. S&M cash is independently allocatable across quarters.
 
-When this engine is integrated, the cash-neutral S&M capacity is not a safe budget if other operating
-outflows are incomplete; the interface warns when other OPEX is set to zero.
+Cash-neutral S&M capacity sums net cash before S&M. The lowest monthly
+cash balance determines the additional liquidity needed. PLAN currently
+reports that funding requirement against the selected spend. It does not
+automatically cap spending.
 
-## One integrated CARR/Revenue bridge in the existing PLAN matrix
+## One integrated CARR and revenue bridge
 
-The forecast grid has exactly one opening and one closing Contracted ARR row.
-The intermediate groups share one monthly source ledger:
+The matrix shows total opening and closing CARR with cohort detail from
+the same monthly ledger:
 
-- **A Existing**: customer cohorts present at the start of the current year.
-- **B Earlier New**: customers in the months after their acquisition month,
-  within the same year. B closing CARR = B opening CARR + transfers from C
-  within the column − churn + expansion. Transferred customers follow the
-  same rule. Transfers at the opening boundary are included in B opening CARR.
-- **C First Month**: new CARR and first-month recognized revenue. The
-  remaining CARR at the end of a column is the final month's acquisitions.
+- **A · Existing:** cohorts active at the start of the year.
+- **B1 · Accumulated:** cohorts acquired earlier in the current year.
+  Transfers from B2 at the start of a period are part of B1 opening CARR.
+  Transfers during the period are shown separately.
+- **B2 · New in period:** signing flows and first-month revenue. Only the
+  last month's signings remain in B2 at the end of a displayed period.
 
-A/B opening rows are components of total opening CARR. Closing Contracted
-ARR equals closing A + B + C. CARR transferred to B continues the same
-customer contract. New CARR is recorded once, in C.
+Closing CARR adds the closing stocks of A, B1 and B2. Recognized revenue
+adds the flows from those three groups. NRR measures only cohorts in the
+displayed period's opening base. Quarter and year columns add the monthly
+flows and use opening and closing balances at the period boundaries.
 
-After the A/B/C movement lines, three **flow** rows appear:
-- Recognized Revenue Existing (A)
-- Recognized Revenue New (B+C)
-- Total Recognized Revenue (sum of the first two)
-
-Recognized revenue is never added to CARR stocks and differs from churn ARR
-and expansion ARR by measurement units and timing. The full revenue bridge
-separately verifies A base revenue + A churn/expansion revenue impact = A net
-recognized revenue, and equivalent B movement recognition.
-
-The EVEN/FRONT/BACK controls are always present in fixed toolbars. The
-acquisition presets are greyed out in monthly and manual budget modes.
-Users can override New Contracted ARR values per input budget
-period; then closing CARR is an output and the previous target remains a
-reference only.
-
-`tests/cohort-carr-reconciliation.test.mjs` checks the six essential CARR
-and recognized-revenue reconciliations across Year/Quarter/Month budgeting,
-every display granularity, FRONT/EVEN/BACK, and 12/24/36-month horizons.
-
-<details>
-<summary>Historical A recognition example with full first-month effect (superseded)</summary>
-
-Within a displayed period of `D` months, annualized opening CARR earns
-`openingCARR * D/12` before any changes. If a CARR change is allocated to
-month `j` (1-based), it affects `(D-j+1)` full months of period revenue.
-The earned impact is `monthlyCARRChange * (D-j+1)/12`. Therefore every A/B/C
-recognized-revenue subtotal is derived from the CARR changes visible above
-it, and `Recognized A + Recognized (B+C) = Total Recognized`.
-
-For the year-budget example above, we allocate the fixed period CARR changes
-equally across the 12 months. The first month's change affects 12 months;
-the last month's change affects 1 month. The effective revenue weight is
-`(12+11+...+1)/(12*12)=13/24`:
-- Opening base revenue = 500,000 × 12/12 = **500,000**
-- Churn revenue effect = −125,000 × 13/24 = **−67,708.33**
-- Expansion revenue effect = +255,000 × 13/24 = **+138,125**
-- **Year 1 recognized existing revenue = 570,416.67**
-
-The same closing CARR of 630,000 can coexist with a different year's
-recognized revenue when the user deliberately chooses QUARTER or MONTH
-budgeting, because the timing and calculation scope are different.
-
-`src/engine/cohort-budget.js` also resets monthly Existing vs New revenue
-classification at the beginning of EACH budget year, matching A/B/C in the
-displayed bridge. Phasing applies ONLY to first-invoiced New CARR; it
-cannot change churn or expansion in the existing base. If no New CARR
-is required, the phasing slider is greyed out and explicitly says why.
-
-</details>
+The annual budget, cash view and conversion funnel use the customer
+volumes from the cohort forecast. Planned S&M is the modeled customers ×
+selected CAC × allocated spending share. Category amounts use unrounded
+values until display. Blended planned CAC is total S&M divided by total
+new customers. The funnel rounds required volumes up to whole units.
 
 ## Guarantees and acceptance
 

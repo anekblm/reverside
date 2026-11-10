@@ -292,6 +292,7 @@ export function buildRevenueBridge(monthly, view = "quarter") {
     const hasYearOpeningBridge=first.originalRevenueBridge!=null;
     const metrics={
       originalBaseRevenue:0,originalChurnRevenueImpact:0,originalExpansionRevenueImpact:0,
+      originalOpeningRevenue:0,originalMonthlyChurnImpact:0,originalMonthlyExpansionImpact:0,
       earlierNewBaseRevenue:0,earlierNewChurnRevenueImpact:0,earlierNewExpansionRevenueImpact:0,
       earlierNewRealizationImpact:0,
       currentNewRevenue:0,currentNewChurnRevenueImpact:0,currentNewExpansionRevenueImpact:0,
@@ -318,6 +319,8 @@ export function buildRevenueBridge(monthly, view = "quarter") {
         metrics.originalBaseRevenue+=bridge.originalBaseRevenue;
         metrics.originalChurnRevenueImpact+=bridge.originalChurnRevenueImpact;
         metrics.originalExpansionRevenueImpact+=bridge.originalExpansionRevenueImpact;
+        metrics.originalMonthlyChurnImpact+=bridge.originalChurnThisMonth;
+        metrics.originalMonthlyExpansionImpact+=bridge.originalExpansionThisMonth;
       }
       const revenueWeight=(slice.length-i)/12;
       for(const c of month.cohortFlows) {
@@ -328,9 +331,12 @@ export function buildRevenueBridge(monthly, view = "quarter") {
         cohortARR[bucket+"ChurnCustomers"]+=c.churnCustomers;
         cohortARR[bucket+"NewCustomers"]+=c.newCustomers;
         if(bucket==="original") {
+          metrics.originalOpeningRevenue+=c.startARR/12;
           if(!hasYearOpeningBridge) {
             metrics.originalChurnRevenueImpact-=c.churnARR*revenueWeight;
             metrics.originalExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+            metrics.originalMonthlyChurnImpact-=c.churnARR/12;
+            metrics.originalMonthlyExpansionImpact+=c.expansionARR/12;
           }
         } else if(bucket==="earlier") {
           // Transfers at the opening boundary are already in B's opening stock.

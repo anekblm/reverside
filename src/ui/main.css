@@ -112,8 +112,7 @@
       padding:7px 4px 10px; font-size:11px; color:#666; }
     .pl-existing-toolbar input[type="range"] { width:100px; }
     .pl-existing-toolbar output { min-width:2.5em; font-weight:600; color:#185FA5; }
-    .pl-month-impact { color:#666; font-size:9px; line-height:1.2; }
-    .pl-month-impact span { white-space:nowrap; }
+    .pl-year-opening-impact { color:#666; font-size:9px; line-height:1.2; }
     .pl-cohort-toggle { display:flex; align-items:baseline; gap:5px; width:100%;
       padding:3px 0; border:0; background:transparent; font:inherit; color:inherit;
       text-align:left; }

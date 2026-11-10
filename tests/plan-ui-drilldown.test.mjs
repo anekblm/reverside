@@ -143,6 +143,33 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   assert.equal(win._latestMonthlyPlan.months.length,12);
 });
 
+test('annual S&M, cash and the funnel use the same customer plan',()=>{
+  const scenario=createApp(12);
+  const {app,node,win}=scenario;
+  setTarget(scenario,505000);
+  node('plChurnSlider').value='0';
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  app.onCustomCACChange('3');
+  app.selectStrategy('custom');
+  assert.equal(win._latestMonthlyPlan.summary.newCustomersNeeded,1);
+  close(win._latestMonthlyPlan.summary.totalSM,3);
+  assert.equal(node('s3TotalBudget').textContent,'3 kr');
+  const spending=node('annualPlanTable').innerHTML.split('>S&M spend</span>')[1];
+  assert.match(spending,/3 kr<\/div>/);
+  assert.match(node('cashFlowPanel').innerHTML,/Forecast closing ARR <strong>510,000 kr<\/strong> ·\s*Target <strong>505,000 kr/);
+  assert.match(node('waterfallContent').innerHTML,/>1 new<\/div>/);
+  assert.equal(node('benchLTV').textContent,'43,636 kr');
+  app.onCustomCACChange('10000');
+  assert.match(node('s3Payback').textContent,/15\.0 months/);
+  assert.doesNotMatch(node('plTable').innerHTML,/NaN/);
+  app.onCustomCACChange('0');
+  close(win._latestMonthlyPlan.summary.totalSM,0);
+  setTarget(scenario,500000);
+  assert.match(node('waterfallContent').innerHTML,/>0 new<\/div>/);
+  assert.doesNotMatch(node('waterfallContent').innerHTML,/>[1-9][0-9,]*<\/span>/);
+});
+
 test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in every view',()=>{
   const {app,node,win}=createApp(36);
   const required=[
@@ -185,6 +212,8 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   const reconcile=p=>{
     close(p.originalBaseRevenue+p.originalChurnRevenueImpact+
       p.originalExpansionRevenueImpact,p.originalNetRevenue);
+    close(p.originalOpeningRevenue+p.originalMonthlyChurnImpact+
+      p.originalMonthlyExpansionImpact,p.originalNetRevenue);
     close(p.earlierNewBaseRevenue+p.earlierNewChurnRevenueImpact+
       p.earlierNewExpansionRevenueImpact+p.earlierNewRealizationImpact,p.earlierNewNetRevenue);
     close(p.originalNetRevenue+p.earlierNewNetRevenue+
@@ -271,7 +300,7 @@ test('A and B1 toggle independently, while B2 always shows its two summary rows'
   }
   assert.equal((html().match(/>Recognized Revenue<\/div>/g)??[]).length,3);
   assert.doesNotMatch(html(),/plCohortToggleC/);
-  assert.doesNotMatch(html(),/Revenue before changes|− Revenue phasing|Transferred from B2/);
+  assert.doesNotMatch(html(),/>Revenue before changes<\/div>|− Revenue phasing|Transferred from B2/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   assert.doesNotMatch(html(),/− Revenue phasing/);
@@ -366,7 +395,7 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   close(qs.reduce((n,q)=>n+q.recognizedRevenue,0),y.recognizedRevenue);
 });
 
-test('Existing A shows the full revenue bridge, month-only detail and customer counts in the same grid',()=>{
+test('Existing A reconciles rolling opening revenue and shows the impact against year opening',()=>{
   const {app,node,win}=createApp(12);
   setTarget({app,node},400000);
   node('plChurnSlider').value='25';
@@ -388,15 +417,22 @@ test('Existing A shows the full revenue bridge, month-only detail and customer c
   close(plan.monthlyBridge[1].originalChurnThisMonth,-434.0277777778);
   close(plan.monthlyBridge[1].originalExpansionRevenueImpact,1041.6666666667);
   close(plan.monthlyBridge[1].originalExpansionThisMonth,347.2222222222);
-  assert.doesNotMatch(node('plTable').innerHTML,/pl-month-impact/);
+  const feb=plan.monthlyBridge[1];
+  close(feb.originalOpeningRevenue,feb.originalStartARR/12);
+  close(feb.originalOpeningRevenue,41493.0555555556);
+  close(feb.originalMonthlyChurnImpact,-434.0277777778);
+  close(feb.originalMonthlyExpansionImpact,347.2222222222);
+  close(feb.originalNetRevenue,41406.25);
+  close(plan.quarters[0].originalOpeningRevenue,124479.1666666667);
+  assert.doesNotMatch(node('plTable').innerHTML,/pl-year-opening-impact/);
   app.togglePlCohort('A');
   app.togglePlQtr(0);
   app.togglePlMonth(0,0);
   assert.equal(win._latestMonthlyPlan,plan);
   const html=node('plTable').innerHTML;
-  assert.equal((html.match(/pl-month-impact/g)??[]).length,6);
-  assert.match(html,/of which <span>−434 kr/);
-  assert.match(html,/of which <span>\+347 kr/);
+  assert.match(html,/vs\. year opening −1,302 kr/);
+  assert.match(html,/vs\. year opening \+1,042 kr/);
+  assert.doesNotMatch(html,/vs\. year opening (−434|\+347) kr/);
   assert.match(html,/50 cust\./);
   assert.match(html,/lost cust\./);
   node('plExistingPhase').value='0';
