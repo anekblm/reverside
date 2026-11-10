@@ -1,6 +1,6 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
-import { forecastSaaS } from "./engine/cohort-budget.js";
+import { forecastSaaS, churnPeriodRates, PLAN_GRANULARITIES, SIGNING_PATTERNS } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
@@ -65,24 +65,24 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     return true;
   }
 
-  function goToStep2() {
+  function goToStep2(fromPlan = false) {
     state.productName = document.getElementById('productName').value || 'My Product';
     if (!classifyAnimal()) return;
     // Keep the initial target above the company's ARR when moving from Step 1.
     // A user-selected target in Step 2 is not overwritten on subsequent visits.
     const targetField = document.getElementById('targetRevenue');
-    if (state.revenue >= targetDefaults[state.currency] && Number(targetField.value) === targetDefaults[state.currency]) {
+    if (!fromPlan && state.revenue >= targetDefaults[state.currency] && Number(targetField.value) === targetDefaults[state.currency]) {
       const unit = targetDefaults[state.currency];
       state.targetRevenue = Math.ceil((state.revenue * 2) / unit) * unit;
       targetField.value = state.targetRevenue;
     }
     document.getElementById('headerAnimal').textContent = state.productName;
     document.getElementById('headerAnimalEmoji').textContent = animals[state.animal].emoji + ' ' + state.animal;
-    updateStep2Display();
+    updateStep2Display(!fromPlan);
     switchStep(2);
   }
 
-  function updateStep2Display() {
+  function updateStep2Display(resetChurn = true) {
     const bench = animals[state.animal];
     const fmt = currencyFormats[state.currency];
     const pre = state.stage === 'pre';
@@ -129,7 +129,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('animalSummary').textContent = bench.summary;
     const gtmExp = { Mice: 'For Mice (PLG): Users discover through organic adoption and viral features. Product is the primary growth lever.', Rabbits: 'For Rabbits (MLG + Self-Serve): Marketing generates inbound leads. Product remains mostly self-serve with optional light sales support.', Deer: 'For Deer (MLG + SLG): Marketing generates qualified leads at scale. Inside sales closes deals through demos and consultative selling.', Elephants: 'For Elephants (SLG): Enterprise sales team with field sales and ABM. Long cycles 1–2 quarters. High touch required.', Whales: 'For Whales (Founder-Led): Founder personally involved in closures. Strategic partnerships and deep relationships. Cycles 6–18 months.' };
     document.getElementById('gtmExplanation').textContent = gtmExp[state.animal] || '';
-    document.getElementById('churnSlider').value = Math.round(bench.churn * 100);
+    if (resetChurn) document.getElementById('churnSlider').value = Math.round(bench.churn * 100);
     updateClassificationExplanation();
     updateMetrics();
   }
@@ -639,15 +639,16 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plChurn = null;     // P&L churn override (null = use state.churn)
   let plExpansion = null; // P&L expansion rate (null = same as churn → NRR 100%)
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
-  let plQtrScenario = 'EVEN'; // New CARR between quarters
-  let plMonthScenario = 'EVEN'; // New CARR between months INSIDE each quarter
+  let plChurnPeriod = 'year';
+  const planDistributions = {
+    retention: defaultDistribution('EVEN'),
+    acquisition: defaultDistribution('EVEN'),
+  };
   let plNewCustomerPhase = 100;
-  let plExistingRetention = { pattern: 'EVEN', phasePercent: 100 };
-  let plBudgetGranularity = 'quarter';
-  let plPeriodOverride = null; // explicit New Contracted ARR per budget period
-  let plPeriodInputsOpen = false;
+  let plExistingPhase = 100;
   const plExpandedCohorts = new Set();
   let plCarrView = 'fullYear';
+  let planInitialized = false;
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -656,29 +657,69 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   // Conversion funnel benchmarks per animal
 
   function goToStep3() {
-    selectedStrategy = null;
-    yearAllocs = {};
-    quarterSMShares = {};
-    plPeriodOverride = null;
-    plPeriodInputsOpen = false;
-    plNewCustomerPhase = 100;
-    document.getElementById('budgetSummarySection').style.display = 'none';
-    populateStrategyCards();
-    initPLSliders();
-    // Init yearSplit with linear distribution so S&M is spread evenly from the start
     const years = Math.max(1, Math.round(state.timeframe / 12));
-    yearSplit = [];
-    const base = Math.floor(100 / years);
-    for (let y = 0; y < years; y++) {
-      yearSplit.push(base + (y === years-1 ? 100 - base*years : 0));
+    if(!planInitialized) {
+      planInitialized=true;
+      document.getElementById('budgetSummarySection').style.display = 'none';
+      populateStrategyCards();
+      initPLSliders();
+    } else {
+      populateStrategyCards(false);
     }
+    if(yearSplit.length!==years) initYearSplit();
+    renderPlanInputs();
     switchStep(3);
-    // Render P&L immediately without waiting for strategy selection
-    const fmt = currencyFormats[state.currency];
-    buildPL(years, fmt);
+    if(selectedStrategy) selectStrategy(selectedStrategy,false);
+    else updateStep3Display();
   }
 
-  function populateStrategyCards() {
+  function renderPlanInputs() {
+    const fields = {
+      planStartARR: state.revenue, planOpeningCustomers: state.customers,
+      planExpectedACV: state.expectedACV, planTargetARR: state.targetRevenue,
+      planTimePeriod: state.timeframe, planGrossMargin: Math.round(state.grossMargin * 100),
+    };
+    for (const [id,value] of Object.entries(fields)) document.getElementById(id).value=String(value);
+    const pre = state.stage==='pre';
+    document.getElementById('planStartARR').disabled=pre;
+    document.getElementById('planOpeningCustomers').disabled=pre;
+    document.getElementById('planExpectedACVField').hidden=!pre;
+    document.getElementById('planCurrency').textContent=state.currency;
+    document.getElementById('planEntryACV').textContent=currencyFormats[state.currency](state.acv);
+    document.getElementById('planAnimal').textContent=animals[state.animal].emoji+' '+state.animal;
+  }
+
+  function onPlanInputsChange() {
+    const value = id => Number(document.getElementById(id).value);
+    const revenue=value('planStartARR'), customers=value('planOpeningCustomers');
+    const expectedACV=value('planExpectedACV'), target=value('planTargetARR');
+    const timeframe=value('planTimePeriod'), margin=value('planGrossMargin');
+    const timeframeInput=document.querySelector(`input[name="timeframe"][value="${timeframe}"]`);
+    const pre=state.stage==='pre';
+    const openingValid=pre?Number.isFinite(expectedACV)&&expectedACV>0:
+      Number.isFinite(revenue)&&revenue>0&&Number.isInteger(customers)&&customers>0;
+    const error=document.getElementById('planInputsError');
+    if(!openingValid || !Number.isFinite(target) || target<=0 || !timeframeInput || margin<5 || margin>95 || !Number.isFinite(margin)) {
+      error.textContent='Enter valid opening values, a positive target ARR and a gross margin from 5% to 95%.';
+      return;
+    }
+    error.textContent='';
+    const previousYears=Math.ceil(state.timeframe/12);
+    const inputs={revenue,customers,expectedACV,targetRevenue:target,cogsSlider:margin};
+    for(const [id,amount] of Object.entries(inputs)) document.getElementById(id).value=String(amount);
+    timeframeInput.checked=true;
+    classifyAnimal();
+    state.grossMargin=margin/100;
+    updateStep2Display(false);
+    if(previousYears!==Math.ceil(state.timeframe/12)) initYearSplit();
+    document.getElementById('headerAnimalEmoji').textContent=animals[state.animal].emoji+' '+state.animal;
+    renderPlanInputs();
+    populateStrategyCards(false);
+    if(selectedStrategy) selectStrategy(selectedStrategy,false);
+    else updateStep3Display();
+  }
+
+  function populateStrategyCards(resetSelection = true) {
     if (!state.animal) return;
     const fmt = currencyFormats[state.currency];
     const benchPayback = paybackBenchmarks[state.animal];
@@ -693,8 +734,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('stratEffPayback').textContent = benchPayback + '-month payback';
     document.getElementById('stratGrowCAC').textContent = fmt(growthCAC);
     document.getElementById('stratGrowNote').textContent = 'Max ' + maxGrowthMonths + ' months at this level';
-    document.getElementById('customCACInput').value = '';
     document.getElementById('customCACInput').placeholder = fmt(recCAC);
+    if (!resetSelection) return;
+    document.getElementById('customCACInput').value = '';
 
     // Reset card styles
     ['efficient','growth','custom'].forEach(s => {
@@ -703,7 +745,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     });
   }
 
-  function selectStrategy(strategy) {
+  function selectStrategy(strategy, resetSplit = true) {
     selectedStrategy = strategy;
     const fmt = currencyFormats[state.currency];
     const recCAC = state.newRecCAC || 0;
@@ -723,7 +765,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     });
 
-    if (strategy === 'custom') {
+    if (strategy === 'custom' && resetSplit) {
       customCAC = parseInt(document.getElementById('customCACInput').value) || recCAC;
     }
 
@@ -757,7 +799,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       warningEl.style.display = 'none';
     }
 
-    initYearSplit();
+    if (resetSplit) initYearSplit();
     updateStep3Display();
     document.getElementById('budgetSummarySection').style.display = 'block';
   }
@@ -1132,12 +1174,17 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
+  function onChurnPeriodChange(period) {
+    if (!Object.hasOwn(PLAN_GRANULARITIES,period) || period===plChurnPeriod) return;
+    plChurnPeriod=period;
+    updatePLSliderDisplay();
+    updateStep3Display();
+  }
+
   function onExistingRetentionChange() {
-    const pattern = document.getElementById('plExistingPattern').value;
     const phasePercent = Number(document.getElementById('plExistingPhase').value);
-    if (!['EVEN','FRONT','BACK'].includes(pattern) ||
-        !Number.isFinite(phasePercent) || phasePercent < 0 || phasePercent > 100) return;
-    plExistingRetention = { pattern, phasePercent };
+    if (!Number.isFinite(phasePercent) || phasePercent < 0 || phasePercent > 100) return;
+    plExistingPhase = phasePercent;
     updateStep3Display();
   }
 
@@ -1149,14 +1196,23 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!cd) return;
     const churnPct = Math.round((plChurn || 0) * 100);
     const expPct   = Math.round((plExpansion || 0) * 100);
-    const nrr      = Math.round((1 - (plChurn||0) + (plExpansion||0)) * 100);
+    const rates = churnPeriodRates(plChurn??0,plChurnPeriod,plExpansion??0);
+    const nrr      = Math.round(rates.annualNRR * 100);
     cd.textContent = churnPct + '%';
+    const period=document.getElementById('plChurnPeriod');
+    if(period) period.value=plChurnPeriod;
+    const description=document.getElementById('plChurnDescription');
+    if(description) description.textContent='Share of opening CARR lost each '+plChurnPeriod;
     const equivalents = document.getElementById('plChurnEquivalents');
     if (equivalents) {
-      const annualRetention = 1 - (plChurn ?? 0);
-      const monthly = ((1 - annualRetention ** (1 / 12)) * 100).toFixed(2);
-      const quarterly = ((1 - annualRetention ** (1 / 4)) * 100).toFixed(2);
-      equivalents.textContent = `Equivalent at a constant rate · ${monthly}% monthly · ${quarterly}% quarterly`;
+      const otherPeriods=Object.entries(PLAN_GRANULARITIES)
+        .filter(([period])=>period!==plChurnPeriod)
+        .map(([period,width])=>{
+          const equivalent=(1-rates.annualGrossRetention**(width/12))*100;
+          const label={year:'annually',quarter:'quarterly',month:'monthly'}[period];
+          return `${equivalent.toFixed(2)}% ${label}`;
+        }).reverse();
+      equivalents.textContent = 'Equivalent at a constant rate · '+otherPeriods.join(' · ');
     }
     ed.textContent = expPct + '%';
     if (nd) {
@@ -1170,32 +1226,32 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Expansion rate per retained customer note under NRR
     const expNoteEl = document.getElementById('plExpansionRateNote');
     if (expNoteEl) {
-      const churn_ = plChurn || 0;
-      const exp_   = plExpansion || 0;
-      const grr_   = Math.max(0.001, 1 - churn_);
-      const expPerRetained = Math.round((exp_ / grr_) * 100);
+      const expPerRetained = Math.round((rates.expansion / (1-rates.churn)) * 100);
+      const rateText=expPerRetained+'% expansion per retained customer per '+plChurnPeriod;
 
-      if (exp_ === 0) {
+      if (rates.expansion === 0) {
         expNoteEl.style.display = 'none';
       } else if (expPerRetained > 100) {
         expNoteEl.style.display = 'block';
         expNoteEl.style.color = '#E24B4A';
-        expNoteEl.innerHTML = `⚠ Requires ${expPerRetained}% expansion per retained customer — very difficult to sustain. Consider reducing churn or accepting more new customer acquisition.`;
+        expNoteEl.textContent = `⚠ Requires ${rateText}. Very difficult to sustain.`;
       } else if (expPerRetained > 40) {
         expNoteEl.style.display = 'block';
         expNoteEl.style.color = '#BA7517';
-        expNoteEl.innerHTML = `Requires ${expPerRetained}% expansion per retained customer — aggressive but possible with a strong upsell motion.`;
+        expNoteEl.textContent = `Requires ${rateText}. Aggressive upsell assumption.`;
       } else {
         expNoteEl.style.display = 'block';
         expNoteEl.style.color = '#999';
-        expNoteEl.innerHTML = `Requires ${expPerRetained}% expansion per retained customer.`;
+        expNoteEl.textContent = `Requires ${rateText}.`;
       }
     }
   }
 
   function resetPL() {
     plNewCustomerPhase = 100;
-    plExistingRetention = { pattern: 'EVEN', phasePercent: 100 };
+    plChurnPeriod = 'year';
+    plExistingPhase = 100;
+    planDistributions.retention=defaultDistribution('EVEN');
     initPLSliders();
     updateStep3Display();
   }
@@ -1387,91 +1443,92 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('waterfallContent').innerHTML = html;
   }
 
-  function setQtrScenario(s) {
-    if (['EVEN','FRONT','BACK'].includes(s)) setNewARRDistribution(s, plMonthScenario);
+  function defaultDistribution(pattern) {
+    return {
+      pattern, quarters:[...SIGNING_PATTERNS[pattern]],
+      months:Array.from({length:4},()=>Array(3).fill(100/3)),
+    };
   }
 
-  function setMonthScenario(s) {
-    if (['EVEN','FRONT','BACK'].includes(s)) setNewARRDistribution(plQtrScenario, s);
-  }
-
-  function setNewARRDistribution(signingPattern, monthlySigningPattern) {
-    if (plBudgetGranularity==='month' || plPeriodOverride!==null) return;
-    if (signingPattern===plQtrScenario && monthlySigningPattern===plMonthScenario) return;
-    plQtrScenario=signingPattern;
-    plMonthScenario=monthlySigningPattern;
+  function setDistributionPreset(kind,pattern) {
+    if(!Object.hasOwn(planDistributions,kind) || !Object.hasOwn(SIGNING_PATTERNS,pattern)) return;
+    planDistributions[kind]=defaultDistribution(pattern);
     updateStep3Display();
   }
 
-  function onPlanBudgetGranularityChange(value) {
-    if (!['year','quarter','month'].includes(value) || plBudgetGranularity===value) return;
-    if (plPeriodOverride!==null && !window.confirm('Changing the New ARR budget level will clear your manual New ARR amounts. Continue?')) {
-      document.getElementById('planBudgetGranularity').value=plBudgetGranularity;
+  function onDistributionWeightChange(kind,quarter,month,raw) {
+    if(!Object.hasOwn(planDistributions,kind) || !Number.isInteger(quarter) || quarter<0 || quarter>3) return;
+    const distribution=planDistributions[kind];
+    const shares=month===null?distribution.quarters:distribution.months[quarter];
+    const index=month===null?quarter:month;
+    if(!Number.isInteger(index) || index<0 || index>=shares.length) return;
+    const value=Number(raw);
+    if(!raw.trim() || !Number.isFinite(value) || value<0 || value>100) {
+      renderPlanDistribution(kind);
       return;
     }
-    plBudgetGranularity=value;
-    plPeriodOverride=null; // Never reinterpret an amount set for a different period length.
+    const remaining=100-value;
+    const otherTotal=shares.reduce((total,share,i)=>i===index?total:total+share,0);
+    const next=shares.map((share,i)=>i===index?value:
+      remaining*(otherTotal>0?share/otherTotal:1/(shares.length-1)));
+    if(month===null) distribution.quarters=next;
+    else distribution.months[quarter]=next;
+    distribution.pattern='CUSTOM';
     updateStep3Display();
   }
 
-  function togglePlanPeriodInputs() {
-    plPeriodInputsOpen=!plPeriodInputsOpen;
-    if(window._latestMonthlyPlan) renderPlanToolbar(window._latestMonthlyPlan);
+  function planDistributionWeights(kind) {
+    const distribution=planDistributions[kind];
+    return distribution.months.flatMap((shares,q)=>shares.map(share=>
+      kind==='retention' && plChurnPeriod!=='year'?share:share*distribution.quarters[q]/100));
   }
 
-  function onPlanPeriodValueChange(index,raw) {
-    if(raw.trim()==='') return;
-    const value=Number(raw);
-    const model=window._latestMonthlyPlan;
-    if(!Number.isFinite(value)||value<0||!model) return;
-    const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
-    const count=Math.ceil(state.timeframe/width);
-    if(!Number.isInteger(index)||index<0||index>=count) return;
-    if(!plPeriodOverride) {
-      plPeriodOverride=Array.from({length:count},(_,p)=>
-        model.months.slice(p*width,Math.min(state.timeframe,(p+1)*width))
-          .reduce((total,m)=>total+m.newARR,0));
+  function renderPlanDistribution(kind) {
+    const distribution=planDistributions[kind];
+    const control=document.getElementById('plDistribution'+kind);
+    control.hidden=kind==='retention' && plChurnPeriod==='month';
+    const status=document.getElementById('plDistributionStatus'+kind);
+    status.textContent=distribution.pattern==='CUSTOM'?'Custom':distribution.pattern;
+    const editor=document.getElementById('plDistributionEditor'+kind);
+    const prefix='plWeight'+kind;
+    const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if(!editor.dataset.ready) {
+      const field=(q,m,label)=>'<label>'+label+' <input id="'+prefix+q+
+        (m===null?'Q':'M'+m)+'" type="number" min="0" max="100" step="any" '+
+        'aria-label="'+label+' share (%)" onchange="onDistributionWeightChange(\''+kind+'\','+q+','+m+',this.value)">%</label>';
+      editor.innerHTML='<div id="'+prefix+'QuarterPanel"><strong>Distribution between quarters</strong>'+
+        '<div class="pl-distribution-grid">'+distribution.quarters.map((_,q)=>field(q,null,'Q'+(q+1))).join('')+'</div></div>'+
+        '<strong>Distribution within quarters</strong>'+
+        '<div class="pl-distribution-grid">'+distribution.months.map((shares,q)=>
+          '<div>'+shares.map((_,m)=>field(q,m,monthNames[3*q+m])).join('')+'</div>').join('')+'</div>'+
+        '<div class="pl-budget-note">Editing a share redistributes the remainder proportionally within its group.</div>';
+      editor.dataset.ready='true';
     }
-    plPeriodOverride[index]=value;
-    updateStep3Display();
-  }
-
-  function resetPlanPeriodInputs() {
-    plPeriodOverride=null;
-    updateStep3Display();
+    document.getElementById(prefix+'QuarterPanel').hidden=kind==='retention' && plChurnPeriod!=='year';
+    distribution.quarters.forEach((weight,q)=>{
+      document.getElementById(prefix+q+'Q').value=String(Number(weight.toFixed(4)));
+      distribution.months[q].forEach((share,m)=>{
+        document.getElementById(prefix+q+'M'+m).value=String(Number(share.toFixed(4)));
+      });
+    });
+    for(const pattern of Object.keys(SIGNING_PATTERNS)) {
+      const button=document.getElementById('plDistribution'+kind+pattern);
+      button.classList?.toggle?.('active',distribution.pattern===pattern);
+      button.setAttribute?.('aria-pressed',String(distribution.pattern===pattern));
+    }
   }
 
   function renderPlanToolbar(model) {
-    const select=document.getElementById('planBudgetGranularity');
-    if(select) select.value=plBudgetGranularity;
-    const existingPattern=document.getElementById('plExistingPattern');
-    if(existingPattern) existingPattern.value=plExistingRetention.pattern;
     const existingPhase=document.getElementById('plExistingPhase');
-    if(existingPhase) existingPhase.value=String(plExistingRetention.phasePercent);
+    if(existingPhase) existingPhase.value=String(plExistingPhase);
     const existingPhaseValue=document.getElementById('plExistingPhaseValue');
-    if(existingPhaseValue) existingPhaseValue.textContent=plExistingRetention.phasePercent+'%';
+    if(existingPhaseValue) existingPhaseValue.textContent=plExistingPhase+'%';
     const existingPhaseNote=document.getElementById('plExistingPhaseNote');
-    if(existingPhaseNote) existingPhaseNote.textContent=plExistingRetention.phasePercent===100
+    if(existingPhaseNote) existingPhaseNote.textContent=plExistingPhase===100
       ? 'Full effect in the month of change'
       : 'Full effect from the following month';
-    const presetsEnabled=plBudgetGranularity!=='month' && plPeriodOverride===null;
-    for(const pattern of ['EVEN','FRONT','BACK']) {
-      const btn=document.getElementById('planPattern'+pattern);
-      if(!btn) continue;
-      btn.disabled=!presetsEnabled;
-      btn.classList?.toggle?.('active',presetsEnabled&&pattern===plQtrScenario);
-      if(btn.setAttribute) btn.setAttribute('aria-pressed',String(presetsEnabled&&pattern===plQtrScenario));
-    }
-    for(const pattern of ['EVEN','FRONT','BACK']){
-      const button=document.getElementById('planMonthPattern'+pattern);
-      if(!button)continue;
-      button.disabled=!presetsEnabled;
-      button.classList?.toggle?.('active',presetsEnabled&&pattern===plMonthScenario);
-      button.setAttribute?.('aria-pressed',String(presetsEnabled&&pattern===plMonthScenario));
-    }
-    const oldSelect=document.getElementById('signingPattern');
-    if(oldSelect) {oldSelect.value=plQtrScenario;oldSelect.disabled=!presetsEnabled;}
-    const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
+    renderPlanDistribution('retention');
+    renderPlanDistribution('acquisition');
     const hasNewCARR=model.summary.annualizedNewARR>1e-8;
     const slider=document.getElementById('plNewCustomerPhasingSlider');
     const card=document.getElementById('plNewCustomerPhasingCard');
@@ -1486,47 +1543,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       slider.value=String(plNewCustomerPhase);
     }
     if(output) output.textContent=hasNewCARR?plNewCustomerPhase.toFixed(1)+'%':'—';
-    const modeNote=document.getElementById('planBudgetGranularityNote');
-    if(modeNote) {
-      modeNote.textContent=
-        'New ARR budget: '+plBudgetGranularity.toUpperCase()+'. '+
-        (!hasNewCARR?(plPeriodOverride
-          ?'Manually budgeted New CARR is zero; revenue phasing is inactive. '
-          :'Existing cohorts already achieve the CARR target; no New CARR is needed and phasing is inactive. '): '')+
-        (hasNewCARR
-          ? ' New CARR uses '+(plBudgetGranularity==='month'?'monthly amounts':
-            plQtrScenario+' between quarters and '+plMonthScenario+' within quarters')+'. ':'')+
-        (plPeriodOverride
-          ? 'Custom New CARR overrides the target; closing CARR is an output.'
-          : 'Closing CARR target sets the required New CARR.');
-    }
-    const editor=document.getElementById('planPeriodEditor');
-    if(editor) editor.style.display=plPeriodInputsOpen?'block':'none';
-    const editBtn=document.getElementById('planPeriodEditButton');
-    if(editBtn){
-      editBtn.textContent=plPeriodInputsOpen?'Hide period New ARR ▴':'Edit period New ARR ▾';
-      if(editBtn.setAttribute) editBtn.setAttribute('aria-expanded',String(plPeriodInputsOpen));
-    }
-    const editorStatus=document.getElementById('planPeriodEditorStatus');
-    if(editorStatus) editorStatus.textContent=plPeriodOverride
-      ? 'Closing CARR: '+Math.round(model.summary.endingARR).toLocaleString('sv-SE')+
-        '; original target: '+Math.round(state.targetRevenue).toLocaleString('sv-SE')+'.'
-      : 'Automatically calculated against the closing CARR target.';
-    const grid=document.getElementById('planPeriodInputGrid');
-    if(grid&&plPeriodInputsOpen){
-      const count=Math.ceil(state.timeframe/width);
-      const amounts=plPeriodOverride??Array.from({length:count},(_,p)=>
-        model.months.slice(p*width,Math.min(state.timeframe,(p+1)*width))
-          .reduce((total,m)=>total+m.newARR,0));
-      grid.innerHTML=amounts.map((value,p)=>{
-        const name=plBudgetGranularity==='year'?'Y'+(p+1)
-          :plBudgetGranularity==='quarter'?'Y'+(Math.floor(p/4)+1)+' Q'+(p%4+1)
-          :'Y'+(Math.floor(p/12)+1)+' M'+(p%12+1);
-        return '<label>'+name+'<input type="number" min="0" step="any" value="'+
-          Number(value.toFixed(2))+'" onchange="onPlanPeriodValueChange('+p+',this.value)" '+
-          'aria-label="New Contracted ARR '+name+'"></label>';
-      }).join('');
-    }
+    const newARRNote=document.getElementById('planNewARRNote');
+    if(newARRNote) newARRNote.textContent=hasNewCARR
+      ? 'New CARR is calculated from the closing CARR target. The distribution sets when it is signed.'
+      : model.summary.targetGap<-1e-8
+        ? 'No acquisition weight falls within the selected time period. Adjust the distribution to calculate New CARR.'
+        : 'Existing customers are forecast to reach the closing CARR target.';
   }
 
   function quarterSharesForYear(year) {
@@ -1558,8 +1580,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const control = document.getElementById('quarterSMControls');
     const cashPanel = document.getElementById('cashFlowPanel');
     if (!control || !cashPanel) return;
-    const select = document.getElementById('signingPattern');
-    if (select) select.value = plQtrScenario;
     control.innerHTML = model.years.map((year, y) => {
       const shares = quarterSharesForYear(y);
       return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0;">'
@@ -1576,8 +1596,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!document.getElementById('plTable')) return;
     const acv         = state.acv || 0;
     const grossMargin = state.grossMargin ?? 0.80;
-    const churnRate   = plChurn !== null ? plChurn : (state.churn ?? 0.25);
-    const expRate     = plExpansion !== null ? plExpansion : churnRate; // default NRR=100%
+    const churnRate   = plChurn ?? state.churn;
+    const expRate     = plExpansion ?? churnRate;
     const defs = budgetDefaults[state.animal] || budgetDefaults.Deer;
     const smBudgetPercentByYear = Array.from({ length: years }, (_, y) => {
       const alloc = yearAllocs[y] || defs;
@@ -1587,13 +1607,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const model = forecastSaaS({
       months: state.timeframe,
       openingARR: state.revenue, openingCustomers: state.customers,
-      acv, targetARR: state.targetRevenue, granularity: plBudgetGranularity,
+      acv, targetARR: state.targetRevenue, granularity: 'month',
+      churnPeriod: plChurnPeriod, churnRate,
       newCustomerFirstMonthPhasePercent: plNewCustomerPhase,
-      existingRetention: plExistingRetention,
-      newARRByPeriod: plPeriodOverride,
-      annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
-      yearShares: yearSplit, signingPattern: plBudgetGranularity==='month'?'EVEN':plQtrScenario,
-      monthlySigningPattern: plBudgetGranularity==='month'?'EVEN':plMonthScenario,
+      existingRetention: {monthlyWeights:planDistributionWeights('retention'),phasePercent:plExistingPhase},
+      newARRMonthlyWeights: planDistributionWeights('acquisition'),
+      annualExpansionComp: expRate, grossMargin, yearShares: yearSplit,
       priceNewOnExpansion: plUseExpACV,
       cacByYear: Array.from({ length: years }, (_, y) => selectedStrategy ? getCACForYear(y, years) : 0),
       smBudgetPercentByYear,
@@ -1615,7 +1634,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const years = model.years.length;
     const acv = state.acv || 0;
     const grossMargin = state.grossMargin ?? 0.80;
-    const churnRate = plChurn ?? state.churn ?? 0.25;
+    const churnRate = 1-churnPeriodRates(plChurn??state.churn,plChurnPeriod,plExpansion??0).annualGrossRetention;
     let cumulativeResult = 0, breakEvenYear = null;
     const rows = model.years.map((r, y) => {
       const opResult = r.operatingContribution;
@@ -2166,10 +2185,10 @@ Object.assign(window, {
   onPLSlider,
   onExistingRetentionChange,
   onNewCustomerPhasingChange,
-  onPlanBudgetGranularityChange,
-  togglePlanPeriodInputs,
-  onPlanPeriodValueChange,
-  resetPlanPeriodInputs,
+  onPlanInputsChange,
+  onChurnPeriodChange,
+  setDistributionPreset,
+  onDistributionWeightChange,
   onPLCheckbox,
   selectStrategy,
   onCustomCACChange,
@@ -2178,8 +2197,6 @@ Object.assign(window, {
   toggleAllocRow,
   onAllocInput,
   toggleLock,
-  setQtrScenario,
-  setMonthScenario,
   togglePlQtr,
   togglePlMonth,
   togglePlCohort,

@@ -90,9 +90,11 @@
       .pl-new-phase input[type="range"] { margin-top:6px; }
     }
 
-    /* Fixed-height PLAN toolbar: controls do not appear/disappear on year expand. */
-    .pl-budget-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-      padding:8px 4px 7px; min-height:50px; }
+    .pl-inputs-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+    .pl-inputs-grid label { font-size:11px; font-weight:500; color:#555; }
+    .pl-inputs-grid .form-input { width:100%; margin-top:4px; }
+    .pl-inputs-error { font-size:11px; color:#A32D2D; }
+    .pl-inputs-error:not(:empty) { margin-top:5px; }
     .pl-budget-granularity-label { display:flex; gap:7px; align-items:center; font-size:11px;
       font-weight:500; color:#666; white-space:nowrap; }
     .pl-budget-granularity-label select { border:1px solid #ddd; background:#fff; border-radius:5px;
@@ -105,8 +107,6 @@
       color:white; font-weight:700; }
     .pl-pattern-btn:disabled { background:#f3f3f3; color:#aaa; border-color:#e7e7e7;
       opacity:.7; cursor:not-allowed; }
-    .pl-period-edit-toggle { flex:0 0 auto; width:auto; margin-left:auto; padding:6px 10px;
-      font-size:11px; border-radius:5px; }
     .pl-budget-note { font-size:10px; color:#999; padding:0 4px 8px; }
     .pl-existing-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px;
       padding:7px 4px 10px; font-size:11px; color:#666; }
@@ -124,20 +124,15 @@
     .pl-cohort-heading-static { padding:3px 0 3px 11px; }
     .pl-carr-view { display:flex; align-items:center; flex-wrap:wrap; gap:5px 8px;
       margin-bottom:0.55rem; color:#666; font-size:11px; }
-    .pl-period-editor { background:#fafafa; border:1px solid #e5e5e5; border-radius:6px;
-      padding:12px; margin:4px 0 12px; }
-    .pl-period-editor-title { font-size:11px; font-weight:600; color:#555; margin-bottom:9px; }
-    .pl-period-input-grid { display:flex; flex-wrap:wrap; gap:9px; max-height:180px; overflow:auto; }
-    .pl-period-input-grid label { display:flex; flex-direction:column; gap:4px;
-      font-size:10px; color:#666; }
-    .pl-period-input-grid input { width:100px; border:1px solid #ddd; border-radius:5px;
-      padding:6px; font-size:11px; }
-    .pl-period-editor-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px;
-      margin-top:12px; font-size:10px; color:#777; }
-    .pl-period-editor-actions button { flex:0 0 auto; width:auto; font-size:10px; padding:6px 10px; }
+    .pl-distribution { margin:5px 0 8px; }
+    .pl-distribution summary { color:#555; font-size:11px; cursor:pointer; padding:6px 0; }
+    .pl-distribution-editor { background:#fafafa; border:1px solid #e5e5e5; border-radius:6px;
+      padding:10px; color:#555; font-size:11px; }
+    .pl-distribution-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr));
+      gap:6px; margin:5px 0 9px; }
+    .pl-distribution-grid label { display:flex; align-items:center; gap:4px; margin-bottom:4px; }
+    .pl-distribution-grid input { width:65px; border:1px solid #ddd; border-radius:5px; padding:4px; }
     @media (max-width:600px) {
-      .pl-budget-toolbar { gap:7px; }
-      .pl-period-edit-toggle { margin-left:0; }
       .pl-pattern-caption { width:100%; }
       .pl-pattern-group { flex-wrap:wrap; }
     }

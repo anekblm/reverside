@@ -21,6 +21,24 @@ function periodMonths(granularity) {
   if (!width) throw new RangeError("Unknown planning granularity");
   return width;
 }
+
+export function churnPeriodRates(rate, period, annualExpansion) {
+  const width=periodMonths(period);
+  if(finite(rate,"Churn rate")>=1) throw new RangeError("Churn rate must be below 100%");
+  finite(annualExpansion,"Annual expansion");
+  const periods=12/width;
+  const expansion=Math.expm1(Math.log1p(annualExpansion)/periods);
+  return {
+    width, churn:rate, expansion,
+    annualGrossRetention:(1-rate)**periods,
+    annualNRR:(1-rate+expansion)**periods,
+  };
+}
+
+function validateMonthlyWeights(weights) {
+  if(weights.length!==12 || weights.some(weight=>!Number.isFinite(weight)||weight<0) || sum(weights)<=0)
+    throw new RangeError("Distribution must contain twelve nonnegative monthly weights with a positive total");
+}
 function monthToPeriod(month, granularity) {
   return Math.floor(month / periodMonths(granularity));
 }
@@ -58,7 +76,7 @@ export const MONTH_SIGNING_PATTERNS=Object.freeze({
   FRONT:[50,30,20], EVEN:[1,1,1], BACK:[20,30,50],
 });
 function monthlyTemplateWeights(months,yearShares=[],quarterPattern="EVEN",
-                                monthPattern="EVEN",monthlyPatternsByQuarter=null) {
+                                monthPattern="EVEN",monthlyPatternsByQuarter=null,monthlyWeights=null) {
   const quarterWeights=SIGNING_PATTERNS[quarterPattern];
   if(!quarterWeights)throw new RangeError("Unknown between-quarter pattern: "+quarterPattern);
   if(!MONTH_SIGNING_PATTERNS[monthPattern])
@@ -68,8 +86,15 @@ function monthlyTemplateWeights(months,yearShares=[],quarterPattern="EVEN",
   if(shares.some(x=>!Number.isFinite(x)||x<0)||sum(shares)<=0)
     throw new RangeError("Invalid yearly distribution");
   const result=[];
+  if(monthlyWeights) validateMonthlyWeights(monthlyWeights);
   for(let y=0;y<years;y++) {
     const yMonths=Math.min(12,months-12*y);
+    if(monthlyWeights) {
+      const active=monthlyWeights.slice(0,yMonths);
+      const activeWeight=sum(active);
+      for(const weight of active) result.push(activeWeight>0?shares[y]*weight/activeWeight:0);
+      continue;
+    }
     const activeQ=Math.ceil(yMonths/3);
     const activeQWeight=sum(quarterWeights.slice(0,activeQ));
     for(let q=0;q<activeQ;q++){
@@ -91,10 +116,10 @@ function firstInvoiceWeights(input) {
   const width=periodMonths(granularity);
   const count=Math.ceil(months/width);
   const template=monthlyTemplateWeights(months,input.yearShares,input.signingPattern,
-    input.monthlySigningPattern??"EVEN",input.monthlyPatternsByQuarter);
+    input.monthlySigningPattern??"EVEN",input.monthlyPatternsByQuarter,input.newARRMonthlyWeights);
   const total=sum(template);
   const periodTotals=Array.from({length:count},(_,p)=>
-    sum(template.slice(p*width,Math.min(months,(p+1)*width)))/total);
+    total>0?sum(template.slice(p*width,Math.min(months,(p+1)*width)))/total:0);
   if(newARRByPeriod!=null){
     if(newARRByPeriod.length!==count)throw new RangeError("Manual ARR needs one amount per budget period");
     newARRByPeriod.forEach(v=>finite(v,"period New ARR"));
@@ -135,10 +160,11 @@ export function maximumNewRevenuePhase({months,granularity,yearShares,signingPat
 
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
-  const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv,existingRetention}=input;
+  const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv,existingRetention,retention}=input;
   const openingCustomers=input.openingCustomers??openingARR/acv;
   const newACVByMonth=input.newACVByMonth??Array(months).fill(acv);
-  const width=periodMonths(granularity);
+  const budgetWidth=periodMonths(granularity);
+  const width=retention?.width??budgetWidth;
   const annualGrossRetention=1-annualChurn;
   const annualNRR=annualGrossRetention+annualExpansionComp;
   const cohorts=[{firstInvoiceMonth:-1,arr:openingARR,count:openingCustomers}];
@@ -153,23 +179,27 @@ function makeARRRows(input, monthlySignedARR) {
       priorExistingChurn=0;
       priorExistingExpansion=0;
       for(const c of cohorts) {
-        c.yearOpeningARR=c.arr;
-        c.yearOpeningCustomers=c.count;
         yearOpeningARR+=c.arr;
+      }
+    }
+    if(existingRetention && m%existingRetention.width===0) {
+      for(const c of cohorts) {
+        if(c.firstInvoiceMonth>=yearStart) continue;
+        c.retentionOpeningARR=c.arr;
+        c.retentionOpeningCustomers=c.count;
       }
     }
     const periodStart=Math.floor(m/width)*width;
     const periodLength=Math.min(width,months-periodStart);
     if(m===periodStart) {
-      // Current-year acquisitions use the selected budget-period retention.
-      const grossRetention=Math.pow(annualGrossRetention,periodLength/12);
-      const netRetention=Math.pow(annualNRR,periodLength/12);
+      const churn=retention?.churn??1-Math.pow(annualGrossRetention,periodLength/12);
+      const expansion=retention?.expansion??Math.pow(annualNRR,periodLength/12)-(1-churn);
       for(const c of cohorts) {
         if(existingRetention && c.firstInvoiceMonth<yearStart) continue;
         const eligible=c.firstInvoiceMonth<periodStart;
-        c.periodChurnPerMonth=eligible?c.arr*(1-grossRetention)/periodLength:0;
-        c.periodExpansionPerMonth=eligible?c.arr*(netRetention-grossRetention)/periodLength:0;
-        c.periodLostCustomersPerMonth=eligible?c.count*(1-grossRetention)/periodLength:0;
+        c.periodChurnPerMonth=eligible?c.arr*churn/periodLength:0;
+        c.periodExpansionPerMonth=eligible?c.arr*expansion/periodLength:0;
+        c.periodLostCustomersPerMonth=eligible?c.count*churn/periodLength:0;
       }
     }
     if(monthlySignedARR[m]>0)cohorts.push({
@@ -185,12 +215,13 @@ function makeARRRows(input, monthlySignedARR) {
       const before=newlyAdded?0:c.arr;
       const beforeCustomers=newlyAdded?0:c.count;
       const useYearOpening=existingRetention && c.firstInvoiceMonth<yearStart;
+      const cohortWeight=retention&&existingRetention?existingWeight*periodLength:1;
       const churn=useYearOpening
-        ? c.yearOpeningARR*annualChurn*existingWeight : c.periodChurnPerMonth;
+        ? c.retentionOpeningARR*existingRetention.churn*existingWeight : c.periodChurnPerMonth*cohortWeight;
       const expansion=useYearOpening
-        ? c.yearOpeningARR*annualExpansionComp*existingWeight : c.periodExpansionPerMonth;
+        ? c.retentionOpeningARR*existingRetention.expansion*existingWeight : c.periodExpansionPerMonth*cohortWeight;
       const lostCustomers=useYearOpening
-        ? c.yearOpeningCustomers*annualChurn*existingWeight : c.periodLostCustomersPerMonth;
+        ? c.retentionOpeningCustomers*existingRetention.churn*existingWeight : c.periodLostCustomersPerMonth*cohortWeight;
       if(!newlyAdded) {
         c.arr=before-churn+expansion;
         c.count=beforeCustomers-lostCustomers;
@@ -236,7 +267,7 @@ function makeARRRows(input, monthlySignedARR) {
     }
     rows.push({
       index:m,month:m+1,year:Math.floor(m/12),quarter:Math.floor(monthOfYear/3),
-      budgetPeriod:Math.floor(m/width),
+      budgetPeriod:Math.floor(m/budgetWidth),
       startARR,churnARR,expansionARR,newARR,endARR,
       startCustomers,churnCustomers,endCustomers,
       newCustomers:newARR/newACVByMonth[m],newACV:newACVByMonth[m],
@@ -421,8 +452,10 @@ export function forecastSaaS(input) {
       throw new RangeError("Opening customers and opening ARR must both be zero, or both be positive");
   }
   const targetARR=finite(input.targetARR,"targetARR");
-  const annualChurn=finite(input.annualChurn,"annualChurn");
   const annualExpansionComp=finite(input.annualExpansionComp,"annualExpansionComp");
+  const retention=input.churnPeriod==null?null:
+    churnPeriodRates(input.churnRate,input.churnPeriod,annualExpansionComp);
+  const annualChurn=retention?1-retention.annualGrossRetention:finite(input.annualChurn,"annualChurn");
   const grossMargin=finite(input.grossMargin,"grossMargin");
   if(annualChurn>=1||grossMargin>1||1-annualChurn+annualExpansionComp<=0)
     throw new RangeError("Churn, NRR or margin outside valid range");
@@ -437,19 +470,30 @@ export function forecastSaaS(input) {
   const yearsCount=Math.ceil(months/12);
   const {weights,phase,phaseRanges,periodTotals,intraPeriodWeights}=
     firstInvoiceWeights({...input,months,granularity});
-  const nrrAnnual=1-annualChurn+annualExpansionComp;
-  const factor=nrrAnnual/(1-annualChurn);
+  const nrrAnnual=retention?.annualNRR??1-annualChurn+annualExpansionComp;
+  const factor=nrrAnnual/(retention?.annualGrossRetention??1-annualChurn);
   const newACV=Array.from({length:months},(_,m)=>
     acv*Math.pow(factor,Math.floor(m/12)+(input.priceNewOnExpansion?1:0)));
   let existingRetention;
   if(input.existingRetention) {
-    const {pattern="EVEN",phasePercent=50}=input.existingRetention;
+    const {pattern="EVEN",phasePercent=50,monthlyWeights}=input.existingRetention;
     finite(phasePercent,"Existing customer revenue phasing");
     if(phasePercent>100) throw new RangeError("Existing customer revenue phasing must be <= 100%");
-    existingRetention={weights:monthlyTemplateWeights(12,[],pattern),phase:phasePercent/100};
+    const template=monthlyWeights??monthlyTemplateWeights(12,[],pattern);
+    validateMonthlyWeights(template);
+    const retentionWidth=retention?.width??12;
+    const weights=Array.from({length:12/retentionWidth},(_,p)=>{
+      const period=template.slice(p*retentionWidth,(p+1)*retentionWidth);
+      const total=sum(period);
+      return period.map(weight=>total>0?weight/total:1/retentionWidth);
+    }).flat();
+    existingRetention={
+      width:retentionWidth, weights, phase:phasePercent/100,
+      churn:retention?.churn??annualChurn, expansion:retention?.expansion??annualExpansionComp,
+    };
   }
   const retentionInput={months,openingARR,openingCustomers:input.openingCustomers,acv,
-    annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV,existingRetention};
+    annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV,existingRetention,retention};
   let newCustomersNeeded;
   let monthNewARR;
   if(input.newARRByPeriod != null) {
@@ -461,7 +505,7 @@ export function forecastSaaS(input) {
     const unitARR=weights.map((w,m)=>w*newACV[m]);
     const withOne=makeARRRows(retentionInput,unitARR).at(-1).endARR;
     const endingContribution=withOne-baseline;
-    newCustomersNeeded=targetARR>baseline?
+    newCustomersNeeded=targetARR>baseline && sum(unitARR)>0?
       Math.ceil((targetARR-baseline)/endingContribution-1e-10):0;
     if(!Number.isSafeInteger(newCustomersNeeded)||newCustomersNeeded>1e8)throw new RangeError("Target requires too many customers");
     monthNewARR=unitARR.map(v=>v*newCustomersNeeded);
@@ -559,7 +603,7 @@ export function forecastSaaS(input) {
     annualCustomers,annualSM,quarterSM,
     signingPattern:input.signingPattern||"EVEN",
     monthlySigningPattern:input.monthlySigningPattern||"EVEN",
-    granularity,periodPhasing:phase,periodPhaseRanges:phaseRanges,
+    granularity, churnPeriod:input.churnPeriod, periodPhasing:phase,periodPhaseRanges:phaseRanges,
     periodCount:periodTotals.length,
     manualBudget:input.newARRByPeriod!=null,
     assumptions:{
@@ -568,7 +612,8 @@ export function forecastSaaS(input) {
       phasing:firstMonthPhase!=null
         ? "First-month phasing is applied once to signed CARR / 12. Full recurring revenue starts the following month."
         : "Year/quarter/month budget recognition percentage is applied once to the new cohort's maximum period revenue; the result is allocated to months and preserved in views.",
-      churn:"New cohorts start churn/expansion in following BUDGET period.",
+      churn:retention?"New cohorts start churn and expansion in the next churn period."
+        :"New cohorts start churn and expansion in the next budget period.",
       costs:"COGS paid in revenue month; other operating outflows entered separately.",
       collections:"Monthly invoices, whole-month collection delay; no opening receivables.",
       cash:"No annual upfront billing, financing, tax or capex in this PLAN version.",

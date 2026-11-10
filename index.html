@@ -284,7 +284,7 @@
           <label class="radio-label"><input type="radio" name="timeframe" value="48" onchange="updateMetrics()"> 48 months</label>
           <label class="radio-label"><input type="radio" name="timeframe" value="60" onchange="updateMetrics()"> 60 months</label>
         </div>
-        <div class="form-helper">ⓘ How long do you plan to reach your target? The 6-month selection currently uses an annual forecast bucket in Step 3; half-year precision is not yet implemented.</div>
+        <div class="form-helper">ⓘ How long do you plan to reach your target? The forecast is calculated month by month.</div>
       </div>
 
       <div class="slider-group">
@@ -480,6 +480,31 @@
     <div class="step" id="step3">
       <h2>Plan Your Go-To-Market Budget</h2>
 
+      <section class="card" aria-labelledby="planInputsHeading">
+        <div class="card-title" id="planInputsHeading">Plan assumptions</div>
+        <div class="pl-inputs-grid">
+          <label>Start ARR <input id="planStartARR" type="number" min="0" step="any" class="form-input" onchange="onPlanInputsChange()"></label>
+          <label>Target ARR <input id="planTargetARR" type="number" min="1" step="any" class="form-input" onchange="onPlanInputsChange()"></label>
+          <label>Opening customers <input id="planOpeningCustomers" type="number" min="0" step="1" class="form-input" onchange="onPlanInputsChange()"></label>
+          <label>Time period
+            <select id="planTimePeriod" class="form-input" onchange="onPlanInputsChange()">
+              <option value="6">6 months</option>
+              <option value="12">1 year</option>
+              <option value="24">2 years</option>
+              <option value="36">3 years</option>
+              <option value="48">4 years</option>
+              <option value="60">5 years</option>
+            </select>
+          </label>
+          <label>Gross margin (%) <input id="planGrossMargin" type="number" min="5" max="95" step="1" class="form-input" onchange="onPlanInputsChange()"></label>
+          <label id="planExpectedACVField" hidden>Expected ACV <input id="planExpectedACV" type="number" min="1" step="any" class="form-input" onchange="onPlanInputsChange()"></label>
+        </div>
+        <div class="pl-assumption-note">
+          Currency <strong id="planCurrency"></strong> · Entry ACV <strong id="planEntryACV"></strong> · <strong id="planAnimal"></strong>
+        </div>
+        <div class="pl-inputs-error" id="planInputsError" role="alert"></div>
+      </section>
+
       <!-- P&L OVERVIEW -->
         <div class="card" style="margin-top:0;">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
@@ -487,9 +512,9 @@
             <button onclick="resetPL()" style="flex:none;padding:0.3rem 0.75rem;font-size:11px;font-weight:500;color:#555;background:white;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;">Reset churn, expansion &amp; timing</button>
           </div>
           <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
-            Adjust churn and expansion to model your growth scenario. Existing customer changes are allocated over the year. New customer phasing applies to revenue in the acquisition month. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
+            Adjust churn and expansion to model your growth scenario. Churn uses the selected period and expansion follows the same timing. New customer phasing applies to revenue in the acquisition month. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
             <div style="margin-top:0.5rem;font-size:11px;color:#666;line-height:1.6;">
-              Expansion Compensation is a 1:1 percentage point offset to churn — setting both to 25% results in NRR 100% (flat base). The actual expansion required per retained customer is always higher than the compensation rate, because expansion is spread across fewer customers after churn. Example: 25% churn + 25% expansion compensation → 33% expansion per retained customer.
+              Expansion is entered as an annual rate. For a monthly or quarterly churn period, the model converts it to an equivalent period rate and applies it to that period’s opening CARR.
             </div>
             <div style="margin-top:0.4rem;padding:0.25rem 0.6rem;display:inline-block;background:#fafafa;border:0.5px solid #e0e0e0;border-radius:4px;font-size:11px;color:#999;">
               S&M spending is independently scheduled by quarter below
@@ -503,20 +528,27 @@
                 <div class="pl-assumption-heading">
                   <div>
                     <div class="pl-assumption-name">Churn rate</div>
-                    <div class="pl-assumption-description">Annual % · A uses opening CARR for the year</div>
+                    <div class="pl-assumption-description" id="plChurnDescription">Share of opening CARR lost each year</div>
                   </div>
                   <div class="pl-assumption-value" style="color:#E24B4A;" id="plChurnDisplay">—</div>
                 </div>
                 <input type="range" id="plChurnSlider" min="0" max="80" step="1" value="25"
-                  oninput="onPLSlider()" aria-label="Annual ARR churn rate" aria-describedby="plChurnEquivalents">
+                  oninput="onPLSlider()" aria-label="ARR churn rate" aria-describedby="plChurnEquivalents">
                 <div class="pl-assumption-note" id="plChurnEquivalents"></div>
+                <label class="pl-budget-granularity-label">Churn period
+                  <select id="plChurnPeriod" onchange="onChurnPeriodChange(this.value)">
+                    <option value="year" selected>Year</option>
+                    <option value="quarter">Quarter</option>
+                    <option value="month">Month</option>
+                  </select>
+                </label>
               </div>
 
               <div class="pl-assumption-card">
                 <div class="pl-assumption-heading">
                   <div>
                     <div class="pl-assumption-name">Expansion compensation</div>
-                    <div class="pl-assumption-description">Annual % of opening CARR · not % of churn</div>
+                    <div class="pl-assumption-description">Annual rate · timing follows churn</div>
                   </div>
                   <div class="pl-assumption-value" style="color:#3B6D11;" id="plExpansionDisplay">—</div>
                 </div>
@@ -528,7 +560,7 @@
                 <div class="pl-assumption-heading">
                   <div>
                     <div class="pl-assumption-name">Resulting NRR</div>
-                    <div class="pl-assumption-description">Annual NRR = 100% − churn + expansion</div>
+                    <div class="pl-assumption-description">Annualized from the selected churn period</div>
                   </div>
                   <div class="pl-assumption-value" id="plNRROutcome">—</div>
                 </div>
@@ -538,14 +570,6 @@
             </div>
             <div class="pl-existing-toolbar" role="group" aria-label="Existing customer retention">
               <label class="pl-budget-granularity-label">
-                A · Annual timing
-                <select id="plExistingPattern" onchange="onExistingRetentionChange()">
-                  <option value="EVEN">EVEN</option>
-                  <option value="FRONT">FRONT</option>
-                  <option value="BACK">BACK</option>
-                </select>
-              </label>
-              <label class="pl-budget-granularity-label">
                 A · First-month revenue effect
                 <input type="range" id="plExistingPhase" min="0" max="100" step="1" value="100"
                   oninput="onExistingRetentionChange()" aria-describedby="plExistingPhaseNote">
@@ -553,55 +577,35 @@
               <output id="plExistingPhaseValue" for="plExistingPhase">100%</output>
               <span id="plExistingPhaseNote">Full effect in the month of change</span>
             </div>
+            <div class="pl-distribution" id="plDistributionretention">
+              <div class="pl-pattern-group" role="group" aria-label="Churn and expansion distribution">
+                <span class="pl-pattern-caption">Churn and expansion distribution</span>
+                <button type="button" class="pl-pattern-btn active" id="plDistributionretentionEVEN" onclick="setDistributionPreset('retention','EVEN')">Even</button>
+                <button type="button" class="pl-pattern-btn" id="plDistributionretentionFRONT" onclick="setDistributionPreset('retention','FRONT')">Front</button>
+                <button type="button" class="pl-pattern-btn" id="plDistributionretentionBACK" onclick="setDistributionPreset('retention','BACK')">Back</button>
+              </div>
+              <details>
+                <summary>View distribution · <span id="plDistributionStatusretention">EVEN</span></summary>
+                <div class="pl-distribution-editor" id="plDistributionEditorretention"></div>
+              </details>
+            </div>
           </section>
 
           <section class="pl-forecast-section" aria-labelledby="plNewHeading">
             <h3 id="plNewHeading">New customers</h3>
-            <div class="pl-budget-toolbar">
-              <label class="pl-budget-granularity-label" for="planBudgetGranularity">
-                New ARR budget
-                <select id="planBudgetGranularity"
-                        onchange="onPlanBudgetGranularityChange(this.value)"
-                        aria-label="Budget planning granularity">
-                  <option value="year">Year</option>
-                  <option value="quarter" selected>Quarter</option>
-                  <option value="month">Month</option>
-                </select>
-              </label>
-              <div class="pl-pattern-group" role="group" aria-label="New CARR distribution between quarters">
-                <span class="pl-pattern-caption">Between quarters</span>
-                <button type="button" class="pl-pattern-btn active" id="planPatternEVEN"
-                        onclick="setQtrScenario('EVEN')">EVEN</button>
-                <button type="button" class="pl-pattern-btn" id="planPatternFRONT"
-                        onclick="setQtrScenario('FRONT')">FRONT</button>
-                <button type="button" class="pl-pattern-btn" id="planPatternBACK"
-                        onclick="setQtrScenario('BACK')">BACK</button>
+            <div class="pl-distribution" id="plDistributionacquisition">
+              <div class="pl-pattern-group" role="group" aria-label="New CARR distribution">
+                <span class="pl-pattern-caption">New CARR distribution</span>
+                <button type="button" class="pl-pattern-btn active" id="plDistributionacquisitionEVEN" onclick="setDistributionPreset('acquisition','EVEN')">Even</button>
+                <button type="button" class="pl-pattern-btn" id="plDistributionacquisitionFRONT" onclick="setDistributionPreset('acquisition','FRONT')">Front</button>
+                <button type="button" class="pl-pattern-btn" id="plDistributionacquisitionBACK" onclick="setDistributionPreset('acquisition','BACK')">Back</button>
               </div>
-              <div class="pl-pattern-group" role="group" aria-label="New CARR distribution within each quarter">
-                <span class="pl-pattern-caption">Within quarter · months</span>
-                <button type="button" class="pl-pattern-btn" id="planMonthPatternFRONT"
-                        onclick="setMonthScenario('FRONT')">FRONT</button>
-                <button type="button" class="pl-pattern-btn active" id="planMonthPatternEVEN"
-                        onclick="setMonthScenario('EVEN')">EVEN</button>
-                <button type="button" class="pl-pattern-btn" id="planMonthPatternBACK"
-                        onclick="setMonthScenario('BACK')">BACK</button>
-              </div>
-              <button type="button" class="pl-period-edit-toggle" id="planPeriodEditButton"
-                      onclick="togglePlanPeriodInputs()" aria-expanded="false">
-                Edit period New ARR ▾
-              </button>
+              <details>
+                <summary>View distribution · <span id="plDistributionStatusacquisition">EVEN</span></summary>
+                <div class="pl-distribution-editor" id="plDistributionEditoracquisition"></div>
+              </details>
             </div>
-            <div class="pl-budget-note" id="planBudgetGranularityNote">
-              Quarterly budget. Monthly values are generated automatically.
-            </div>
-            <div id="planPeriodEditor" class="pl-period-editor" style="display:none;">
-              <div class="pl-period-editor-title">New Contracted ARR at first invoice · per budget period</div>
-              <div id="planPeriodInputGrid" class="pl-period-input-grid"></div>
-              <div class="pl-period-editor-actions">
-                <button type="button" onclick="resetPlanPeriodInputs()">Reset to ARR target</button>
-                <span id="planPeriodEditorStatus"></span>
-              </div>
-            </div>
+            <div class="pl-budget-note" id="planNewARRNote"></div>
             <div class="pl-assumption-card pl-new-phase" id="plNewCustomerPhasingCard">
               <div class="pl-assumption-heading">
                 <div>
@@ -801,7 +805,7 @@
       </div><!-- end cards wrapper -->
 
       <div class="button-group" style="position:sticky;bottom:0;background:white;padding:1rem 0;border-top:0.5px solid #e0e0e0;margin-top:1rem;z-index:10;">
-        <button onclick="goToStep2()">← Back to Step 2</button>
+        <button onclick="goToStep2(true)">← Back to Step 2</button>
         <button onclick="goToStep1()" style="color:#999;">Start Over</button>
       </div>
     </div>

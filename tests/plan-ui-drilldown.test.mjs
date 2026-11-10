@@ -6,7 +6,7 @@ import {
   growthMultipliers,growthMaxMonths,budgetDefaults,funnels
 } from '../src/domain/saas-profiles.js';
 import { annualGrossProfitLtv } from '../src/engine/unit-economics.js';
-import { forecastSaaS,buildRevenueBridge } from '../src/engine/cohort-budget.js';
+import { forecastSaaS,buildRevenueBridge,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS } from '../src/engine/cohort-budget.js';
 import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
 const originalApp=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
@@ -25,22 +25,31 @@ function createApp(timeframe=36){
     plChurnSlider:25,plExpansionSlider:25,plNewCustomerPhasingSlider:100,
     cashOpening:0,cashOtherOpex:1000,cashCollectionLag:0
   }).forEach(([id,v])=>node(id).value=String(v));
+  const timeframeInputs=[6,12,24,36,48,60].map(value=>({value:String(value),checked:value===timeframe}));
   const doc={
     getElementById:node,
-    querySelector:selector=>selector==='.container'?node('container'):
-      {value:selector.includes('currency')?'SEK':
-        selector.includes('companyStage')?'early':
-        selector.includes('timeframe')?String(timeframe):''},
+    querySelector:selector=>{
+      if(selector==='.container') return node('container');
+      if(selector.includes('timeframe')) {
+        if(selector.endsWith(':checked')) return timeframeInputs.find(input=>input.checked);
+        const input=timeframeInputs.find(input=>selector.includes('"'+input.value+'"]'));
+        if(!input) return null;
+        return {set checked(value) {
+          if(value) timeframeInputs.forEach(option=>{option.checked=option===input;});
+        }};
+      }
+      return {value:selector.includes('currency')?'SEK':selector.includes('companyStage')?'early':''};
+    },
     querySelectorAll:()=>[],
   };
   const win={_qtr:{},scrollTo(){},confirm(){return true;}};
   const factory=new Function('document','window','animals','targetDefaults','toEUR',
     'currencyFormats','paybackBenchmarks','cacRatios','growthMultipliers',
     'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv',
-    'forecastSaaS','renderCashPanel',appBody);
+    'forecastSaaS','churnPeriodRates','PLAN_GRANULARITIES','SIGNING_PATTERNS','renderCashPanel',appBody);
   const app=factory(doc,win,animals,targetDefaults,toEUR,currencyFormats,
     paybackBenchmarks,cacRatios,growthMultipliers,growthMaxMonths,budgetDefaults,
-    funnels,annualGrossProfitLtv,forecastSaaS,renderCashPanel);
+    funnels,annualGrossProfitLtv,forecastSaaS,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS,renderCashPanel);
   app.goToStep2();
   app.goToStep3();
   return {app,node,win};
@@ -49,6 +58,10 @@ const width=node=>{
   const m=node('plTable').innerHTML.match(/grid-template-columns:([^;]+);gap:5px;width:/);
   assert.ok(m,'Missing original forecast grid');
   return m[1].trim().split(/\s+/).length;
+};
+const setTarget=({app,node},amount)=>{
+  node('planTargetARR').value=String(amount);
+  app.onPlanInputsChange();
 };
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-6*Math.max(1,Math.abs(a),Math.abs(b)),a+' != '+b);
 
@@ -118,7 +131,7 @@ test('first-month phasing slider modifies the same cohort engine while preservin
   }
   app.resetPL();
   assert.equal(node('plNewCustomerPhasingDisplay').textContent,'100.0%');
-  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,200/3));
+  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,100));
 });
 test('normal strategy and cash panel stay operational with nested expansion',()=>{
   const {app,node,win}=createApp(12);
@@ -224,72 +237,56 @@ test('A and B1 toggle independently, while B2 always shows its two summary rows'
   assert.equal(win._latestMonthlyPlan,plan);
 });
 
-test('budget granularity Year/Quarter/Month changes the input engine, not the display layout',()=>{
-  const {app,node,win}=createApp(36);
-  assert.equal(width(node),4);
-  assert.equal(win._latestMonthlyPlan.granularity,'quarter');
-  assert.ok(!node('planPatternEVEN').disabled);
-  app.onPlanBudgetGranularityChange('year');
-  assert.equal(win._latestMonthlyPlan.granularity,'year');
-  assert.equal(win._latestMonthlyPlan.periodPhasing.length,3);
-  assert.match(node('plNewCustomerPhasingNote').textContent,/acquisition month/);
-  const signedBefore=win._latestMonthlyPlan.quarters.map(p=>p.newARR);
-  app.onNewCustomerPhasingChange('67');
-  win._latestMonthlyPlan.quarters.forEach((q,i)=>close(q.newARR,signedBefore[i]));
-  close(win._latestMonthlyPlan.monthlyBridge[0].currentNewNetRevenue,
-    win._latestMonthlyPlan.months[0].newARR/12*.67);
-  assert.equal(width(node),4);
-  app.onPlanBudgetGranularityChange('quarter');
-  assert.equal(win._latestMonthlyPlan.granularity,'quarter');
-  assert.equal(win._latestMonthlyPlan.periodPhasing.length,12);
-  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
-  app.onPlanBudgetGranularityChange('month');
-  assert.equal(win._latestMonthlyPlan.granularity,'month');
-  assert.equal(win._latestMonthlyPlan.periodPhasing.length,36);
-  assert.ok(!node('plNewCustomerPhasingSlider').disabled);
-  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
-  assert.ok(node('planPatternFRONT').disabled && node('planPatternBACK').disabled);
-  assert.ok(node('planMonthPatternFRONT').disabled && node('planMonthPatternBACK').disabled);
-  assert.equal(width(node),4);
-  const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
-  app.onNewCustomerPhasingChange('50');
-  assert.notEqual(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
-  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'50.0%');
-  app.onPlanBudgetGranularityChange('quarter');
-  assert.ok(!node('planPatternFRONT').disabled);
-  app.setQtrScenario('FRONT');
-  assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
-  assert.equal(width(node),4);
-  app.togglePlQtr(0);
-  assert.equal(width(node),8);
-  assert.ok(!node('planPatternFRONT').disabled);
+test('Churn period changes the rate interval while forecasts remain monthly and target-driven',()=>{
+  const scenario=createApp(12);
+  const {app,node,win}=scenario;
+  setTarget(scenario,1000000);
+  node('plChurnSlider').value='25';
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  const expected={year:[63,1],quarter:[124,4],month:[305,12]};
+  for(const [period,[customers,periods]] of Object.entries(expected)){
+    app.onChurnPeriodChange(period);
+    const plan=win._latestMonthlyPlan;
+    assert.equal(plan.churnPeriod,period);
+    assert.equal(plan.granularity,'month');
+    assert.equal(plan.summary.newCustomersNeeded,customers);
+    close(plan.years[0].originalEndARR,500000*.75**periods);
+    assert.equal(plan.manualBudget,false);
+    assert.equal(width(node),2);
+  }
+  assert.match(node('plChurnEquivalents').textContent,/96\.83% annually/);
+  assert.ok(node('plDistributionretention').hidden);
+  assert.ok(!node('plDistributionacquisition').hidden);
+  assert.match(node('planNewARRNote').textContent,/calculated from the closing CARR target/);
 });
 
-test('manual New CARR inputs obey budget periods and deactivate preset buttons without moving the grid',()=>{
-  const {app,node,win}=createApp(36);
-  app.togglePlanPeriodInputs();
-  assert.equal(node('planPeriodEditor').style.display,'block');
-  assert.ok(node('planPeriodInputGrid').innerHTML.includes('Y1 Q1'));
-  app.onPlanPeriodValueChange(0,'125000');
-  close(win._latestMonthlyPlan.quarters[0].newARR,125000);
-  assert.ok(node('planPatternEVEN').disabled);
-  assert.ok(node('planPatternFRONT').disabled);
-  assert.equal(width(node),4);
-  app.setQtrScenario('BACK'); // ignored while manual values are authoritative
-  assert.notEqual(win._latestMonthlyPlan.signingPattern,'BACK');
-  app.resetPlanPeriodInputs();
-  assert.equal(win._latestMonthlyPlan.manualBudget,false);
-  assert.ok(!node('planPatternEVEN').disabled);
-  assert.equal(width(node),4);
-  app.togglePlanPeriodInputs();
-  assert.equal(node('planPeriodEditor').style.display,'none');
+test('manual distribution weights start populated and control timing without setting an ARR amount',()=>{
+  const scenario=createApp(12);
+  const {app,node,win}=scenario;
+  setTarget(scenario,1000000);
+  node('plChurnSlider').value='25';
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  close(Number(node('plWeightretention0Q').value),25);
+  for(const kind of ['retention','acquisition']){
+    app.onDistributionWeightChange(kind,3,null,'100');
+    app.onDistributionWeightChange(kind,3,2,'100');
+    assert.equal(node('plDistributionStatus'+kind).textContent,'Custom');
+  }
+  const {monthlyBridge}=win._latestMonthlyPlan;
+  monthlyBridge.slice(0,-1).forEach(month=>{
+    close(month.originalChurnARR,0);
+    close(month.currentNewARR,0);
+  });
+  close(monthlyBridge.at(-1).originalChurnARR,125000);
+  close(monthlyBridge.at(-1).currentNewARR,630000);
+  close(monthlyBridge.at(-1).originalChurnThisMonth,-125000/12);
 });
 
 test('YEAR retention explicitly derives 25% churn and 51% expansion from opening CARR in the ORIGINAL matrix',()=>{
   const {app,node,win}=createApp(12);
-  app.onPlanBudgetGranularityChange('year');
-  app.togglePlanPeriodInputs();
-  app.onPlanPeriodValueChange(0,'0'); // remove New CARR to isolate existing cohort
+  setTarget({app,node},400000);
   node('plChurnSlider').value='25';
   node('plExpansionSlider').value='51';
   app.onPLSlider();
@@ -308,7 +305,7 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   assert.equal(node('plExistingPhaseNote').textContent,'Full effect in the month of change');
   close(y.endACV,y.endARR/y.endCustomers);
   assert.match(node('plTable').innerHTML,/Contracted ACV \(end\) = Closing CARR \/ Customers/);
-  assert.match(node('planBudgetGranularityNote').textContent,/New ARR budget: YEAR/);
+  assert.match(node('planNewARRNote').textContent,/Existing customers/);
   assert.ok(node('plNewCustomerPhasingSlider').disabled,'No new cohort means phasing has no relevance');
   assert.equal(node('plNewCustomerPhasingDisplay').textContent,'—');
   const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
@@ -323,8 +320,7 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
 
 test('Existing A shows the full revenue bridge, month-only detail and customer counts in the same grid',()=>{
   const {app,node,win}=createApp(12);
-  app.onPlanBudgetGranularityChange('year');
-  app.onPlanPeriodValueChange(0,'0');
+  setTarget({app,node},400000);
   node('plChurnSlider').value='25';
   node('plExpansionSlider').value='20';
   app.onPLSlider();
@@ -367,9 +363,9 @@ test('Existing A shows the full revenue bridge, month-only detail and customer c
 
 test('A valid explicit phase survives a new quarter preset without changing Existing A',()=>{
   const {app,node,win}=createApp(12);
-  app.onPlanBudgetGranularityChange('year');
-  app.setQtrScenario('FRONT');
-  assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
+  setTarget({app,node},2000000);
+  app.setDistributionPreset('acquisition','FRONT');
+  assert.equal(node('plDistributionStatusacquisition').textContent,'FRONT');
   const front=win._latestMonthlyPlan;
   assert.ok(front.summary.annualizedNewARR>0,'Expected New CARR to exercise signing presets');
   const frontPhasing=67;
@@ -377,35 +373,36 @@ test('A valid explicit phase survives a new quarter preset without changing Exis
   assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
   const existingBefore=win._latestMonthlyPlan.years[0];
   const q1Front=win._latestMonthlyPlan.quarters[0].newARR;
-  app.setQtrScenario('BACK');
-  assert.equal(win._latestMonthlyPlan.signingPattern,'BACK');
+  app.setDistributionPreset('acquisition','BACK');
+  assert.equal(node('plDistributionStatusacquisition').textContent,'BACK');
   const back=win._latestMonthlyPlan;
   assert.ok(back.quarters[0].newARR<q1Front,'BACK should defer first invoiced New CARR');
   close(back.years[0].originalChurnARR,existingBefore.originalChurnARR);
   close(back.years[0].originalExpansionARR,existingBefore.originalExpansionARR);
   close(back.years[0].originalNetRevenue,existingBefore.originalNetRevenue);
   assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
-  app.setQtrScenario('EVEN');
-  assert.equal(win._latestMonthlyPlan.signingPattern,'EVEN');
-  app.setQtrScenario('FRONT');
-  assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
+  app.setDistributionPreset('acquisition','EVEN');
+  assert.equal(node('plDistributionStatusacquisition').textContent,'EVEN');
+  app.setDistributionPreset('acquisition','FRONT');
+  assert.equal(node('plDistributionStatusacquisition').textContent,'FRONT');
 });
 
-test('67% first-month phasing reduces B2 in a quarter budget without reducing later B1 revenue',()=>{
+test('67% first-month phasing reduces B2 without reducing later B1 revenue',()=>{
   const {app,node,win}=createApp(12);
-  app.onPlanPeriodValueChange(0,'36000');
+  setTarget({app,node},2000000);
   const before=win._latestMonthlyPlan;
   app.onNewCustomerPhasingChange('67');
   const plan=win._latestMonthlyPlan;
   const [jan,feb,mar]=plan.monthlyBridge;
-  close(jan.currentNewARR,12000);
-  close(jan.currentNewNetRevenue,670);
+  const mrr=jan.currentNewARR/12;
+  assert.ok(mrr>0);
+  close(jan.currentNewNetRevenue,mrr*.67);
   close(jan.earlierNewNetRevenue,0);
-  close(feb.earlierNewNetRevenue,1000);
-  close(mar.earlierNewNetRevenue,2000);
-  close(plan.quarters[0].currentNewNetRevenue,2010);
-  close(plan.quarters[0].earlierNewNetRevenue,3000);
-  close(plan.quarters[0].newRevenue,5010);
+  close(feb.earlierNewNetRevenue,mrr);
+  close(mar.earlierNewNetRevenue,mrr*2);
+  close(plan.quarters[0].currentNewNetRevenue,mrr*3*.67);
+  close(plan.quarters[0].earlierNewNetRevenue,mrr*3);
+  close(plan.quarters[0].newRevenue,mrr*5.01);
   close(before.quarters[0].endARR,plan.quarters[0].endARR);
   close(plan.quarters[0].recognizedRevenue,
     jan.recognizedRevenue+feb.recognizedRevenue+mar.recognizedRevenue);
@@ -422,46 +419,33 @@ test('the churn slider updates the equivalent compound monthly and quarterly rat
   assert.match(node('plChurnEquivalents').textContent,/0\.00% monthly · 0\.00% quarterly/);
 });
 
-test('Budget level only clears manual amounts after confirmation and keeps the first-month phase',()=>{
+test('Step 3 changes update the opening ACV, profile and horizon without clearing scenario choices',()=>{
   const {app,node,win}=createApp(12);
-  app.onPlanPeriodValueChange(0,'50000');
-  app.onNewCustomerPhasingChange('25');
-  const manual=win._latestMonthlyPlan;
-  const confirmations=[];
-  win.confirm=message=>{confirmations.push(message);return false;};
-  node('planBudgetGranularity').value='month';
-  app.onPlanBudgetGranularityChange('month');
-  assert.equal(win._latestMonthlyPlan,manual);
-  assert.equal(node('planBudgetGranularity').value,'quarter');
-  assert.match(confirmations[0],/clear your manual New ARR amounts/);
-  win.confirm=()=>true;
-  app.onPlanBudgetGranularityChange('month');
-  assert.equal(win._latestMonthlyPlan.granularity,'month');
-  assert.equal(win._latestMonthlyPlan.manualBudget,false);
-  assert.equal(win._latestMonthlyPlan.periodPhasing[0],25);
-});
-
-test('independent quarter and month presets preserve one matrix and period revenue total',()=>{
-  const {app,node,win}=createApp(12);
-  app.onPlanBudgetGranularityChange('year');
-  app.setQtrScenario('FRONT');
-  app.setMonthScenario('EVEN');
-  const original=win._latestMonthlyPlan;
-  assert.equal(original.monthlySigningPattern,'EVEN');
-  close(original.quarters[0].newARR,original.years[0].newARR*.35);
-  close(original.months[0].newARR,original.months[1].newARR);
-  app.setMonthScenario('FRONT');
-  const front=win._latestMonthlyPlan;
-  assert.equal(front.signingPattern,'FRONT');
-  assert.equal(front.monthlySigningPattern,'FRONT');
-  close(front.quarters[0].newARR,original.quarters[0].newARR);
-  assert.ok(front.months[0].newARR>front.months[2].newARR);
-  assert.ok(node('planMonthPatternEVEN').disabled===false);
-  app.setMonthScenario('BACK');
-  const back=win._latestMonthlyPlan;
-  close(back.quarters[0].newARR,original.quarters[0].newARR);
-  assert.ok(back.months[0].newARR<back.months[2].newARR);
-  app.setMonthScenario('EVEN');
-  close(win._latestMonthlyPlan.quarters[0].newARR,original.quarters[0].newARR);
-  assert.equal(width(node),2);
+  assert.equal(node('planStartARR').value,'500000');
+  assert.equal(node('planOpeningCustomers').value,'50');
+  assert.equal(node('planTimePeriod').value,'12');
+  const animal=node('planAnimal').textContent;
+  app.onChurnPeriodChange('month');
+  app.setDistributionPreset('acquisition','BACK');
+  node('planOpeningCustomers').value='5';
+  node('planStartARR').value='900000';
+  node('planTargetARR').value='1800000';
+  node('planTimePeriod').value='24';
+  node('planGrossMargin').value='75';
+  app.onPlanInputsChange();
+  const plan=win._latestMonthlyPlan;
+  assert.equal(plan.months.length,24);
+  assert.equal(plan.churnPeriod,'month');
+  assert.equal(node('plDistributionStatusacquisition').textContent,'BACK');
+  close(plan.months[0].startARR,900000);
+  close(plan.months[0].newACV,180000);
+  close(plan.months[0].grossProfit,plan.months[0].recognizedRevenue*.75);
+  assert.notEqual(node('planAnimal').textContent,animal);
+  assert.equal(node('customers').value,'5');
+  assert.equal(node('targetRevenue').value,'1800000');
+  assert.equal(node('timeframeDisplay').textContent,'24 months');
+  node('planOpeningCustomers').value='0';
+  app.onPlanInputsChange();
+  assert.equal(win._latestMonthlyPlan,plan);
+  assert.match(node('planInputsError').textContent,/valid opening values/);
 });
