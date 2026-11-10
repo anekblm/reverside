@@ -1739,7 +1739,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     const divider = () => `<div style="grid-column:1/-1;border-top:0.5px solid #e0e0e0;margin:2px 0;"></div>`;
 
-    let html = `<div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
+    const compactClass=plMatrixExpanded?'':' class="pl-matrix-totals"';
+    let html = `<div${compactClass} style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
 
     // ── HEADERS ──
     html += `<div></div>`;
