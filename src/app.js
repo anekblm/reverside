@@ -1799,12 +1799,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
     }
 
-    const cohortHeading = (key,title) => {
+    const cohortHeading = (key,title,subtitle) => {
       const expanded=plExpandedCohorts.has(key);
       html += divider();
+      const headingText=`<span><span class="pl-cohort-title">${title}</span>
+        <span class="pl-cohort-subtitle">(${subtitle})</span></span>`;
       const heading=key?`<button type="button" class="pl-cohort-toggle" id="plCohortToggle${key}" aria-expanded="${expanded}" onclick="togglePlCohort('${key}')">
-        <span aria-hidden="true">${expanded?'▾':'▸'}</span><span>${title}</span>
-      </button>`:title;
+        <span aria-hidden="true">${expanded?'▾':'▸'}</span>${headingText}
+      </button>`:`<span class="pl-cohort-heading-static">${headingText}</span>`;
       html += label(heading, false, true, '#444');
       for (let y=0;y<years;y++) html += eachPeriod(y,()=>'<div></div>');
       return expanded;
@@ -1845,13 +1847,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       });
     };
 
-    const expandedA=cohortHeading('A','A. Existing Customers');
-    cohortARRRow('Opening CARR · A','original','StartARR',{noteKey:'StartCustomers'});
+    const expandedA=cohortHeading('A','A – EXISTING CUSTOMERS','from previous year');
+    cohortARRRow('Opening CARR','original','StartARR',{noteKey:'StartCustomers'});
     if(expandedA) {
       cohortARRRow('− Churn CARR','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
       cohortARRRow('+ Expansion CARR','original','ExpansionARR');
     }
-    cohortARRRow('Closing CARR · A','original','EndARR',{bold:true,noteKey:'EndCustomers'});
+    cohortARRRow('Closing CARR','original','EndARR',{bold:true,noteKey:'EndCustomers'});
     if(expandedA) {
       recognizedRow('Revenue before changes','originalBaseRevenue',{bold:false,indent:true});
       recognizedRow('− Churn impact','originalChurnRevenueImpact',
@@ -1859,31 +1861,31 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       recognizedRow('+ Expansion impact','originalExpansionRevenueImpact',
         {bold:false,indent:true,color:'#3B6D11',monthNoteKey:'originalExpansionThisMonth'});
     }
-    recognizedRow('Recognized Revenue · A','originalNetRevenue',{indent:true});
+    recognizedRow('Recognized Revenue','originalNetRevenue',{indent:true});
 
-    const expandedB=cohortHeading('B','B. New Customers – Earlier This Year');
-    cohortARRRow('Of which: Opening CARR – Earlier New (B)','earlier','StartARR',{noteKey:'StartCustomers'});
+    const expandedB=cohortHeading('B','B – NEW CUSTOMERS','acquired this year - accumulated');
+    cohortARRRow('Opening CARR','earlier','StartARR',{noteKey:'StartCustomers'});
     if(expandedB) {
       cohortARRRow('+ Transferred from C','earlier','TransferARR',{noteKey:'TransferCustomers'});
-      cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-      cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
+      cohortARRRow('− Churn CARR','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+      cohortARRRow('+ Expansion CARR','earlier','ExpansionARR');
     }
-    cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
+    cohortARRRow('Closing CARR','earlier','EndARR',{bold:true});
     if(expandedB) {
-      recognizedRow('Revenue before changes · B','earlierNewBaseRevenue',
+      recognizedRow('Revenue before changes','earlierNewBaseRevenue',
         {bold:false,indent:true});
-      recognizedRow('− Revenue impact · churn (B)','earlierNewChurnRevenueImpact',
+      recognizedRow('− Churn impact','earlierNewChurnRevenueImpact',
         {bold:false,indent:true,color:'#E24B4A'});
-      recognizedRow('+ Revenue impact · expansion (B)','earlierNewExpansionRevenueImpact',
+      recognizedRow('+ Expansion impact','earlierNewExpansionRevenueImpact',
         {bold:false,indent:true,color:'#3B6D11'});
-      recognizedRow('− Revenue phasing · earlier new (B)','earlierNewRealizationImpact',
+      recognizedRow('− Revenue phasing','earlierNewRealizationImpact',
         {bold:false,indent:true,color:'#E24B4A'});
     }
-    recognizedRow('Recognized Revenue · B','earlierNewNetRevenue',{indent:true});
+    recognizedRow('Recognized Revenue','earlierNewNetRevenue',{indent:true});
 
-    cohortHeading(null,'C. New Customers – First Month');
-    cohortARRRow('+ New Contracted ARR','current','NewARR',{noteKey:'NewCustomers'});
-    recognizedRow('Recognized Revenue · C','currentNewNetRevenue',{indent:true});
+    cohortHeading(null,'C – NEW CUSTOMERS','acquired this year - new in period');
+    cohortARRRow('New CARR','current','NewARR',{noteKey:'NewCustomers'});
+    recognizedRow('Recognized Revenue','currentNewNetRevenue',{indent:true});
 
     html += divider();
     recognizedRow('Recognized Revenue – Existing (A)','existingRevenue');

@@ -98,7 +98,7 @@ test('Period CARR scales the displayed rate to the column length without recalcu
   assert.equal(firstCell(),currencyFormats.SEK(500000));
   assert.equal(win._latestMonthlyPlan,plan);
   assert.equal(width(node),7);
-  const revenueCell=html=>html.split('>Recognized Revenue · A</div>')[1].match(/^<div[^>]*>\s*([^<]+)/)[1].trim();
+  const revenueCell=html=>html.split('>Recognized Revenue</div>')[1].match(/^<div[^>]*>\s*([^<]+)/)[1].trim();
   assert.equal(revenueCell(node('plTable').innerHTML),revenueCell(withMonths));
 });
 test('quarter phasing slider modifies the same cohort engine while preserving open month columns',()=>{
@@ -125,7 +125,7 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   app.togglePlMonth(0,0);
   app.selectStrategy('efficient');
   assert.match(node('cashFlowPanel').innerHTML,/Operating cash flow/);
-  assert.match(node('plTable').innerHTML,/B\. New Customers – Earlier This Year/);
+  assert.match(node('plTable').innerHTML,/B – NEW CUSTOMERS/);
   assert.equal(win._latestMonthlyPlan.months.length,12);
 });
 
@@ -133,22 +133,25 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   const {app,node,win}=createApp(36);
   const required=[
     '>Opening CARR</div>',
-    'A. Existing Customers',
-    'Opening CARR · A',
+    'A – EXISTING CUSTOMERS',
+    '(from previous year)',
+    '>Opening CARR</div>',
     '>− Churn CARR</div>',
     '>+ Expansion CARR</div>',
-    'Closing CARR · A',
-    'Recognized Revenue · A',
-    'B. New Customers – Earlier This Year',
-    'Of which: Opening CARR – Earlier New (B)',
+    '>Closing CARR</div>',
+    '>Recognized Revenue</div>',
+    'B – NEW CUSTOMERS',
+    '(acquired this year - accumulated)',
+    '>Opening CARR</div>',
     '+ Transferred from C',
-    '− Churn CARR – B',
-    '+ Expansion CARR – B',
-    'Closing CARR – B',
-    'Recognized Revenue · B',
-    'C. New Customers – First Month',
-    '+ New Contracted ARR',
-    'Recognized Revenue · C',
+    '>− Churn CARR</div>',
+    '>+ Expansion CARR</div>',
+    '>Closing CARR</div>',
+    '>Recognized Revenue</div>',
+    'C – NEW CUSTOMERS',
+    '(acquired this year - new in period)',
+    '>New CARR</div>',
+    '>Recognized Revenue</div>',
     'Recognized Revenue – Existing (A)',
     'Recognized Revenue – New (B+C)',
     'Total Recognized Revenue',
@@ -156,11 +159,12 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
-    required.forEach(label=>assert.ok(html.includes(label),'Missing label '+label));
+    let position=-1;
+    for(const label of required) {
+      position=html.indexOf(label,position+1);
+      assert.notEqual(position,-1,'Missing or out-of-order label '+label);
+    }
     assert.ok(!html.includes('id="revenueMatrix"'),'A separate revenue table must not be added');
-    const positions=required.map(label=>html.indexOf(label));
-    assert.ok(positions.every((v,i)=>v>=0&&(i===0||v>positions[i-1])),
-      'Opening CARR, cohort changes, recognized revenue totals and closing CARR must appear in the agreed order');
     assert.ok(!html.includes('New MRR · first invoice'),
       'Remove the obsolete duplicate ARR/MRR block');
   };
@@ -203,21 +207,20 @@ test('A and B toggle independently, while C always shows only its two summary ro
   const html=()=>node('plTable').innerHTML;
   for(const key of ['A','B']) {
     assert.match(html(),new RegExp('id="plCohortToggle'+key+'" aria-expanded="false"'));
-    assert.match(html(),new RegExp('Recognized Revenue · '+key));
   }
-  assert.match(html(),/Recognized Revenue · C/);
-  assert.doesNotMatch(html(),/plCohortToggleC|Closing CARR – C|Revenue phasing · current new/);
-  assert.doesNotMatch(html(),/Revenue before changes|Revenue phasing · earlier new|Transferred from C/);
+  assert.equal((html().match(/>Recognized Revenue<\/div>/g)??[]).length,3);
+  assert.doesNotMatch(html(),/plCohortToggleC/);
+  assert.doesNotMatch(html(),/Revenue before changes|− Revenue phasing|Transferred from C/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
-  assert.match(html(),/Revenue phasing · earlier new/);
+  assert.match(html(),/− Revenue phasing/);
   assert.match(html(),/Transferred from C/);
-  assert.doesNotMatch(html(),/Revenue before changes<\/div>|Revenue phasing · current new/);
+  assert.match(html(),/id="plCohortToggleA" aria-expanded="false"/);
   app.togglePlQtr(0);
   app.togglePlMonth(0,1);
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   app.togglePlCohort('B');
-  assert.doesNotMatch(html(),/Revenue phasing · earlier new/);
+  assert.doesNotMatch(html(),/− Revenue phasing/);
   assert.equal(win._latestMonthlyPlan,plan);
 });
 
