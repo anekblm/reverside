@@ -1,6 +1,6 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
 import { annualGrossProfitLtv } from "./engine/unit-economics.js";
-import { forecastSaaS, maximumNewRevenuePhase } from "./engine/cohort-budget.js";
+import { forecastSaaS } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
 
@@ -641,7 +641,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plUseExpACV = false; // Use expanded ACV for new customer count calculation
   let plQtrScenario = 'EVEN'; // New CARR between quarters
   let plMonthScenario = 'EVEN'; // New CARR between months INSIDE each quarter
-  let plQuarterPhasing = null; // null = implied phase in the selected budget period
+  let plNewCustomerPhase = 100;
   let plExistingRetention = { pattern: 'EVEN', phasePercent: 50 };
   let plBudgetGranularity = 'quarter';
   let plPeriodOverride = null; // explicit New Contracted ARR per budget period
@@ -661,7 +661,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     quarterSMShares = {};
     plPeriodOverride = null;
     plPeriodInputsOpen = false;
-    plQuarterPhasing = null;
+    plNewCustomerPhase = 100;
     document.getElementById('budgetSummarySection').style.display = 'none';
     populateStrategyCards();
     initPLSliders();
@@ -1115,16 +1115,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
-  function onQuarterPhasingChange(value) {
+  function onNewCustomerPhasingChange(value) {
     if (!(window._latestMonthlyPlan?.summary?.annualizedNewARR>1e-8)) return;
-    const fraction = Number(value);
-    const ranges=window._latestMonthlyPlan?.periodPhaseRanges??[];
-    const minimum=ranges.length?Math.max(...ranges.map(r=>r[0])):0;
-    const maximum=ranges.length?Math.min(...ranges.map(r=>r[1])):100;
-    if (!Number.isFinite(fraction) || fraction < minimum || fraction > maximum+1e-8) return;
-    plQuarterPhasing = fraction;
-    const output = document.getElementById('plQuarterPhasingDisplay');
-    if (output) output.textContent = fraction.toFixed(1) + '%';
+    const percent = Number(value);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) return;
+    plNewCustomerPhase = percent;
     updateStep3Display();
   }
 
@@ -1156,6 +1151,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const expPct   = Math.round((plExpansion || 0) * 100);
     const nrr      = Math.round((1 - (plChurn||0) + (plExpansion||0)) * 100);
     cd.textContent = churnPct + '%';
+    const equivalents = document.getElementById('plChurnEquivalents');
+    if (equivalents) {
+      const annualRetention = 1 - (plChurn ?? 0);
+      const monthly = ((1 - annualRetention ** (1 / 12)) * 100).toFixed(2);
+      const quarterly = ((1 - annualRetention ** (1 / 4)) * 100).toFixed(2);
+      equivalents.textContent = `Equivalent at a constant rate · ${monthly}% monthly · ${quarterly}% quarterly`;
+    }
     ed.textContent = expPct + '%';
     if (nd) {
       nd.textContent = nrr + '%';
@@ -1192,10 +1194,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function resetPL() {
-    plQuarterPhasing = null;
+    plNewCustomerPhase = 100;
     plExistingRetention = { pattern: 'EVEN', phasePercent: 50 };
-    const slider = document.getElementById('plQuarterPhasingSlider');
-    if (slider) slider.value = '66.7';
     initPLSliders();
     updateStep3Display();
   }
@@ -1398,19 +1398,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   function setNewARRDistribution(signingPattern, monthlySigningPattern) {
     if (plBudgetGranularity==='month' || plPeriodOverride!==null) return;
     if (signingPattern===plQtrScenario && monthlySigningPattern===plMonthScenario) return;
-    if (plQuarterPhasing!==null) {
-      const maximum=maximumNewRevenuePhase({
-        months:state.timeframe, granularity:plBudgetGranularity, yearShares:yearSplit,
-        signingPattern, monthlySigningPattern,
-      });
-      if (plQuarterPhasing>maximum+1e-8) {
-        const notice=document.getElementById('planNewARRNotice');
-        const limit=Math.floor((maximum+1e-8)*10)/10;
-        notice.textContent='This distribution supports up to '+limit+'% new customer phasing. '+
-          'Lower phasing to '+limit+'% or less before changing the distribution.';
-        return;
-      }
-    }
     plQtrScenario=signingPattern;
     plMonthScenario=monthlySigningPattern;
     updateStep3Display();
@@ -1418,15 +1405,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   function onPlanBudgetGranularityChange(value) {
     if (!['year','quarter','month'].includes(value) || plBudgetGranularity===value) return;
-    const resets=[];
-    if (plPeriodOverride!==null) resets.push('clear your manual New ARR amounts');
-    if (plQuarterPhasing!==null) resets.push('reset new customer phasing for the new period');
-    if (resets.length && !window.confirm('Changing the New ARR budget level will '+resets.join(' and ')+'. Continue?')) {
+    if (plPeriodOverride!==null && !window.confirm('Changing the New ARR budget level will clear your manual New ARR amounts. Continue?')) {
       document.getElementById('planBudgetGranularity').value=plBudgetGranularity;
       return;
     }
     plBudgetGranularity=value;
-    plQuarterPhasing=null;
     plPeriodOverride=null; // Never reinterpret an amount set for a different period length.
     updateStep3Display();
   }
@@ -1459,8 +1442,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function renderPlanToolbar(model) {
-    const notice=document.getElementById('planNewARRNotice');
-    if(notice) notice.textContent='';
     const select=document.getElementById('planBudgetGranularity');
     if(select) select.value=plBudgetGranularity;
     const existingPattern=document.getElementById('plExistingPattern');
@@ -1487,34 +1468,20 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const oldSelect=document.getElementById('signingPattern');
     if(oldSelect) {oldSelect.value=plQtrScenario;oldSelect.disabled=!presetsEnabled;}
     const width=plBudgetGranularity==='year'?12:plBudgetGranularity==='quarter'?3:1;
-    const ranges=model.periodPhaseRanges??[];
-    const min=ranges.length?Math.max(...ranges.map(r=>r[0])):100/width;
-    const max=ranges.length?Math.min(...ranges.map(r=>r[1])):100;
     const hasNewCARR=model.summary.annualizedNewARR>1e-8;
-    const phaseActive=hasNewCARR;
-    const slider=document.getElementById('plQuarterPhasingSlider');
-    const card=document.getElementById('plQuarterPhasingCard');
-    const note=document.getElementById('plQuarterPhasingNote');
-    const output=document.getElementById('plQuarterPhasingDisplay');
-    if(card) card.style.opacity=phaseActive?'1':'0.55';
-    if(note) note.textContent=phaseActive
-      ? 'Share of full-period revenue earned in the acquisition '+plBudgetGranularity
+    const slider=document.getElementById('plNewCustomerPhasingSlider');
+    const card=document.getElementById('plNewCustomerPhasingCard');
+    const note=document.getElementById('plNewCustomerPhasingNote');
+    const output=document.getElementById('plNewCustomerPhasingDisplay');
+    if(card) card.style.opacity=hasNewCARR?'1':'0.55';
+    if(note) note.textContent=hasNewCARR
+      ? 'Share of monthly revenue earned in the acquisition month. Full revenue from the following month.'
       : 'Inactive without New CARR';
     if(slider){
-      slider.disabled=!phaseActive;
-      slider.min=String(min);
-      slider.max=String(max);
-      slider.value=String(plQuarterPhasing??model.periodPhasing[0]??100);
+      slider.disabled=!hasNewCARR;
+      slider.value=String(plNewCustomerPhase);
     }
-    if(output) output.textContent=phaseActive
-      ?(plQuarterPhasing??model.periodPhasing[0]).toFixed(1)+'%'
-      : '—';
-    const minimumLabel=document.getElementById('plPhasingMinLabel');
-    if(minimumLabel) minimumLabel.textContent=phaseActive
-      ? '0% · no revenue in start period' : 'Not applicable';
-    const maximumLabel=document.getElementById('plPhasingMaxLabel');
-    if(maximumLabel) maximumLabel.textContent=phaseActive
-      ? max.toFixed(1)+'% · maximum from signed months' : 'No new customers';
+    if(output) output.textContent=hasNewCARR?plNewCustomerPhase.toFixed(1)+'%':'—';
     const modeNote=document.getElementById('planBudgetGranularityNote');
     if(modeNote) {
       modeNote.textContent=
@@ -1524,9 +1491,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
           :'Existing cohorts already achieve the CARR target; no New CARR is needed and phasing is inactive. '): '')+
         (hasNewCARR
           ? ' New CARR uses '+(plBudgetGranularity==='month'?'monthly amounts':
-            plQtrScenario+' between quarters and '+plMonthScenario+' within quarters')+
-            '. Revenue phasing is calculated on the selected budget period, '+
-            '0–'+max.toFixed(1)+'% with the current signed months. ':'')+
+            plQtrScenario+' between quarters and '+plMonthScenario+' within quarters')+'. ':'')+
         (plPeriodOverride
           ? 'Custom New CARR overrides the target; closing CARR is an output.'
           : 'Closing CARR target sets the required New CARR.');
@@ -1619,7 +1584,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       months: state.timeframe,
       openingARR: state.revenue, openingCustomers: state.customers,
       acv, targetARR: state.targetRevenue, granularity: plBudgetGranularity,
-      phasePercent: plQuarterPhasing,
+      newCustomerFirstMonthPhasePercent: plNewCustomerPhase,
       existingRetention: plExistingRetention,
       newARRByPeriod: plPeriodOverride,
       annualChurn: churnRate, annualExpansionComp: expRate, grossMargin,
@@ -1879,8 +1844,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         {bold:false,indent:true,color:'#E24B4A'});
       recognizedRow('+ Expansion impact','earlierNewExpansionRevenueImpact',
         {bold:false,indent:true,color:'#3B6D11'});
-      recognizedRow('− Revenue phasing','earlierNewRealizationImpact',
-        {bold:false,indent:true,color:'#E24B4A'});
     }
     recognizedRow('Recognized Revenue','earlierNewNetRevenue',{indent:true});
 
@@ -1913,7 +1876,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       A uses the year-opening CARR as its revenue base. Its churn and expansion
       rows include the effect of changes from earlier months in the year.
       In a monthly cell, “of which” shows the portion from that month's own change.
-      New customer phasing applies once in the acquisition budget period.
+      New customer phasing applies once in the acquisition month.
       Opening CARR - churn + expansion + new CARR = Closing CARR.
       Recognized Existing (A) + Recognized New (B1 + B2) = Total Recognized Revenue.
       B2 shows new CARR and first-month recognized revenue. The following month,
@@ -2198,7 +2161,7 @@ Object.assign(window, {
   resetPL,
   onPLSlider,
   onExistingRetentionChange,
-  onQuarterPhasingChange,
+  onNewCustomerPhasingChange,
   onPlanBudgetGranularityChange,
   togglePlanPeriodInputs,
   onPlanPeriodValueChange,

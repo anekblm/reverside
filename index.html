@@ -487,7 +487,7 @@
             <button onclick="resetPL()" style="flex:none;padding:0.3rem 0.75rem;font-size:11px;font-weight:500;color:#555;background:white;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;">Reset churn, expansion &amp; timing</button>
           </div>
           <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
-            Adjust churn and expansion to model your growth scenario. Existing customer changes are allocated over the year. New customer phasing applies to revenue in the acquisition budget period. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
+            Adjust churn and expansion to model your growth scenario. Existing customer changes are allocated over the year. New customer phasing applies to revenue in the acquisition month. This forecast shows gross profit less sales &amp; marketing, and excludes other operating costs, financing cash flows, and working capital. It is not a cash-runway forecast.
             <div style="margin-top:0.5rem;font-size:11px;color:#666;line-height:1.6;">
               Expansion Compensation is a 1:1 percentage point offset to churn — setting both to 25% results in NRR 100% (flat base). The actual expansion required per retained customer is always higher than the compensation rate, because expansion is spread across fewer customers after churn. Example: 25% churn + 25% expansion compensation → 33% expansion per retained customer.
             </div>
@@ -508,7 +508,8 @@
                   <div class="pl-assumption-value" style="color:#E24B4A;" id="plChurnDisplay">—</div>
                 </div>
                 <input type="range" id="plChurnSlider" min="0" max="80" step="1" value="25"
-                  oninput="onPLSlider()" aria-label="Annual ARR churn rate">
+                  oninput="onPLSlider()" aria-label="Annual ARR churn rate" aria-describedby="plChurnEquivalents">
+                <div class="pl-assumption-note" id="plChurnEquivalents"></div>
               </div>
 
               <div class="pl-assumption-card">
@@ -593,7 +594,6 @@
             <div class="pl-budget-note" id="planBudgetGranularityNote">
               Quarterly budget. Monthly values are generated automatically.
             </div>
-            <div class="pl-budget-warning" id="planNewARRNotice" role="status"></div>
             <div id="planPeriodEditor" class="pl-period-editor" style="display:none;">
               <div class="pl-period-editor-title">New Contracted ARR at first invoice · per budget period</div>
               <div id="planPeriodInputGrid" class="pl-period-input-grid"></div>
@@ -602,20 +602,20 @@
                 <span id="planPeriodEditorStatus"></span>
               </div>
             </div>
-            <div class="pl-assumption-card pl-new-phase" id="plQuarterPhasingCard">
+            <div class="pl-assumption-card pl-new-phase" id="plNewCustomerPhasingCard">
               <div class="pl-assumption-heading">
                 <div>
-                  <div class="pl-assumption-name" id="plQuarterPhasingLabel">New customer revenue phasing</div>
-                  <div class="pl-assumption-description" id="plQuarterPhasingNote">Share of new customer revenue earned in the acquisition quarter</div>
+                  <div class="pl-assumption-name" id="plNewCustomerPhasingLabel">New customer first-month revenue</div>
+                  <div class="pl-assumption-description" id="plNewCustomerPhasingNote">Share of monthly revenue earned in the acquisition month. Full revenue from the following month.</div>
                 </div>
-                <div class="pl-assumption-value" style="color:#185FA5;" id="plQuarterPhasingDisplay">66.7%</div>
+                <div class="pl-assumption-value" style="color:#185FA5;" id="plNewCustomerPhasingDisplay">100.0%</div>
               </div>
-              <input type="range" id="plQuarterPhasingSlider"
-                min="0" max="100" step="0.1" value="66.7"
-                oninput="onQuarterPhasingChange(this.value)" aria-labelledby="plQuarterPhasingLabel" aria-describedby="plQuarterPhasingNote">
+              <input type="range" id="plNewCustomerPhasingSlider"
+                min="0" max="100" step="0.1" value="100"
+                oninput="onNewCustomerPhasingChange(this.value)" aria-labelledby="plNewCustomerPhasingLabel" aria-describedby="plNewCustomerPhasingNote">
               <div class="pl-phasing-ends">
-                <span id="plPhasingMinLabel">0% · no revenue in start period</span>
-                <span id="plPhasingMaxLabel">66.7% · maximum from signed months</span>
+                <span>0% · no first-month revenue</span>
+                <span>100% · full first-month revenue</span>
               </div>
             </div>
           </section>

@@ -60,17 +60,16 @@ values, customer counts and year/quarter/month reconciliation.
 
 ### Budget granularity
 
-- Year, Quarter or Month sets the input period for new CARR and for its
-  acquisition revenue phasing. A uses the annual schedule defined above.
+- Year, Quarter or Month sets the input period for new CARR and B1
+  retention. A uses the annual schedule defined above.
 
 When planning a full year, Front/Even/Back set **quarterly New Contracted ARR shares**:
 35/30/20/15, 25/25/25/25 or 15/20/25/40. Within each quarter the default
 distribution is EVEN across its three months, independently of the full-year
 quarter pattern.
 
-Revenue phasing preserves the selected signing distribution and signed
-CARR for every period. The [acquisition contract](PLAN_BUDGET_PHASING_CONTRACT.md)
-documents the requirements and current UI gaps.
+First-month revenue phasing preserves the selected signing distribution
+and signed CARR. The same setting applies at every budget level.
 
 Manual period ARR inputs override target-derived new customer amounts;
 closing CARR then becomes an output, not a forced target.
@@ -87,14 +86,13 @@ derived from quarter/year budgets are allocated forecasts.
 1. **Original base (pre-existing at the current year's start):**
    starting MRR revenue, less revenue impact from churn, plus revenue impact
    from expansion, all summed over months in the displayed period.
-2. **B, earlier new cohorts:** revenue in months after acquisition within the
-   same year. Sum monthly opening MRR, churn and expansion effects, and
-   any acquisition-period phasing assigned to those months.
-3. **C, first-month cohorts:** recognized revenue in the acquisition month.
-   This includes the applicable first-month share of acquisition phasing.
+2. **B1, accumulated:** revenue in months after acquisition within the same
+   year. Sum monthly opening MRR and eligible churn and expansion effects.
+3. **B2, new in period:** recognized revenue in the acquisition month,
+   after first-month phasing.
 
-For a January customer, January's revenue is in C and February's revenue is
-in B. This split also applies within the Q1 and annual totals. At the start
+For a January customer, January's revenue is in B2 and February's revenue is
+in B1. This split also applies within the Q1 and annual totals. At the start
 of the following year the customer joins A.
 
 The ARR Bridge separately reconciles:
@@ -102,8 +100,19 @@ The ARR Bridge separately reconciles:
 ARR/MRR at year or quarter end is the *last month's stock*, never a sum of
 monthly ARR/MRR values. Recognized revenue and cashflows *are* summed.
 
-## Acquisition phasing and feasibility
+## First-month revenue phasing
 
+In PLAN, recognized revenue for the acquisition month equals
+`new CARR / 12 × first-month revenue %`. The slider ranges from 0% to
+100% and defaults to 100%. Each cohort earns full active monthly revenue
+from the following month. Quarter and year columns sum the monthly ledger.
+For example, 12,000 in January New CARR at 67% yields 670 in January B2
+and 1,000 from that cohort in February B1 before any retention changes.
+
+### Engine compatibility for budget-period phasing
+
+Callers using the earlier `phasePercent` or `phaseByPeriod` inputs
+without `newCustomerFirstMonthPhasePercent` retain the budget-period rule.
 For a budget period of `L` months, the maximum before timing constraints
 is `new CARR × L / 12`. Acquisition-period recognized revenue equals
 that maximum × the selected phase. The engine caps the phase at the amount
@@ -163,8 +172,11 @@ feasible range depending on actual months.
   changes. The monthly allocation can be viewed but never silently treated
   as a revised monthly-budget forecast.
 - Newly acquired cohorts become eligible for churn and expansion after
-  their acquisition budget period. During that period their revenue follows
-  acquisition phasing.
+  their acquisition budget period. The annual slider inputs are shared
+  with A. At 25% annual churn, the constant-rate equivalents are 2.37%
+  monthly and 6.94% quarterly. A allocates its annual CARR churn amount
+  across the chosen timing pattern, so its actual monthly percentage
+  varies with the pattern and the month's opening CARR.
 - COGS cash proxy = recognized revenue × (1 − gross margin), paid in the
   same month. Other OPEX cash payments are a separately entered monthly value.
 - Monthly cash collection = monthly earned subscription revenue shifted by

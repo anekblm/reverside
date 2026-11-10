@@ -87,6 +87,7 @@ function monthlyTemplateWeights(months,yearShares=[],quarterPattern="EVEN",
 }
 function firstInvoiceWeights(input) {
   const {months,granularity,phasePercent,phaseByPeriod,newARRByPeriod}=input;
+  const firstMonthPhase=input.newCustomerFirstMonthPhasePercent;
   const width=periodMonths(granularity);
   const count=Math.ceil(months/width);
   const template=monthlyTemplateWeights(months,input.yearShares,input.signingPattern,
@@ -106,14 +107,18 @@ function firstInvoiceWeights(input) {
     const normalized=withinSum>0?within.map(v=>v/withinSum):
       Array(within.length).fill(1/within.length);
     const natural=phaseFraction(normalized)*100;
-    const requested=phaseByPeriod?.[p]??phasePercent??natural;
+    // Each signing cohort contributes one acquisition month out of the period.
+    const minimum=firstMonthPhase==null?0:Math.max(0,natural-100/within.length);
+    const requested=firstMonthPhase==null
+      ? phaseByPeriod?.[p]??phasePercent??natural
+      : minimum+(natural-minimum)*firstMonthPhase/100;
     finite(requested,"Revenue phasing for period "+(p+1));
     if(requested>natural+1e-8&&!(newARRByPeriod&&newARRByPeriod[p]===0))throw new RangeError(
       "Revenue phasing "+Number(requested).toFixed(2)+"% exceeds "+
       natural.toFixed(2)+"% realizable with the chosen signing months "+
       "in budget period "+(p+1)+
       ". Choose an earlier within-quarter signing pattern or edit signing amounts.");
-    phaseRanges.push([0,natural]);
+    phaseRanges.push([minimum,natural]);
     phase.push(requested);
     weights.push(...normalized.map(v=>v*periodTotals[p]));
     intraPeriodWeights.push(...normalized);
@@ -398,7 +403,8 @@ export function buildRevenueBridge(monthly, view = "quarter") {
  * Full monthly SaaS plan. Budget level changes input assumptions; view level
  * only re-groups the SAME saved monthly cohort ledger.
  *
- * phasePercent/phaseByPeriod apply to new cohorts in their acquisition budget period.
+ * newCustomerFirstMonthPhasePercent applies only to the acquisition month.
+ * Otherwise phasePercent/phaseByPeriod apply to the acquisition budget period.
  * existingRetention allocates start-of-year cohorts' annual changes over 12 months
  * and sets the fraction of each change earned in its first month.
  */
@@ -425,6 +431,9 @@ export function forecastSaaS(input) {
     throw new RangeError("Collection lag must be whole months from 0 to 12");
   const openingCash=finite(input.openingCash??0,"openingCash",-1e15);
   const otherOpexMonthly=finite(input.otherOpexMonthly??0,"otherOpexMonthly");
+  const firstMonthPhase=input.newCustomerFirstMonthPhasePercent;
+  if(firstMonthPhase!=null && finite(firstMonthPhase,"New customer first-month revenue phasing")>100)
+    throw new RangeError("New customer first-month revenue phasing must be <= 100%");
   const yearsCount=Math.ceil(months/12);
   const {weights,phase,phaseRanges,periodTotals,intraPeriodWeights}=
     firstInvoiceWeights({...input,months,granularity});
@@ -466,10 +475,8 @@ export function forecastSaaS(input) {
     m.budgetPeriod=monthToPeriod(i,granularity);
     m.effectivePeriodPhasing=phase[m.budgetPeriod];
   });
-  // Budget-level recognition is computed ONCE, then stored in the monthly
-  // ledger for TRACK. Contracted New ARR and cohort churn remain unchanged.
-  // This allocated first-period realization may lag contracted ARR; it must
-  // never be re-applied when the user expands a period in the matrix.
+  // Store realization once in the monthly ledger for TRACK and every view.
+  // Contracted New ARR and cohort churn are calculated independently.
   for(let p=0;p<periodTotals.length;p++){
     const begin=p*width,end=Math.min(months,begin+width);
     const budget=monthly.slice(begin,end);
@@ -485,7 +492,11 @@ export function forecastSaaS(input) {
       for(const c of row.cohortFlows){
         const currentBudgetCohort=c.firstInvoiceMonth>=begin&&c.firstInvoiceMonth<end;
         const raw=c.recognizedRevenue;
-        c.recognizedRevenue=currentBudgetCohort?raw*scale:raw;
+        if(firstMonthPhase!=null) {
+          if(c.firstInvoiceMonth===row.index) c.recognizedRevenue=raw*firstMonthPhase/100;
+        } else if(currentBudgetCohort) {
+          c.recognizedRevenue=raw*scale;
+        }
         c.realizationAdjustment=c.recognizedRevenue-raw;
       }
       row.recognizedRevenue=sum(row.cohortFlows.map(c=>c.recognizedRevenue));
@@ -553,8 +564,10 @@ export function forecastSaaS(input) {
     manualBudget:input.newARRByPeriod!=null,
     assumptions:{
       subscription:"Monthly SaaS: customer starts at first invoicing month.",
-      acquisition:"New Contracted ARR enters signed cohorts immediately. Revenue realization can lag the contract in its first budget period according to explicit phasing.",
-      phasing:"Year/quarter/month budget recognition percentage is applied once to the new cohort's maximum period revenue; the result is allocated to months and preserved in views.",
+      acquisition:"New Contracted ARR enters signed cohorts immediately.",
+      phasing:firstMonthPhase!=null
+        ? "First-month phasing is applied once to signed CARR / 12. Full recurring revenue starts the following month."
+        : "Year/quarter/month budget recognition percentage is applied once to the new cohort's maximum period revenue; the result is allocated to months and preserved in views.",
       churn:"New cohorts start churn/expansion in following BUDGET period.",
       costs:"COGS paid in revenue month; other operating outflows entered separately.",
       collections:"Monthly invoices, whole-month collection delay; no opening receivables.",

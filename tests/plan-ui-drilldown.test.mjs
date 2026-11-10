@@ -6,7 +6,7 @@ import {
   growthMultipliers,growthMaxMonths,budgetDefaults,funnels
 } from '../src/domain/saas-profiles.js';
 import { annualGrossProfitLtv } from '../src/engine/unit-economics.js';
-import { forecastSaaS,buildRevenueBridge,maximumNewRevenuePhase } from '../src/engine/cohort-budget.js';
+import { forecastSaaS,buildRevenueBridge } from '../src/engine/cohort-budget.js';
 import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
 const originalApp=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
@@ -22,7 +22,7 @@ function createApp(timeframe=36){
   Object.entries({
     customers:50,revenue:500000,expectedACV:10000,targetRevenue:1000000,
     productName:'Regression',churnSlider:25,cogsSlider:80,newCustomersPercentSlider:60,
-    plChurnSlider:25,plExpansionSlider:25,plQuarterPhasingSlider:66.7,
+    plChurnSlider:25,plExpansionSlider:25,plNewCustomerPhasingSlider:100,
     cashOpening:0,cashOtherOpex:1000,cashCollectionLag:0
   }).forEach(([id,v])=>node(id).value=String(v));
   const doc={
@@ -37,10 +37,10 @@ function createApp(timeframe=36){
   const factory=new Function('document','window','animals','targetDefaults','toEUR',
     'currencyFormats','paybackBenchmarks','cacRatios','growthMultipliers',
     'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv',
-    'forecastSaaS','maximumNewRevenuePhase','renderCashPanel',appBody);
+    'forecastSaaS','renderCashPanel',appBody);
   const app=factory(doc,win,animals,targetDefaults,toEUR,currencyFormats,
     paybackBenchmarks,cacRatios,growthMultipliers,growthMaxMonths,budgetDefaults,
-    funnels,annualGrossProfitLtv,forecastSaaS,maximumNewRevenuePhase,renderCashPanel);
+    funnels,annualGrossProfitLtv,forecastSaaS,renderCashPanel);
   app.goToStep2();
   app.goToStep3();
   return {app,node,win};
@@ -101,15 +101,15 @@ test('Period CARR scales the displayed rate to the column length without recalcu
   const revenueCell=html=>html.split('>Recognized Revenue</div>')[1].match(/^<div[^>]*>\s*([^<]+)/)[1].trim();
   assert.equal(revenueCell(node('plTable').innerHTML),revenueCell(withMonths));
 });
-test('quarter phasing slider modifies the same cohort engine while preserving open month columns',()=>{
+test('first-month phasing slider modifies the same cohort engine while preserving open month columns',()=>{
   const {app,node,win}=createApp(36);
   app.togglePlQtr(0);
   app.togglePlMonth(0,0);
   const initial=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
-  app.onQuarterPhasingChange('50');
+  app.onNewCustomerPhasingChange('50');
   assert.equal(width(node),11); // 1 label + 3 months + 4 quarter totals + Y1 total + Y2 + Y3
   assert.match(node('plTable').innerHTML,/Y1 Q1 ▲/);
-  assert.equal(node('plQuarterPhasingDisplay').textContent,'50.0%');
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'50.0%');
   win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,50));
   assert.notEqual(win._latestMonthlyPlan.summary.totalRecognizedRevenue,initial);
   for(const year of win._latestMonthlyPlan.years){
@@ -117,6 +117,7 @@ test('quarter phasing slider modifies the same cohort engine while preserving op
     close(year.startCustomers-year.churnCustomers+year.newCustomers,year.endCustomers);
   }
   app.resetPL();
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'100.0%');
   win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,200/3));
 });
 test('normal strategy and cash panel stay operational with nested expansion',()=>{
@@ -212,14 +213,14 @@ test('A and B1 toggle independently, while B2 always shows its two summary rows'
   assert.doesNotMatch(html(),/Revenue before changes|− Revenue phasing|Transferred from B2/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
-  assert.match(html(),/− Revenue phasing/);
+  assert.doesNotMatch(html(),/− Revenue phasing/);
   assert.match(html(),/Transferred from B2/);
   assert.match(html(),/id="plCohortToggleA" aria-expanded="false"/);
   app.togglePlQtr(0);
   app.togglePlMonth(0,1);
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   app.togglePlCohort('B');
-  assert.doesNotMatch(html(),/− Revenue phasing/);
+  assert.doesNotMatch(html(),/Transferred from B2/);
   assert.equal(win._latestMonthlyPlan,plan);
 });
 
@@ -231,31 +232,29 @@ test('budget granularity Year/Quarter/Month changes the input engine, not the di
   app.onPlanBudgetGranularityChange('year');
   assert.equal(win._latestMonthlyPlan.granularity,'year');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,3);
-  assert.match(node('plQuarterPhasingNote').textContent,/acquisition year/);
-  assert.equal(Number(node('plQuarterPhasingSlider').min),0);
-  assert.ok(Number(node('plQuarterPhasingSlider').max)>50);
+  assert.match(node('plNewCustomerPhasingNote').textContent,/acquisition month/);
   const signedBefore=win._latestMonthlyPlan.quarters.map(p=>p.newARR);
-  app.onQuarterPhasingChange('50');
-  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,50));
+  app.onNewCustomerPhasingChange('67');
   win._latestMonthlyPlan.quarters.forEach((q,i)=>close(q.newARR,signedBefore[i]));
-  app.onQuarterPhasingChange('25'); // valid independent revenue realization
-  win._latestMonthlyPlan.periodPhasing.forEach(p=>close(p,25));
+  close(win._latestMonthlyPlan.monthlyBridge[0].currentNewNetRevenue,
+    win._latestMonthlyPlan.months[0].newARR/12*.67);
   assert.equal(width(node),4);
   app.onPlanBudgetGranularityChange('quarter');
   assert.equal(win._latestMonthlyPlan.granularity,'quarter');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,12);
-  assert.equal(Number(node('plQuarterPhasingSlider').min),0);
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
   app.onPlanBudgetGranularityChange('month');
   assert.equal(win._latestMonthlyPlan.granularity,'month');
   assert.equal(win._latestMonthlyPlan.periodPhasing.length,36);
-  assert.ok(!node('plQuarterPhasingSlider').disabled);
+  assert.ok(!node('plNewCustomerPhasingSlider').disabled);
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
   assert.ok(node('planPatternFRONT').disabled && node('planPatternBACK').disabled);
   assert.ok(node('planMonthPatternFRONT').disabled && node('planMonthPatternBACK').disabled);
   assert.equal(width(node),4);
   const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
-  app.onQuarterPhasingChange('50');
+  app.onNewCustomerPhasingChange('50');
   assert.notEqual(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
-  assert.equal(node('plQuarterPhasingDisplay').textContent,'50.0%');
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'50.0%');
   app.onPlanBudgetGranularityChange('quarter');
   assert.ok(!node('planPatternFRONT').disabled);
   app.setQtrScenario('FRONT');
@@ -307,10 +306,10 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   close(y.endACV,y.endARR/y.endCustomers);
   assert.match(node('plTable').innerHTML,/Contracted ACV \(end\) = Closing CARR \/ Customers/);
   assert.match(node('planBudgetGranularityNote').textContent,/New ARR budget: YEAR/);
-  assert.ok(node('plQuarterPhasingSlider').disabled,'No new cohort means phasing has no relevance');
-  assert.equal(node('plQuarterPhasingDisplay').textContent,'—');
+  assert.ok(node('plNewCustomerPhasingSlider').disabled,'No new cohort means phasing has no relevance');
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'—');
   const before=win._latestMonthlyPlan.summary.totalRecognizedRevenue;
-  app.onQuarterPhasingChange('50');
+  app.onNewCustomerPhasingChange('50');
   close(win._latestMonthlyPlan.summary.totalRecognizedRevenue,before);
   app.togglePlQtr(0);
   const qs=win._latestMonthlyPlan.quarters;
@@ -365,9 +364,9 @@ test('A valid explicit phase survives a new quarter preset without changing Exis
   assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
   const front=win._latestMonthlyPlan;
   assert.ok(front.summary.annualizedNewARR>0,'Expected New CARR to exercise signing presets');
-  const frontPhasing=(front.periodPhaseRanges[0][0]+front.periodPhaseRanges[0][1])/2;
-  app.onQuarterPhasingChange(String(frontPhasing));
-  close(win._latestMonthlyPlan.periodPhasing[0],frontPhasing);
+  const frontPhasing=67;
+  app.onNewCustomerPhasingChange(String(frontPhasing));
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
   const existingBefore=win._latestMonthlyPlan.years[0];
   const q1Front=win._latestMonthlyPlan.quarters[0].newARR;
   app.setQtrScenario('BACK');
@@ -377,34 +376,48 @@ test('A valid explicit phase survives a new quarter preset without changing Exis
   close(back.years[0].originalChurnARR,existingBefore.originalChurnARR);
   close(back.years[0].originalExpansionARR,existingBefore.originalExpansionARR);
   close(back.years[0].originalNetRevenue,existingBefore.originalNetRevenue);
-  close(back.periodPhasing[0],frontPhasing);
-  assert.ok(node('plQuarterPhasingSlider').max>node('plQuarterPhasingSlider').min);
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
   app.setQtrScenario('EVEN');
   assert.equal(win._latestMonthlyPlan.signingPattern,'EVEN');
   app.setQtrScenario('FRONT');
   assert.equal(win._latestMonthlyPlan.signingPattern,'FRONT');
 });
 
-test('An incompatible signing preset explains the phasing limit and leaves the plan intact',()=>{
+test('67% first-month phasing reduces B2 in a quarter budget without reducing later B1 revenue',()=>{
   const {app,node,win}=createApp(12);
-  app.setMonthScenario('FRONT');
-  app.onQuarterPhasingChange('70');
-  const front=win._latestMonthlyPlan;
-  app.setMonthScenario('BACK');
-  assert.equal(win._latestMonthlyPlan,front);
-  assert.equal(front.monthlySigningPattern,'FRONT');
-  assert.match(node('planNewARRNotice').textContent,/Lower phasing to 56\.6%/);
-  app.onQuarterPhasingChange('25');
-  app.setMonthScenario('BACK');
-  assert.equal(win._latestMonthlyPlan.monthlySigningPattern,'BACK');
-  assert.equal(win._latestMonthlyPlan.periodPhasing[0],25);
-  assert.equal(node('planNewARRNotice').textContent,'');
+  app.onPlanPeriodValueChange(0,'36000');
+  const before=win._latestMonthlyPlan;
+  app.onNewCustomerPhasingChange('67');
+  const plan=win._latestMonthlyPlan;
+  const [jan,feb,mar]=plan.monthlyBridge;
+  close(jan.currentNewARR,12000);
+  close(jan.currentNewNetRevenue,670);
+  close(jan.earlierNewNetRevenue,0);
+  close(feb.earlierNewNetRevenue,1000);
+  close(mar.earlierNewNetRevenue,2000);
+  close(plan.quarters[0].currentNewNetRevenue,2010);
+  close(plan.quarters[0].earlierNewNetRevenue,3000);
+  close(plan.quarters[0].newRevenue,5010);
+  close(before.quarters[0].endARR,plan.quarters[0].endARR);
+  close(plan.quarters[0].recognizedRevenue,
+    jan.recognizedRevenue+feb.recognizedRevenue+mar.recognizedRevenue);
+  assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
 });
 
-test('Budget level only clears manual amounts and explicit phase after confirmation',()=>{
+test('the churn slider updates the equivalent compound monthly and quarterly rates',()=>{
+  const {app,node}=createApp(12);
+  node('plChurnSlider').value='25';
+  app.onPLSlider();
+  assert.match(node('plChurnEquivalents').textContent,/2\.37% monthly · 6\.94% quarterly/);
+  node('plChurnSlider').value='0';
+  app.onPLSlider();
+  assert.match(node('plChurnEquivalents').textContent,/0\.00% monthly · 0\.00% quarterly/);
+});
+
+test('Budget level only clears manual amounts after confirmation and keeps the first-month phase',()=>{
   const {app,node,win}=createApp(12);
   app.onPlanPeriodValueChange(0,'50000');
-  app.onQuarterPhasingChange('25');
+  app.onNewCustomerPhasingChange('25');
   const manual=win._latestMonthlyPlan;
   const confirmations=[];
   win.confirm=message=>{confirmations.push(message);return false;};
@@ -412,12 +425,12 @@ test('Budget level only clears manual amounts and explicit phase after confirmat
   app.onPlanBudgetGranularityChange('month');
   assert.equal(win._latestMonthlyPlan,manual);
   assert.equal(node('planBudgetGranularity').value,'quarter');
-  assert.match(confirmations[0],/clear your manual New ARR amounts and reset new customer phasing/);
+  assert.match(confirmations[0],/clear your manual New ARR amounts/);
   win.confirm=()=>true;
   app.onPlanBudgetGranularityChange('month');
   assert.equal(win._latestMonthlyPlan.granularity,'month');
   assert.equal(win._latestMonthlyPlan.manualBudget,false);
-  assert.equal(win._latestMonthlyPlan.periodPhasing[0],100);
+  assert.equal(win._latestMonthlyPlan.periodPhasing[0],25);
 });
 
 test('independent quarter and month presets preserve one matrix and period revenue total',()=>{

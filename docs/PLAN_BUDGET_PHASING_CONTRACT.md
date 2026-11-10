@@ -5,6 +5,12 @@
 **Primärkälla:** [Ordagrann, oförändrad trådsammanställning](source-thread-budget-phasing-2026-11-06.md).
 **Omfattning:** Nyförsäljning, New Contracted ARR, budget-/visningsgranularitet, Revenue Phasing, månadsallokering och TRACK. Dokumentet ersätter motstridiga tekniska antaganden på *dessa områden* i tidigare implementation och dokumentation. Det avgör inte andra ospecificerade affärsregler.
 
+**PLAN från 2026-11-10.** Reglaget för nykundsintäkt styr första
+månaden för varje kohort, oavsett vald budgetnivå. Månader summeras till
+kvartal och år. Reglerna för periodfasning nedan finns kvar för
+motoranrop som använder de tidigare parametrarna. Se
+[första månadens intäkt](FINANCIAL_MODEL.md#first-month-revenue-phasing).
+
 Kohort A har en separat [finansiell regel för årsbaserad churn, expansion
 och intäkt](FINANCIAL_MODEL.md#a-customers-present-at-the-start-of-the-year).
 Budgetnivån nedan gäller nykundernas beräkning.
