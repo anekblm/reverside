@@ -648,6 +648,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plExistingPhase = 100;
   const plExpandedCohorts = new Set();
   let plCarrView = 'fullYear';
+  let plMatrixExpanded = true;
   let planInitialized = false;
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
@@ -1710,11 +1711,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const yearQuarterCells = (y,key,sign=1,bold=false,color='#333',bg='white') =>
       eachPeriod(y,(period,kind)=>periodCell((period[key]||0)*sign,kind,{bold,color,bg}));
 
-    const yearArrStartCells = (y,note='') => eachPeriod(y,(period,kind)=>
-      carrCell(period.startARR??0,period,kind,{color:'#555',bg:'#fafafa',
-        note:kind==='year'||kind==='yearTotal'?note:
-          ((period.startCustomers??0)>0?Math.round(period.startCustomers)+' cust.':'')}));
-
     const yearChurnCells = (y,note='') => eachPeriod(y,(period,kind)=>
       periodCell(-(period.churnARR??0),kind,{color:'#E24B4A',
         note:kind==='year'||kind==='yearTotal'?note:
@@ -1746,8 +1742,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     let html = `<div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
 
     // ── HEADERS ──
-    // Presets now occupy a permanent toolbar ABOVE this grid.
-    // No conditional rows: expand/collapse changes columns only, never vertical position.
     html += `<div></div>`;
     for (let y = 0; y < years; y++) {
       const exp = window._qtr && window._qtr[y];
@@ -1772,19 +1766,32 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     }
 
-    // Single integrated Contracted ARR / Revenue bridge, with no duplicate ARR
-    // section. A/B are the cohorts present at the displayed period start;
-    // C holds subscriptions first invoiced inside the displayed period.
-    // ARR rows are annualized STOCK movements; revenue rows are earned FLOWS.
-    const custAtStart = model.years.map(r => r.startCustomers);
-    const custAtEnd = model.years.map(r => r.endCustomers);
-    const acvAtStart = model.years.map(r => r.startACV);
+    const totalRow = (name,key) => {
+      html += label(name,false,true,'#185FA5');
+      for(let y=0;y<years;y++) html += eachPeriod(y,(period,kind)=>{
+        const options={bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB'};
+        if(key==='recognizedRevenue') return periodCell(period[key],kind,options);
+        const opening=key==='startARR';
+        const customers=opening?period.startCustomers:period.endCustomers;
+        const count=Math.round(customers);
+        const isYear=kind==='year'||kind==='yearTotal';
+        if(isYear){
+          const acv=opening?period.startACV:period.endACV;
+          options.note=count+' cust. · ACV '+fmt(Math.round(acv))+
+            (!opening&&y===years-1?' · target':'');
+        } else if(!opening||customers>0) {
+          options.note=count+' cust.';
+        }
+        return carrCell(period[key],period,kind,options);
+      });
+    };
 
-    // Keep the original first row (opening Contracted ARR, customers and ACV).
-    html += label('Opening CARR', false, true);
-    for (let y = 0; y < years; y++) {
-      const acvStr = fmt(Math.round(acvAtStart[y]));
-      html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
+    totalRow('Opening CARR','startARR');
+    if(!plMatrixExpanded){
+      totalRow('Closing CARR','endARR');
+      totalRow('Recognized Revenue','recognizedRevenue');
+      el.innerHTML=html+'</div>';
+      return;
     }
 
     const cohortHeading = (key,title,{subtitle,nested=false}={}) => {
@@ -1875,21 +1882,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     recognizedRow('Recognized Revenue','currentNewNetRevenue',{indent:true});
 
     html += divider();
-    recognizedRow('Recognized Revenue – Existing (A)','existingRevenue');
-    recognizedRow('Recognized Revenue – New (B1 + B2)','newRevenue');
-    recognizedRow('Total Recognized Revenue','recognizedRevenue');
-
+    totalRow('Closing CARR','endARR');
     html += divider();
-    html += label('Closing CARR · A + B',false,true);
-    for(let y=0;y<years;y++){
-      html += eachPeriod(y,(period,kind)=>carrCell(period.endARR??0,period,kind,{
-        bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
-        note:kind==='year'||kind==='yearTotal'
-          ? Math.round(custAtEnd[y])+' cust. · ACV '+
-            fmt(Math.round(period.endACV??0))+(y===years-1?' · target':'')
-          : Math.round(period.endCustomers??0)+' cust.'
-      }));
-    }
+    recognizedRow('Revenue · Existing','existingRevenue',{bold:false});
+    recognizedRow('Revenue · New','newRevenue',{bold:false});
+    totalRow('Total Recognized Revenue','recognizedRevenue');
 
     // Revenue impact and annualized CARR change are different units. The
     // recognized revenue lines cannot be added to the CARR closing stock.
@@ -2171,6 +2168,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
   }
 
+  function togglePlMatrix() {
+    plMatrixExpanded=!plMatrixExpanded;
+    const button=document.getElementById('plMatrixToggle');
+    button.textContent=plMatrixExpanded?'Show totals only':'Show details';
+    button.setAttribute?.('aria-expanded',String(plMatrixExpanded));
+    renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
+  }
+
 // Transitional bridge for inline HTML event handlers. Step-by-step, handlers will
 // move to addEventListener inside the corresponding feature module.
 Object.assign(window, {
@@ -2200,6 +2205,7 @@ Object.assign(window, {
   togglePlQtr,
   togglePlMonth,
   togglePlCohort,
+  togglePlMatrix,
   setPlCarrView,
   updateCashAssumptions,
   updateQuarterSM

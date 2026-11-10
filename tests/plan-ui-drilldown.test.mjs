@@ -165,10 +165,10 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     'B2 – New in period',
     '>New CARR</div>',
     '>Recognized Revenue</div>',
-    'Recognized Revenue – Existing (A)',
-    'Recognized Revenue – New (B1 + B2)',
-    'Total Recognized Revenue',
-    '>Closing CARR · A + B</div>'
+    '>Closing CARR</div>',
+    '>Revenue · Existing</div>',
+    '>Revenue · New</div>',
+    '>Total Recognized Revenue</div>'
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
@@ -212,6 +212,26 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   assert.ok(q2.earlierNewNetRevenue>0,'Q2 must include prior Q1 new customers');
   assert.ok(win._latestMonthlyPlan.years[0].earlierNewNetRevenue>0,
     'Year totals include revenue from subsequent months in B');
+});
+
+test('matrix totals view preserves open columns and cohort details when reopened',()=>{
+  const {app,node,win}=createApp(12);
+  const plan=win._latestMonthlyPlan;
+  app.togglePlQtr(0);
+  app.togglePlMonth(0,0);
+  app.togglePlCohort('B');
+  const detailed=node('plTable').innerHTML;
+  app.togglePlMatrix();
+  const compact=node('plTable').innerHTML;
+  assert.equal(width(node),9);
+  assert.deepEqual([...compact.matchAll(/>(Opening CARR|Closing CARR|Recognized Revenue)<\/div>/g)]
+    .map(match=>match[1]),['Opening CARR','Closing CARR','Recognized Revenue']);
+  assert.doesNotMatch(compact,/EXISTING CUSTOMERS|Revenue · Existing|Gross profit|Unit Economics/);
+  assert.equal(node('plMatrixToggle').textContent,'Show details');
+  app.togglePlMatrix();
+  assert.equal(node('plTable').innerHTML,detailed);
+  assert.equal(node('plMatrixToggle').textContent,'Show totals only');
+  assert.equal(win._latestMonthlyPlan,plan);
 });
 
 test('A and B1 toggle independently, while B2 always shows its two summary rows',()=>{

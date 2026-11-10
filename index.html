@@ -635,12 +635,16 @@
               </label>
             </div>
           </details>
-          <div class="pl-carr-view" role="group" aria-label="CARR display" aria-describedby="plCarrViewNote">
-            <button type="button" class="pl-pattern-btn active" id="plCarrFullYear" aria-pressed="true"
-                    onclick="setPlCarrView('fullYear')">Full Year CARR</button>
-            <button type="button" class="pl-pattern-btn" id="plCarrPeriod" aria-pressed="false"
-                    onclick="setPlCarrView('period')">Period CARR</button>
-            <span id="plCarrViewNote">Period CARR scales the annual run rate to the length of each column.</span>
+          <div class="pl-matrix-toolbar">
+            <div class="pl-carr-view" role="group" aria-label="CARR display" aria-describedby="plCarrViewNote">
+              <button type="button" class="pl-pattern-btn active" id="plCarrFullYear" aria-pressed="true"
+                      onclick="setPlCarrView('fullYear')">Full Year CARR</button>
+              <button type="button" class="pl-pattern-btn" id="plCarrPeriod" aria-pressed="false"
+                      onclick="setPlCarrView('period')">Period CARR</button>
+              <span id="plCarrViewNote">Period CARR scales the annual run rate to the length of each column.</span>
+            </div>
+            <button type="button" class="pl-pattern-btn" id="plMatrixToggle" aria-controls="plTable"
+                    aria-expanded="true" onclick="togglePlMatrix()">Show totals only</button>
           </div>
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <div id="plTable"></div>

@@ -122,8 +122,10 @@
     .pl-cohort-title { font-size:10px; }
     .pl-cohort-subtitle { color:#666; font-size:10px; font-weight:400; }
     .pl-cohort-heading-static { padding:3px 0 3px 11px; }
+    .pl-matrix-toolbar { display:flex; align-items:center; justify-content:space-between;
+      flex-wrap:wrap; gap:6px 12px; margin-bottom:0.55rem; }
     .pl-carr-view { display:flex; align-items:center; flex-wrap:wrap; gap:5px 8px;
-      margin-bottom:0.55rem; color:#666; font-size:11px; }
+      color:#666; font-size:11px; }
     .pl-distribution { margin:5px 0 8px; }
     .pl-distribution summary { color:#555; font-size:11px; cursor:pointer; padding:6px 0; }
     .pl-distribution-editor { background:#fafafa; border:1px solid #e5e5e5; border-radius:6px;
