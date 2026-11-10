@@ -130,22 +130,21 @@ test('FIRST INVOICE: no churn or expansion on new cohorts in acquisition budget 
     if(width<12) assert.ok(r.months[width].cohortFlows.some(c=>c.firstInvoiceMonth>=0&&c.churnARR>0));
   }
 });
-test('REVENUE: displayed period recognition is built from opening CARR and weighted monthly changes',()=>{
+test('REVENUE: the bridge reconciles opening CARR, monthly changes and phasing',()=>{
   const r=forecastSaaS(input({granularity:'quarter',newARRByPeriod:[35000,30000,20000,15000]}));
   for(const view of ['month','quarter','year'])for(const p of buildRevenueBridge(r.months,view)){
     approx(p.originalBaseRevenue+p.originalChurnRevenueImpact+p.originalExpansionRevenueImpact,
       p.originalNetRevenue);
-    approx(p.earlierNewBaseRevenue+p.earlierNewChurnRevenueImpact+p.earlierNewExpansionRevenueImpact,
+    approx(p.earlierNewBaseRevenue+p.earlierNewChurnRevenueImpact+p.earlierNewExpansionRevenueImpact+p.earlierNewRealizationImpact,
       p.earlierNewNetRevenue);
-    approx(p.currentNewRevenue+p.currentNewChurnRevenueImpact+p.currentNewExpansionRevenueImpact,
+    approx(p.currentNewRevenue+p.currentNewRealizationImpact,
       p.currentNewNetRevenue);
     approx(p.originalNetRevenue+p.earlierNewNetRevenue+p.currentNewNetRevenue,p.recognizedRevenue);
     approx(p.existingRevenue+p.newRevenue,p.recognizedRevenue);
     approx(p.originalEndARR+p.earlierEndARR+p.currentEndARR,p.endARR);
   }
-  const q=r.quarters;
-  assert.ok(q[1].earlierNewNetRevenue>0);
-  approx(r.years[0].earlierNewNetRevenue,0);
+  assert.ok(r.quarters[1].earlierNewNetRevenue>0);
+  approx(r.years[0].earlierNewNetRevenue,r.monthlyBridge.reduce((n,m)=>n+m.earlierNewNetRevenue,0));
 });
 test('PHASING: no new ARR means phasing cannot change revenue or churn',()=>{
   const with50=forecastSaaS(input({granularity:'quarter',newARRByPeriod:[0,0,0,0],phasePercent:50}));

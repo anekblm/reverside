@@ -23,17 +23,23 @@ test('one CARR/Revenue bridge reconciles every cohort, period and view',()=>{
             close(p.existingRevenue,p.originalNetRevenue);
             close(p.newRevenue,p.earlierNewNetRevenue+p.currentNewNetRevenue);
             close(p.recognizedRevenue,p.existingRevenue+p.newRevenue);
+            close(p.currentChurnARR,0);
+            close(p.currentExpansionARR,0);
+            close(p.currentChurnCustomers,0);
             for(const group of ['original','earlier','current']){
+              const transferDirection=group==='earlier'?1:group==='current'?-1:0;
               close(p[group+'EndARR'],p[group+'StartARR']-
-                p[group+'ChurnARR']+p[group+'ExpansionARR']+p[group+'NewARR']);
+                p[group+'ChurnARR']+p[group+'ExpansionARR']+p[group+'NewARR']+
+                transferDirection*p.earlierTransferARR);
               close(p[group+'EndCustomers'],p[group+'StartCustomers']-
-                p[group+'ChurnCustomers']+p[group+'NewCustomers']);
+                p[group+'ChurnCustomers']+p[group+'NewCustomers']+
+                transferDirection*p.earlierTransferCustomers);
             }
           }
           close(total(periods,'recognizedRevenue'),total(plan.months,'recognizedRevenue'));
+          for(const key of ['earlierNewNetRevenue','currentNewNetRevenue','earlierChurnARR','earlierExpansionARR','currentNewARR'])
+            close(total(periods,key),total(plan.monthlyBridge,key));
         }
-        for(const year of plan.years)
-          close(year.earlierNewNetRevenue,0); // A whole displayed year: all this year's new cohorts are C
       }
 });
 test('B accumulates only earlier same-year customers and resets at the year boundary',()=>{
@@ -43,4 +49,11 @@ test('B accumulates only earlier same-year customers and resets at the year boun
   close(plan.quarters[4].earlierStartARR,0);
   assert.ok(plan.quarters[4].originalStartARR>plan.quarters[0].originalStartARR);
   for(const year of plan.years)close(year.earlierStartARR,0);
+  const [jan,feb,mar]=plan.monthlyBridge;
+  close(feb.earlierStartARR,jan.currentEndARR);
+  close(mar.earlierStartARR,feb.earlierEndARR+feb.currentEndARR);
+  close(plan.quarters[0].earlierTransferARR,jan.currentEndARR+feb.currentEndARR);
+  close(plan.quarters[0].earlierTransferCustomers,jan.currentEndCustomers+feb.currentEndCustomers);
+  close(plan.quarters[1].earlierStartARR,mar.earlierEndARR+mar.currentEndARR);
+  close(plan.monthlyBridge[12].originalStartARR,plan.monthlyBridge[11].endARR);
 });

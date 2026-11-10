@@ -18,8 +18,11 @@ test('USER APPROVED: 100 New CARR Q1, 25% revenue phasing => 6.25/25/25/25 and 8
   [6.25,25,25,25].forEach((rev,q)=>close(qs[q].recognizedRevenue,rev));
   close(plan.summary.totalRecognizedRevenue,81.25);
   close(plan.summary.endingARR,100);
-  close(qs[0].currentNewRevenue+qs[0].currentNewRealizationImpact,6.25);
-  close(qs[0].currentNewRealizationImpact,-(100/6-6.25));
+  close(qs[0].currentNewRevenue+qs[0].currentNewRealizationImpact,3.125);
+  close(qs[0].earlierNewNetRevenue,3.125);
+  close(qs[0].currentNewRealizationImpact+qs[0].earlierNewRealizationImpact,-(100/6-6.25));
+  close(plan.years[0].currentNewNetRevenue,3.125);
+  close(plan.years[0].earlierNewNetRevenue,78.125);
   close(sum(plan.months.slice(0,3),'recognizedRevenue'),6.25);
   close(sum(plan.months,'recognizedRevenue'),81.25);
   close(sum(buildRevenueBridge(plan.months,'month'),'recognizedRevenue'),81.25);

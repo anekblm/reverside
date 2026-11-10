@@ -35,7 +35,7 @@ test("first invoice month immediately earns full signed MRR, without monthly pha
 test("quarterly input 35 and 50% phasing reproduces exactly 4.375 in new revenue",()=>{
   const r=forecastSaaS(base({months:3,newARRByPeriod:[35],phasePercent:50}));
   approx(r.quarters[0].newARR,35);
-  approx(r.quarters[0].currentNewNetRevenue,35/4*.5);
+  approx(r.quarters[0].newRevenue,35/4*.5);
   approx(r.quarters[0].recognizedRevenue,125+35/4*.5);
   approx(sum(r.months,"recognizedRevenue"),r.quarters[0].recognizedRevenue);
   approx(r.months[0].startARR,500);
@@ -65,15 +65,13 @@ test("monthly budget has no phantom phasing and quarter/year aggregate exactly",
   approx(r.quarters[3].endARR,r.years[0].endARR);
   for(let i=1;i<r.months.length;i++)approx(r.months[i].startARR,r.months[i-1].endARR);
 });
-test("the three revenue buckets reclassify for the DISPLAYED period",()=>{
+test("B and C sum monthly recognized revenue separately in the quarterly view",()=>{
   const model=forecastSaaS(base({months:3,newARRByPeriod:[35]}));
   const months=buildRevenueBridge(model.months,"month");
   assert.equal(months[0].earlierNewNetRevenue,0);
   assert.ok(months[1].earlierNewNetRevenue>0);
-  approx(months[0].currentNewNetRevenue+months[1].currentNewNetRevenue+months[2].currentNewNetRevenue+
-    months[0].earlierNewNetRevenue+months[1].earlierNewNetRevenue+months[2].earlierNewNetRevenue,
-    model.quarters[0].currentNewNetRevenue);
-  approx(model.quarters[0].earlierNewNetRevenue,0);
+  for(const key of ["currentNewNetRevenue","earlierNewNetRevenue"])
+    approx(model.quarters[0][key],months.reduce((n,m)=>n+m[key],0));
 });
 test("new cohorts don't churn within the input quarter, but churn in following quarter",()=>{
   const r=forecastSaaS(base({months:6,newARRByPeriod:[35,0],annualChurn:0.24,annualExpansionComp:0.08}));

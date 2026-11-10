@@ -1802,9 +1802,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const cohortHeading = (key,title) => {
       const expanded=plExpandedCohorts.has(key);
       html += divider();
-      html += label(`<button type="button" class="pl-cohort-toggle" id="plCohortToggle${key}" aria-expanded="${expanded}" onclick="togglePlCohort('${key}')">
+      const heading=key?`<button type="button" class="pl-cohort-toggle" id="plCohortToggle${key}" aria-expanded="${expanded}" onclick="togglePlCohort('${key}')">
         <span aria-hidden="true">${expanded?'▾':'▸'}</span><span>${title}</span>
-      </button>`, false, true, '#444');
+      </button>`:title;
+      html += label(heading, false, true, '#444');
       for (let y=0;y<years;y++) html += eachPeriod(y,()=>'<div></div>');
       return expanded;
     };
@@ -1863,12 +1864,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const expandedB=cohortHeading('B','B. New Customers – Earlier This Year');
     cohortARRRow('Of which: Opening CARR – Earlier New (B)','earlier','StartARR',{noteKey:'StartCustomers'});
     if(expandedB) {
+      cohortARRRow('+ Transferred from C','earlier','TransferARR',{noteKey:'TransferCustomers'});
       cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
       cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
     }
     cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
     if(expandedB) {
-      recognizedRow('Revenue · Opening CARR × period / 12 (B)','earlierNewBaseRevenue',
+      recognizedRow('Revenue before changes · B','earlierNewBaseRevenue',
         {bold:false,indent:true});
       recognizedRow('− Revenue impact · churn (B)','earlierNewChurnRevenueImpact',
         {bold:false,indent:true,color:'#E24B4A'});
@@ -1879,23 +1881,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     recognizedRow('Recognized Revenue · B','earlierNewNetRevenue',{indent:true});
 
-    const expandedC=cohortHeading('C','C. New Customers – Current Period');
-    cohortARRRow('+ New Contracted ARR – Current (C)','current','NewARR',{noteKey:'NewCustomers'});
-    if(expandedC) {
-      cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-      cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
-    }
-    cohortARRRow('Closing CARR – C','current','EndARR',{bold:true});
-    if(expandedC) {
-      recognizedRow('Revenue · New signed CARR before phasing (C)','currentNewRevenue',
-        {bold:false,indent:true});
-      recognizedRow('− Revenue impact · churn (C)','currentNewChurnRevenueImpact',
-        {bold:false,indent:true,color:'#E24B4A'});
-      recognizedRow('+ Revenue impact · expansion (C)','currentNewExpansionRevenueImpact',
-        {bold:false,indent:true,color:'#3B6D11'});
-      recognizedRow('− Revenue phasing · current new (C)','currentNewRealizationImpact',
-        {bold:false,indent:true,color:'#E24B4A'});
-    }
+    cohortHeading(null,'C. New Customers – First Month');
+    cohortARRRow('+ New Contracted ARR','current','NewARR',{noteKey:'NewCustomers'});
     recognizedRow('Recognized Revenue · C','currentNewNetRevenue',{indent:true});
 
     html += divider();
@@ -1926,10 +1913,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       New customer phasing applies once in the acquisition budget period.
       Opening CARR - A/B/C churn + A/B/C expansion + new CARR = Closing CARR.
       Recognized Existing (A) + Recognized New (B+C) = Total Recognized Revenue.
-      Earlier New (B) includes only customers first invoiced earlier in the current year;
-      Current New (C) includes customers first invoiced within the displayed period.
-      When a full year is displayed, all customers first invoiced that year belong to C;
-      from the next year they belong to Existing (A). Expand quarters or months to see B.
+      C shows new CARR and first-month recognized revenue. The following month,
+      customers move to B, or to A at the year boundary. B's opening balance includes
+      transfers at the start of the displayed period. Transfers within the period
+      appear separately in B. Quarterly and annual revenue sum the same monthly split.
       Amounts are calculated before rounding to the displayed currency.
     </div>`;
 
@@ -2176,7 +2163,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function togglePlCohort(key) {
-    if (!['A','B','C'].includes(key)) return;
+    if (!['A','B'].includes(key)) return;
     if (plExpandedCohorts.has(key)) plExpandedCohorts.delete(key);
     else plExpandedCohorts.add(key);
     renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);

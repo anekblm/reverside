@@ -77,28 +77,25 @@ closing CARR then becomes an output, not a forced target.
 
 ### View granularity
 
-Year/quarter/month controls *presentation only*. No financial assumptions are
-recalculated. Every forecast stores one identical monthly ledger and builds
-its selected view by reclassifying vintage cohorts against displayed period
-boundaries. Monthly values derived from quarter/year budgets are **allocated
-forecasts**, not information supplied by the user.
+Year/quarter/month controls presentation. Every forecast uses one monthly
+ledger. Quarter and year columns aggregate monthly flows by cohort and
+use the opening and closing stocks at their boundaries. Monthly values
+derived from quarter/year budgets are allocated forecasts.
 
 ## Revenue Bridge per displayed period
 
 1. **Original base (pre-existing at the current year's start):**
    starting MRR revenue, less revenue impact from churn, plus revenue impact
    from expansion, all summed over months in the displayed period.
-2. **Earlier new cohorts (acquired since year start, before current displayed
-   period):** starting MRR revenue, less churn impact, plus expansion impact.
-3. **Current period new cohorts:** income earned from cohorts first invoiced
-   within the displayed period, including subsequent months in that period.
-   This amount is net of any modeled cohort changes if a coarser view groups
-   shorter budget periods.
+2. **B, earlier new cohorts:** revenue in months after acquisition within the
+   same year. Sum monthly opening MRR, churn and expansion effects, and
+   any acquisition-period phasing assigned to those months.
+3. **C, first-month cohorts:** recognized revenue in the acquisition month.
+   This includes the applicable first-month share of acquisition phasing.
 
-The same customer can appear as "current" in a January display, "earlier"
-in a February display, and "current" in a full-Q1 display. The sum of all three
-groups is unchanged. At the start of each subsequent year, all customers
-from earlier years form that year's original base.
+For a January customer, January's revenue is in C and February's revenue is
+in B. This split also applies within the Q1 and annual totals. At the start
+of the following year the customer joins A.
 
 The ARR Bridge separately reconciles:
 `opening ARR − churn ARR + expansion ARR + new ARR = closing ARR`.
@@ -183,20 +180,19 @@ outflows are incomplete; the interface warns when other OPEX is set to zero.
 ## One integrated CARR/Revenue bridge in the existing PLAN matrix
 
 The forecast grid has exactly one opening and one closing Contracted ARR row.
-The intermediate groups are mutually exclusive **cohort classifications** for
-the displayed period, and share one monthly source ledger:
+The intermediate groups share one monthly source ledger:
 
 - **A Existing**: customer cohorts present at the start of the current year.
-- **B Earlier New**: customer cohorts first invoiced earlier in the *same year*,
-  but before the start of the selected **displayed** period.
-- **C Current New**: customer cohorts first invoiced within that displayed
-  period (month/quarter/year).
+- **B Earlier New**: customers in the months after their acquisition month,
+  within the same year. B closing CARR = B opening CARR + transfers from C
+  within the column − churn + expansion. Transferred customers follow the
+  same rule. Transfers at the opening boundary are included in B opening CARR.
+- **C First Month**: new CARR and first-month recognized revenue. The
+  remaining CARR at the end of a column is the final month's acquisitions.
 
-Each group has its opening or new CARR and churn/expansion CARR movements.
-A/B opening CARR rows are **of-which decompositions** of the top Opening CARR;
-never add them twice. Closing Contracted ARR = closing A+B+C.
-In any full-year display B is zero by definition: all cohorts acquired within
-the displayed year belong to C. The following year's A absorbs prior years.
+A/B opening rows are components of total opening CARR. Closing Contracted
+ARR equals closing A + B + C. CARR transferred to B continues the same
+customer contract. New CARR is recorded once, in C.
 
 After the A/B/C movement lines, three **flow** rows appear:
 - Recognized Revenue Existing (A)

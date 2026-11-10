@@ -114,11 +114,9 @@ quarters into months. Expanding only changes displayed columns, not the monthly
 source ledger. The grid shows quarters within the forecast horizon. Its
 break-even marker is available after a CAC strategy has been selected.
 
-Each cohort starts collapsed. A and B show opening CARR, closing CARR and
-their recognized revenue subtotal. C shows new CARR, closing CARR and its
-recognized revenue subtotal. Each section expands independently to show
-the changes behind those figures. The section state is separate from
-the year and quarter drilldown.
+A and B start collapsed with opening CARR, closing CARR and recognized
+revenue. Each expands independently of the year and quarter drilldown.
+C shows only new CARR with customer counts and first-month recognized revenue.
 
 Full Year CARR displays annualized amounts. Period CARR multiplies the
 CARR rows by the actual months in each displayed column divided by 12.
@@ -137,20 +135,21 @@ assumption and explains contracted and expansion ACV.
    Opening, churn and closing rows show customer counts. The revenue rows
    show the complete churn and expansion effects. Expanded months show
    their own contribution as “of which” in the same cells.
-3. Cohort B: customers first invoiced in **earlier displayed periods within
-   the same calendar year** — their opening CARR, churn ARR, expansion ARR and
-   closing CARR.
-4. Cohort C: customers first invoiced in the **current displayed period** —
-   new CARR, plus possible eligible churn/expansion based on planning level,
-   and closing CARR.
+3. Cohort B: customers acquired in **earlier months of the same year**.
+   The CARR bridge shows opening CARR, transfers from C within the
+   column, churn, expansion and closing CARR. B includes recognized
+   revenue after the acquisition month.
+4. Cohort C: new CARR and recognized revenue in each customer's
+   **acquisition month**. Subsequent changes to these customers appear in B.
 5. Recognized Revenue Existing (A), Recognized Revenue New (B+C),
    Total Recognized Revenue.
 6. Contracted ARR (closing stock = A + B + C).
 
-A/B **opening rows are "of which" decompositions** of opening CARR; they must
-never be added a second time. Annual CARR is a stock, not revenue. Within-year
-B is zero in a whole-year display, because acquisitions during that entire
-displayed year belong to C; expanding into quarters/months exposes B properly.
+A/B opening rows are components of total opening CARR. Customers in C at
+the end of a month move to B at the next month's opening within the same
+year. At year-end, both B and C move to next year's A. Quarter and year
+columns sum the monthly flows by cohort and use opening and closing stocks
+at the column boundaries.
 
 **Acquisition budget granularity** (Year, Quarter, Month) sets the period
 for new CARR inputs, acquisition phasing and retention of eligible

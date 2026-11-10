@@ -141,15 +141,13 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     'Recognized Revenue · A',
     'B. New Customers – Earlier This Year',
     'Of which: Opening CARR – Earlier New (B)',
+    '+ Transferred from C',
     '− Churn CARR – B',
     '+ Expansion CARR – B',
     'Closing CARR – B',
     'Recognized Revenue · B',
-    'C. New Customers – Current Period',
-    '+ New Contracted ARR – Current (C)',
-    '− Churn CARR – C',
-    '+ Expansion CARR – C',
-    'Closing CARR – C',
+    'C. New Customers – First Month',
+    '+ New Contracted ARR',
     'Recognized Revenue · C',
     'Recognized Revenue – Existing (A)',
     'Recognized Revenue – New (B+C)',
@@ -170,7 +168,7 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     close(p.originalBaseRevenue+p.originalChurnRevenueImpact+
       p.originalExpansionRevenueImpact,p.originalNetRevenue);
     close(p.earlierNewBaseRevenue+p.earlierNewChurnRevenueImpact+
-      p.earlierNewExpansionRevenueImpact,p.earlierNewNetRevenue);
+      p.earlierNewExpansionRevenueImpact+p.earlierNewRealizationImpact,p.earlierNewNetRevenue);
     close(p.originalNetRevenue+p.earlierNewNetRevenue+
       p.currentNewNetRevenue,p.recognizedRevenue);
     close(p.existingRevenue,p.originalNetRevenue);
@@ -179,11 +177,12 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     close(p.originalStartARR+p.earlierStartARR+p.currentStartARR,p.startARR);
     close(p.originalEndARR+p.earlierEndARR+p.currentEndARR,p.endARR);
     for(const x of ['original','earlier','current']) {
+      const transferDirection=x==='earlier'?1:x==='current'?-1:0;
       close(p[x+'StartARR']-p[x+'ChurnARR']+p[x+'ExpansionARR']+
-        p[x+'NewARR'],p[x+'EndARR']);
+        p[x+'NewARR']+transferDirection*p.earlierTransferARR,p[x+'EndARR']);
     }
   };
-  for(const key of ['A','B','C']) app.togglePlCohort(key);
+  for(const key of ['A','B']) app.togglePlCohort(key);
   checkLabels();
   win._latestMonthlyPlan.years.forEach(reconcile);
   app.togglePlQtr(0);
@@ -194,29 +193,30 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   buildRevenueBridge(win._latestMonthlyPlan.months,'month').forEach(reconcile);
   const q2=win._latestMonthlyPlan.quarters[1];
   assert.ok(q2.earlierNewNetRevenue>0,'Q2 must include prior Q1 new customers');
-  assert.ok(win._latestMonthlyPlan.years[0].earlierNewNetRevenue===0,
-    'The current year acquired cohort remains current within the year view');
+  assert.ok(win._latestMonthlyPlan.years[0].earlierNewNetRevenue>0,
+    'Year totals include revenue from subsequent months in B');
 });
 
-test('A, B and C start collapsed and toggle independently of the forecast and column drilldown',()=>{
+test('A and B toggle independently, while C always shows only its two summary rows',()=>{
   const {app,node,win}=createApp(12);
   const plan=win._latestMonthlyPlan;
   const html=()=>node('plTable').innerHTML;
-  for(const key of ['A','B','C']) {
+  for(const key of ['A','B']) {
     assert.match(html(),new RegExp('id="plCohortToggle'+key+'" aria-expanded="false"'));
     assert.match(html(),new RegExp('Recognized Revenue · '+key));
   }
-  assert.doesNotMatch(html(),/Revenue before changes|Revenue phasing · earlier new|Revenue phasing · current new/);
+  assert.match(html(),/Recognized Revenue · C/);
+  assert.doesNotMatch(html(),/plCohortToggleC|Closing CARR – C|Revenue phasing · current new/);
+  assert.doesNotMatch(html(),/Revenue before changes|Revenue phasing · earlier new|Transferred from C/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   assert.match(html(),/Revenue phasing · earlier new/);
-  assert.doesNotMatch(html(),/Revenue before changes|Revenue phasing · current new/);
+  assert.match(html(),/Transferred from C/);
+  assert.doesNotMatch(html(),/Revenue before changes<\/div>|Revenue phasing · current new/);
   app.togglePlQtr(0);
   app.togglePlMonth(0,1);
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
-  app.togglePlCohort('C');
   app.togglePlCohort('B');
-  assert.match(html(),/Revenue phasing · current new/);
   assert.doesNotMatch(html(),/Revenue phasing · earlier new/);
   assert.equal(win._latestMonthlyPlan,plan);
 });

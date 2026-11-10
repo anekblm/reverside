@@ -9,9 +9,15 @@ Kohort A har en separat [finansiell regel för årsbaserad churn, expansion
 och intäkt](FINANCIAL_MODEL.md#a-customers-present-at-the-start-of-the-year).
 Budgetnivån nedan gäller nykundernas beräkning.
 
+Matrisen redovisar nykundens första månads intäkt i C och efterföljande
+månaders intäkt i B inom samma år. Phasing följer fortfarande
+anskaffningsperioden. Om den omfattar flera månader kan dess intäktseffekt
+finnas i både B och C. Referensfallet 100 i ny CARR med 25 % phasing och
+jämn signering ger 3,125 i B och 3,125 i C för Q1, totalt 6,25.
+
 ## Implementation på utvecklingsgrenen (denna iteration)
 
-**Implementerat och regressionstestat:** Separat FRONT/EVEN/BACK för kontrakterad New ARR mellan kvartalen och inom deras månader; dessa två nivåer ändrar inte varandras periodtotaler. Revenue Phasing styr separat redovisad intäkt från NYA kohorter på exakt vald inputnivå (Year/Quarter/Month), appliceras en gång och lagras per månad. Acceptansfallet 100 New CARR Q1, 25 % kvartalsphasing är nu 6,25 / 25 / 25 / 25 = 81,25 för året. A/B/C-intäktsbryggan har uttryckliga rader för intäktseffekt av phasing. Visning på en annan nivå räknar aldrig om phasing.
+**Implementerat och regressionstestat:** Separat FRONT/EVEN/BACK för kontrakterad New ARR mellan kvartalen och inom deras månader; dessa två nivåer ändrar inte varandras periodtotaler. Revenue Phasing styr separat redovisad intäkt från NYA kohorter på exakt vald inputnivå (Year/Quarter/Month), appliceras en gång och lagras per månad. Acceptansfallet 100 New CARR Q1, 25 % kvartalsphasing är nu 6,25 / 25 / 25 / 25 = 81,25 för året. I B visas phasingeffekten separat. I C ingår den i Recognized Revenue. Visning på en annan nivå räknar aldrig om phasing.
 
 **Preliminärt, INTE godkänd procentsats:** Källan anger FRONT/EVEN/BACK för kvartalen (35/30/20/15, 25/25/25/25, 15/20/25/40) men inga exakta månadsprocent för FRONT/BACK. Provisoriska standardmönster för val nummer två är **FRONT 50/30/20, EVEN 1/3–1/3–1/3, BACK 20/30/50**. Dessa ska endast betraktas som implementationsexempel till dess att användaren har fastställt dem.
 
@@ -81,7 +87,7 @@ PLAN skapar alltid en månadsbudget (12, 24, 36 ... månader), även när budget
 Följande avstämningar är invarianta:
 - Flöden: Summa månader = respektive kvartal = respektive år för Recognized Revenue, S&M, Cash Collections och övriga periodflöden.
 - Stockar: Periodens Closing CARR = sista månadens CARR, **aldrig** summan av månadsstockar. Ingående nästa period = föregående Closing.
-- Kohorter: Original base, earlier new cohorts, current period new cohorts är konsekventa och behåller sina rätta ursprung. Ingen fantomnyförsäljning eller extra månadsphasing vid visning.
+- Kohorter: A, B och C följer den månadsbaserade klassificeringen även i kvartals- och årsvisning. Ingen fantomnyförsäljning eller extra månadsphasing vid visning.
 - En allokeringsmetod och dess härledning lagras spårbart. Skillnaden **Budgeted monthly** / **Allocated monthly** syns vid behov.
 - När en budget fastställs måste dess månadsallokering **frysas**. TRACK jämför med den frysta **Budget**. **Actual** får inte skriva om ursprungsbudgeten. Ny **Actual + Forecast** är separat.
 

@@ -40,8 +40,9 @@ export function renderRevenueMatrix(model, currency="EUR", view="quarter") {
     row("Earlier new cohorts · pre-churn","earlierNewBaseRevenue"),
     row("− Churn effect · earlier cohorts","earlierNewChurnRevenueImpact",{indent:true}),
     row("+ Expansion effect · earlier cohorts","earlierNewExpansionRevenueImpact",{indent:true}),
+    row("− Revenue phasing · earlier cohorts","earlierNewRealizationImpact",{indent:true}),
     row("Net revenue · earlier new cohorts","earlierNewNetRevenue",{bold:true}),
-    row("Revenue · new in selected period","currentNewNetRevenue",{bold:true}),
+    row("Revenue · new customers in their first month","currentNewNetRevenue",{bold:true}),
     row("TOTAL recognized revenue","recognizedRevenue",{bold:true}),
   ];
   return `<div style="overflow:auto;max-width:100%;border:1px solid #e6e6e6;border-radius:8px;">
@@ -50,9 +51,8 @@ export function renderRevenueMatrix(model, currency="EUR", view="quarter") {
     <div style="font-size:11px;color:#777;line-height:1.6;margin-top:10px;">
       ARR/MRR are <strong>run rates</strong> (closing value, never summed over months).
       Recognized revenue is <strong>earned during each column's period</strong>.
-      "Original base" resets at the start of each plan year. "Earlier" and "Current"
-      are reclassified to match the displayed columns; their sum is invariant.
-      The first invoice month earns a full month's MRR. No same-budget-period
-      new-customer churn/expansion is assumed.
+      "Original base" resets at the start of each plan year. New customers move
+      to "Earlier" after their first month. Quarter and year views sum this
+      monthly split. New customer phasing applies in the acquisition budget period.
     </div>`;
 }

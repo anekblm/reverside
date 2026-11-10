@@ -244,9 +244,8 @@ function makeARRRows(input, monthlySignedARR) {
 }
 
 /**
- * Build a bridge for each displayed period, reclassifying vintages based on
- * the DISPLAYED period (not the source budget's granularity).
- * "Original" always means already present at that calendar year's start.
+ * Keep cohort membership monthly in every view. A is the year-opening
+ * base, C is the acquisition month, and B is subsequent months that year.
  */
 export function buildRevenueBridge(monthly, view = "quarter") {
   const width=periodMonths(view);
@@ -262,14 +261,20 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       currentNewRevenue:0,currentNewChurnRevenueImpact:0,currentNewExpansionRevenueImpact:0,
       currentNewRealizationImpact:0,
     };
-    // The year-opening bridge for A is additive across every view.
-    // B/C and legacy A reconcile against the displayed period's opening CARR.
-    const classifyRevenue = vintage => vintage<yearStart
-      ? "original" : vintage<start ? "earlier" : "current";
+    const cohortARR = {};
+    for(const prefix of ["original","earlier","current"]){
+      for(const key of ["StartARR","ChurnARR","ExpansionARR","NewARR","EndARR",
+                         "StartCustomers","ChurnCustomers","NewCustomers","EndCustomers"])
+        cohortARR[prefix+key] = 0;
+    }
+    const classify = (vintage,monthIndex) => vintage<yearStart
+      ? "original" : vintage<monthIndex ? "earlier" : "current";
+    let earlierTransferARR=0, earlierTransferCustomers=0;
     for(const c of first.cohortFlows) {
-      const bucket=classifyRevenue(c.firstInvoiceMonth);
+      const bucket=classify(c.firstInvoiceMonth,first.index);
+      cohortARR[bucket+"StartARR"]+=c.startARR;
+      cohortARR[bucket+"StartCustomers"]+=c.startCustomers;
       if(bucket==="original" && !hasYearOpeningBridge) metrics.originalBaseRevenue+=c.startARR*slice.length/12;
-      if(bucket==="earlier") metrics.earlierNewBaseRevenue+=c.startARR*slice.length/12;
     }
     slice.forEach((month,i)=>{
       if(hasYearOpeningBridge) {
@@ -280,20 +285,29 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       }
       const revenueWeight=(slice.length-i)/12;
       for(const c of month.cohortFlows) {
-        const bucket=classifyRevenue(c.firstInvoiceMonth);
+        const bucket=classify(c.firstInvoiceMonth,month.index);
+        cohortARR[bucket+"ChurnARR"]+=c.churnARR;
+        cohortARR[bucket+"ExpansionARR"]+=c.expansionARR;
+        cohortARR[bucket+"NewARR"]+=c.newARR;
+        cohortARR[bucket+"ChurnCustomers"]+=c.churnCustomers;
+        cohortARR[bucket+"NewCustomers"]+=c.newCustomers;
         if(bucket==="original") {
           if(!hasYearOpeningBridge) {
             metrics.originalChurnRevenueImpact-=c.churnARR*revenueWeight;
             metrics.originalExpansionRevenueImpact+=c.expansionARR*revenueWeight;
           }
         } else if(bucket==="earlier") {
-          metrics.earlierNewChurnRevenueImpact-=c.churnARR*revenueWeight;
-          metrics.earlierNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+          // Transfers at the opening boundary are already in B's opening stock.
+          if(i>0 && c.firstInvoiceMonth===month.index-1) {
+            earlierTransferARR+=c.startARR;
+            earlierTransferCustomers+=c.startCustomers;
+          }
+          metrics.earlierNewBaseRevenue+=c.startARR/12;
+          metrics.earlierNewChurnRevenueImpact-=c.churnARR/12;
+          metrics.earlierNewExpansionRevenueImpact+=c.expansionARR/12;
           metrics.earlierNewRealizationImpact+=c.realizationAdjustment??0;
         } else {
-          metrics.currentNewRevenue+=c.newARR*revenueWeight;
-          metrics.currentNewChurnRevenueImpact-=c.churnARR*revenueWeight;
-          metrics.currentNewExpansionRevenueImpact+=c.expansionARR*revenueWeight;
+          metrics.currentNewRevenue+=c.newARR/12;
           metrics.currentNewRealizationImpact+=c.realizationAdjustment??0;
         }
       }
@@ -303,48 +317,24 @@ export function buildRevenueBridge(monthly, view = "quarter") {
     const earlierNet=metrics.earlierNewBaseRevenue+
       metrics.earlierNewChurnRevenueImpact+metrics.earlierNewExpansionRevenueImpact+
       metrics.earlierNewRealizationImpact;
-    const currentNet=metrics.currentNewRevenue+
-      metrics.currentNewChurnRevenueImpact+metrics.currentNewExpansionRevenueImpact+
-      metrics.currentNewRealizationImpact;
-    // Stock/flow cohort bridge for the DISPLAYED period, independent of the
-    // budgeting granularity and with no double-counting of earlier new ARR.
-    const cohortARR = {};
-    for(const prefix of ["original","earlier","current"]){
-      for(const key of ["StartARR","ChurnARR","ExpansionARR","NewARR","EndARR",
-                         "StartCustomers","ChurnCustomers","NewCustomers","EndCustomers"])
-        cohortARR[prefix+key] = 0;
-    }
-    const classify=vintage=>vintage<yearStart?"original":vintage<start?"earlier":"current";
-    // Only the FIRST month establishes a period's opening stock.
-    for(const c of first.cohortFlows) {
-      const prefix=classify(c.firstInvoiceMonth);
-      cohortARR[prefix+"StartARR"]+=c.startARR;
-      cohortARR[prefix+"StartCustomers"]+=c.startCustomers;
-    }
-    for(const month of slice)for(const c of month.cohortFlows) {
-      const prefix=classify(c.firstInvoiceMonth);
-      cohortARR[prefix+"ChurnARR"]+=c.churnARR;
-      cohortARR[prefix+"ExpansionARR"]+=c.expansionARR;
-      cohortARR[prefix+"NewARR"]+=c.newARR;
-      cohortARR[prefix+"ChurnCustomers"]+=c.churnCustomers;
-      cohortARR[prefix+"NewCustomers"]+=c.newCustomers;
-    }
+    const currentNet=metrics.currentNewRevenue+metrics.currentNewRealizationImpact;
     for(const c of last.cohortFlows) {
-      const prefix=classify(c.firstInvoiceMonth);
+      const prefix=classify(c.firstInvoiceMonth,last.index);
       cohortARR[prefix+"EndARR"]+=c.endARR;
       cohortARR[prefix+"EndCustomers"]+=c.endCustomers;
     }
     for(const prefix of ["original","earlier","current"]){
+      const transferDirection=prefix==="earlier"?1:prefix==="current"?-1:0;
       if(!near(cohortARR[prefix+"StartARR"]-
                cohortARR[prefix+"ChurnARR"]+
                cohortARR[prefix+"ExpansionARR"]+
-               cohortARR[prefix+"NewARR"],
+               cohortARR[prefix+"NewARR"]+transferDirection*earlierTransferARR,
                cohortARR[prefix+"EndARR"]))
         throw new Error("Cohort ARR bridge does not reconcile: "+prefix+
           " months "+(start+1)+"-"+(start+slice.length));
       if(!near(cohortARR[prefix+"StartCustomers"]-
                cohortARR[prefix+"ChurnCustomers"]+
-               cohortARR[prefix+"NewCustomers"],
+               cohortARR[prefix+"NewCustomers"]+transferDirection*earlierTransferCustomers,
                cohortARR[prefix+"EndCustomers"]))
         throw new Error("Cohort customer bridge does not reconcile: "+prefix+
           " months "+(start+1)+"-"+(start+slice.length));
@@ -367,6 +357,7 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       endACV:last.endCustomers>0?last.endARR/last.endCustomers:0,
       retainedBaseACV:retainedBaseCustomers>0?retainedBaseARR/retainedBaseCustomers:0,
       ...cohortARR,
+      earlierTransferARR,earlierTransferCustomers,
       recognizedRevenue:flow("recognizedRevenue"),
       existingRevenue:originalNet,newRevenue:earlierNet+currentNet,
       originalNetRevenue:originalNet,earlierNewNetRevenue:earlierNet,currentNewNetRevenue:currentNet,
