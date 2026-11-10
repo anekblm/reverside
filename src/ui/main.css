@@ -124,6 +124,7 @@
     .pl-cohort-heading-static { padding:3px 0 3px 11px; }
     .pl-matrix-toolbar { display:flex; align-items:center; justify-content:space-between;
       flex-wrap:wrap; gap:6px 12px; margin-bottom:0.55rem; }
+    .pl-matrix-actions { display:flex; flex-wrap:wrap; gap:5px; }
     .pl-matrix-totals { grid-template-rows:auto repeat(3,1fr); }
     .pl-carr-view { display:flex; align-items:center; flex-wrap:wrap; gap:5px 8px;
       color:#666; font-size:11px; }

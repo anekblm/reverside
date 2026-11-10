@@ -643,8 +643,12 @@
                       onclick="setPlCarrView('period')">Period CARR</button>
               <span id="plCarrViewNote">Period CARR scales the annual run rate to the length of each column.</span>
             </div>
-            <button type="button" class="pl-pattern-btn" id="plMatrixToggle" aria-controls="plTable"
-                    aria-expanded="true" onclick="togglePlMatrix()">Show totals only</button>
+            <div class="pl-matrix-actions">
+              <button type="button" class="pl-pattern-btn" id="plMonthsAndYears" aria-controls="plTable"
+                      aria-pressed="false" onclick="togglePlMonthsAndYears()">Months + years</button>
+              <button type="button" class="pl-pattern-btn" id="plMatrixToggle" aria-controls="plTable"
+                      aria-expanded="true" onclick="togglePlMatrix()">Show totals only</button>
+            </div>
           </div>
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <div id="plTable"></div>

@@ -649,6 +649,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   const plExpandedCohorts = new Set();
   let plCarrView = 'fullYear';
   let plMatrixExpanded = true;
+  let plMonthsAndYears = false;
+  const plCollapsedMonthYears = new Set();
   let planInitialized = false;
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
@@ -1665,6 +1667,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     // The grid template, headers and rows share the same visible periods.
     const visiblePeriods = model.years.map((period,y)=>{
+      if (plMonthsAndYears) {
+        if (plCollapsedMonthYears.has(y)) return [{kind:'year',period}];
+        const months=model.monthlyBridge.slice(period.startMonth-1,period.endMonth)
+          .map(month=>({kind:'month',period:month,monthIndex:month.startMonth-1}));
+        return [...months,{kind:'yearTotal',period}];
+      }
       if (!window._qtr[y]) return [{kind:'year',period}];
       const cols=[];
       for (const quarter of model.quarters.filter(q=>q.year===y)) {
@@ -1745,7 +1753,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // ── HEADERS ──
     html += `<div></div>`;
     for (let y = 0; y < years; y++) {
-      const exp = window._qtr && window._qtr[y];
+      const exp = visiblePeriods[y].length>1;
+      const yearToggle=`id="plYearToggle${y}" role="button" tabindex="0" aria-expanded="${exp}" onclick="togglePlQtr(${y})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePlQtr(${y});}"`;
       if (exp) {
         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         for(const {kind,q,monthIndex} of visiblePeriods[y]) {
@@ -1756,13 +1765,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
             html += `<div style="font-size:10px;font-weight:600;color:${opened?'#185FA5':'#666'};text-align:center;padding:0.25rem;background:${opened?'#EDF4FB':'#f5f5f5'};border-radius:5px;cursor:pointer;" role="button" tabindex="0" onclick="togglePlMonth(${y},${q})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePlMonth(${y},${q});}" title="${opened?'Collapse months':'Expand months'}">Y${y+1} Q${q+1} ${opened?'▲':'▼M'}</div>`;
           }
         }
-        html += `<div style="font-size:11px;font-weight:700;color:#185FA5;text-align:center;padding:0.25rem 0.4rem;background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:5px;cursor:pointer;" onclick="togglePlQtr(${y})" title="Collapse">
+        html += `<div style="font-size:11px;font-weight:700;color:#185FA5;text-align:center;padding:0.25rem 0.4rem;background:#EDF4FB;border:0.5px solid #c5daf0;border-radius:5px;cursor:pointer;" ${yearToggle} title="${plMonthsAndYears?'Collapse months':'Collapse'}">
           Year ${y+1}${breakEvenYear===y+1?' ✓':''} ▲
         </div>`;
       } else {
-        html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem 0.4rem;background:#f0f0f0;border-radius:6px;cursor:pointer;position:relative;" onclick="togglePlQtr(${y})" title="Expand quarters">
+        html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem 0.4rem;background:#f0f0f0;border-radius:6px;cursor:pointer;position:relative;" ${yearToggle} title="${plMonthsAndYears?'Expand months':'Expand quarters'}">
           Year ${y+1}${breakEvenYear===y+1?' ✓':''}
-          <span style="font-size:9px;color:#aaa;margin-left:3px;">▼Q</span>
+          <span style="font-size:9px;color:#aaa;margin-left:3px;">${plMonthsAndYears?'▼M':'▼Q'}</span>
         </div>`;
       }
     }
@@ -2144,9 +2153,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function togglePlQtr(y) {
-    if (!window._qtr) window._qtr = {};
-    window._qtr[y] = !window._qtr[y];
+    if (plMonthsAndYears) {
+      if (plCollapsedMonthYears.has(y)) plCollapsedMonthYears.delete(y);
+      else plCollapsedMonthYears.add(y);
+    } else {
+      if (!window._qtr) window._qtr = {};
+      window._qtr[y] = !window._qtr[y];
+    }
     renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
+    document.getElementById('plYearToggle'+y)?.focus?.({preventScroll:true});
   }
 
   function togglePlCohort(key) {
@@ -2174,6 +2189,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const button=document.getElementById('plMatrixToggle');
     button.textContent=plMatrixExpanded?'Show totals only':'Show details';
     button.setAttribute?.('aria-expanded',String(plMatrixExpanded));
+    renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
+  }
+
+  function togglePlMonthsAndYears() {
+    plMonthsAndYears=!plMonthsAndYears;
+    const button=document.getElementById('plMonthsAndYears');
+    button.classList.toggle?.('active',plMonthsAndYears);
+    button.setAttribute?.('aria-pressed',String(plMonthsAndYears));
     renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
   }
 
@@ -2207,6 +2230,7 @@ Object.assign(window, {
   togglePlMonth,
   togglePlCohort,
   togglePlMatrix,
+  togglePlMonthsAndYears,
   setPlCarrView,
   updateCashAssumptions,
   updateQuarterSM

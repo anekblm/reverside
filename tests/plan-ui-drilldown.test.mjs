@@ -234,6 +234,32 @@ test('matrix totals view preserves open columns and cohort details when reopened
   assert.equal(win._latestMonthlyPlan,plan);
 });
 
+test('Months + years shows every modeled month without quarterly columns',()=>{
+  const {app,node,win}=createApp(24);
+  const plan=win._latestMonthlyPlan;
+  app.togglePlQtr(1);
+  app.togglePlMonth(1,2);
+  app.togglePlMatrix();
+  const previous=node('plTable').innerHTML;
+  app.togglePlMonthsAndYears();
+  const monthly=node('plTable').innerHTML;
+  assert.equal(width(node),27);
+  assert.equal((monthly.match(/>Jan<\/div>/g)??[]).length,2);
+  assert.equal((monthly.match(/>Dec<\/div>/g)??[]).length,2);
+  assert.doesNotMatch(monthly,/Y[12] Q[1-4]/);
+  assert.match(monthly,/pl-matrix-totals/);
+  app.togglePlQtr(1);
+  assert.equal(width(node),15);
+  app.togglePlMonthsAndYears();
+  assert.equal(node('plTable').innerHTML,previous);
+  assert.equal(win._latestMonthlyPlan,plan);
+
+  const halfYear=createApp(6);
+  halfYear.app.togglePlMonthsAndYears();
+  assert.equal(width(halfYear.node),8);
+  assert.doesNotMatch(halfYear.node('plTable').innerHTML,/>Jul<\/div>/);
+});
+
 test('A and B1 toggle independently, while B2 always shows its two summary rows',()=>{
   const {app,node,win}=createApp(12);
   const plan=win._latestMonthlyPlan;
