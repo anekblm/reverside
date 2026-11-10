@@ -646,6 +646,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plBudgetGranularity = 'quarter';
   let plPeriodOverride = null; // explicit New Contracted ARR per budget period
   let plPeriodInputsOpen = false;
+  const plExpandedCohorts = new Set();
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -1795,10 +1796,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       html += yearArrStartCells(y, Math.round(custAtStart[y]) + ' cust. · ACV ' + acvStr);
     }
 
-    const cohortHeading = title => {
+    const cohortHeading = (key,title) => {
+      const expanded=plExpandedCohorts.has(key);
       html += divider();
-      html += label(title, false, true, '#444');
+      html += label(`<button type="button" class="pl-cohort-toggle" id="plCohortToggle${key}" aria-expanded="${expanded}" onclick="togglePlCohort('${key}')">
+        <span aria-hidden="true">${expanded?'▾':'▸'}</span><span>${title}</span>
+      </button>`, false, true, '#444');
       for (let y=0;y<years;y++) html += eachPeriod(y,()=>'<div></div>');
+      return expanded;
     };
     const cohortARRRow = (name, prefix, key, {bold=false, negative=false, noteKey=null}={}) => {
       html += label(name, true, bold);
@@ -1836,47 +1841,62 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       });
     };
 
-    cohortHeading('A. Existing Customers');
+    const expandedA=cohortHeading('A','A. Existing Customers');
     cohortARRRow('Opening CARR · A','original','StartARR',{noteKey:'StartCustomers'});
-    cohortARRRow('− Churn CARR','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-    cohortARRRow('+ Expansion CARR','original','ExpansionARR');
+    if(expandedA) {
+      cohortARRRow('− Churn CARR','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+      cohortARRRow('+ Expansion CARR','original','ExpansionARR');
+    }
     cohortARRRow('Closing CARR · A','original','EndARR',{bold:true,noteKey:'EndCustomers'});
-    recognizedRow('Revenue before changes','originalBaseRevenue',{bold:false,indent:true});
-    recognizedRow('− Churn impact','originalChurnRevenueImpact',
-      {bold:false,indent:true,color:'#E24B4A',monthNoteKey:'originalChurnThisMonth'});
-    recognizedRow('+ Expansion impact','originalExpansionRevenueImpact',
-      {bold:false,indent:true,color:'#3B6D11',monthNoteKey:'originalExpansionThisMonth'});
+    if(expandedA) {
+      recognizedRow('Revenue before changes','originalBaseRevenue',{bold:false,indent:true});
+      recognizedRow('− Churn impact','originalChurnRevenueImpact',
+        {bold:false,indent:true,color:'#E24B4A',monthNoteKey:'originalChurnThisMonth'});
+      recognizedRow('+ Expansion impact','originalExpansionRevenueImpact',
+        {bold:false,indent:true,color:'#3B6D11',monthNoteKey:'originalExpansionThisMonth'});
+    }
+    recognizedRow('Recognized Revenue · A','originalNetRevenue',{indent:true});
 
-    cohortHeading('B. New Customers – Earlier This Year');
+    const expandedB=cohortHeading('B','B. New Customers – Earlier This Year');
     cohortARRRow('Of which: Opening CARR – Earlier New (B)','earlier','StartARR',{noteKey:'StartCustomers'});
-    cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-    cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
+    if(expandedB) {
+      cohortARRRow('− Churn CARR – B','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+      cohortARRRow('+ Expansion CARR – B','earlier','ExpansionARR');
+    }
     cohortARRRow('Closing CARR – B','earlier','EndARR',{bold:true});
-    recognizedRow('Revenue · Opening CARR × period / 12 (B)','earlierNewBaseRevenue',
-      {bold:false,indent:true});
-    recognizedRow('− Revenue impact · churn (B)','earlierNewChurnRevenueImpact',
-      {bold:false,indent:true,color:'#E24B4A'});
-    recognizedRow('+ Revenue impact · expansion (B)','earlierNewExpansionRevenueImpact',
-      {bold:false,indent:true,color:'#3B6D11'});
-    recognizedRow('− Revenue phasing · earlier new (B)','earlierNewRealizationImpact',
-      {bold:false,indent:true,color:'#E24B4A'});
+    if(expandedB) {
+      recognizedRow('Revenue · Opening CARR × period / 12 (B)','earlierNewBaseRevenue',
+        {bold:false,indent:true});
+      recognizedRow('− Revenue impact · churn (B)','earlierNewChurnRevenueImpact',
+        {bold:false,indent:true,color:'#E24B4A'});
+      recognizedRow('+ Revenue impact · expansion (B)','earlierNewExpansionRevenueImpact',
+        {bold:false,indent:true,color:'#3B6D11'});
+      recognizedRow('− Revenue phasing · earlier new (B)','earlierNewRealizationImpact',
+        {bold:false,indent:true,color:'#E24B4A'});
+    }
+    recognizedRow('Recognized Revenue · B','earlierNewNetRevenue',{indent:true});
 
-    cohortHeading('C. New Customers – Current Period');
+    const expandedC=cohortHeading('C','C. New Customers – Current Period');
     cohortARRRow('+ New Contracted ARR – Current (C)','current','NewARR',{noteKey:'NewCustomers'});
-    cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-    cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
+    if(expandedC) {
+      cohortARRRow('− Churn CARR – C','current','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+      cohortARRRow('+ Expansion CARR – C','current','ExpansionARR');
+    }
     cohortARRRow('Closing CARR – C','current','EndARR',{bold:true});
-    recognizedRow('Revenue · New signed CARR before phasing (C)','currentNewRevenue',
-      {bold:false,indent:true});
-    recognizedRow('− Revenue impact · churn (C)','currentNewChurnRevenueImpact',
-      {bold:false,indent:true,color:'#E24B4A'});
-    recognizedRow('+ Revenue impact · expansion (C)','currentNewExpansionRevenueImpact',
-      {bold:false,indent:true,color:'#3B6D11'});
-    recognizedRow('− Revenue phasing · current new (C)','currentNewRealizationImpact',
-      {bold:false,indent:true,color:'#E24B4A'});
+    if(expandedC) {
+      recognizedRow('Revenue · New signed CARR before phasing (C)','currentNewRevenue',
+        {bold:false,indent:true});
+      recognizedRow('− Revenue impact · churn (C)','currentNewChurnRevenueImpact',
+        {bold:false,indent:true,color:'#E24B4A'});
+      recognizedRow('+ Revenue impact · expansion (C)','currentNewExpansionRevenueImpact',
+        {bold:false,indent:true,color:'#3B6D11'});
+      recognizedRow('− Revenue phasing · current new (C)','currentNewRealizationImpact',
+        {bold:false,indent:true,color:'#E24B4A'});
+    }
+    recognizedRow('Recognized Revenue · C','currentNewNetRevenue',{indent:true});
 
     html += divider();
-    recognizedRow('Recognized Revenue · A','existingRevenue');
+    recognizedRow('Recognized Revenue – Existing (A)','existingRevenue');
     recognizedRow('Recognized Revenue – New (B+C)','newRevenue');
     recognizedRow('Total Recognized Revenue','recognizedRevenue');
 
@@ -2149,6 +2169,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
   }
 
+  function togglePlCohort(key) {
+    if (!['A','B','C'].includes(key)) return;
+    if (plExpandedCohorts.has(key)) plExpandedCohorts.delete(key);
+    else plExpandedCohorts.add(key);
+    renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
+    document.getElementById('plCohortToggle'+key)?.focus?.({preventScroll:true});
+  }
+
 // Transitional bridge for inline HTML event handlers. Step-by-step, handlers will
 // move to addEventListener inside the corresponding feature module.
 Object.assign(window, {
@@ -2179,6 +2207,7 @@ Object.assign(window, {
   setMonthScenario,
   togglePlQtr,
   togglePlMonth,
+  togglePlCohort,
   updateCashAssumptions,
   updateQuarterSM
 });

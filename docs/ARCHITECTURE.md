@@ -114,6 +114,12 @@ quarters into months. Expanding only changes displayed columns, not the monthly
 source ledger. The grid shows quarters within the forecast horizon. Its
 break-even marker is available after a CAC strategy has been selected.
 
+Each cohort starts collapsed. A and B show opening CARR, closing CARR and
+their recognized revenue subtotal. C shows new CARR, closing CARR and its
+recognized revenue subtotal. Each section expands independently to show
+the changes behind those figures. The section state is separate from
+the year and quarter drilldown.
+
 The controls above the matrix group A's churn, expansion, NRR and timing
 separately from acquisition budget, signing presets and acquisition
 revenue phasing. The Advanced section contains the new customer ACV

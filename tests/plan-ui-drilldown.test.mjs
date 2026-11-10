@@ -118,17 +118,20 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     '>− Churn CARR</div>',
     '>+ Expansion CARR</div>',
     'Closing CARR · A',
+    'Recognized Revenue · A',
     'B. New Customers – Earlier This Year',
     'Of which: Opening CARR – Earlier New (B)',
     '− Churn CARR – B',
     '+ Expansion CARR – B',
     'Closing CARR – B',
+    'Recognized Revenue · B',
     'C. New Customers – Current Period',
     '+ New Contracted ARR – Current (C)',
     '− Churn CARR – C',
     '+ Expansion CARR – C',
     'Closing CARR – C',
-    'Recognized Revenue · A',
+    'Recognized Revenue · C',
+    'Recognized Revenue – Existing (A)',
     'Recognized Revenue – New (B+C)',
     'Total Recognized Revenue',
     'Closing CARR · A + B + C'
@@ -160,6 +163,7 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
         p[x+'NewARR'],p[x+'EndARR']);
     }
   };
+  for(const key of ['A','B','C']) app.togglePlCohort(key);
   checkLabels();
   win._latestMonthlyPlan.years.forEach(reconcile);
   app.togglePlQtr(0);
@@ -172,6 +176,29 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
   assert.ok(q2.earlierNewNetRevenue>0,'Q2 must include prior Q1 new customers');
   assert.ok(win._latestMonthlyPlan.years[0].earlierNewNetRevenue===0,
     'The current year acquired cohort remains current within the year view');
+});
+
+test('A, B and C start collapsed and toggle independently of the forecast and column drilldown',()=>{
+  const {app,node,win}=createApp(12);
+  const plan=win._latestMonthlyPlan;
+  const html=()=>node('plTable').innerHTML;
+  for(const key of ['A','B','C']) {
+    assert.match(html(),new RegExp('id="plCohortToggle'+key+'" aria-expanded="false"'));
+    assert.match(html(),new RegExp('Recognized Revenue · '+key));
+  }
+  assert.doesNotMatch(html(),/Revenue before changes|Revenue phasing · earlier new|Revenue phasing · current new/);
+  app.togglePlCohort('B');
+  assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
+  assert.match(html(),/Revenue phasing · earlier new/);
+  assert.doesNotMatch(html(),/Revenue before changes|Revenue phasing · current new/);
+  app.togglePlQtr(0);
+  app.togglePlMonth(0,1);
+  assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
+  app.togglePlCohort('C');
+  app.togglePlCohort('B');
+  assert.match(html(),/Revenue phasing · current new/);
+  assert.doesNotMatch(html(),/Revenue phasing · earlier new/);
+  assert.equal(win._latestMonthlyPlan,plan);
 });
 
 test('budget granularity Year/Quarter/Month changes the input engine, not the display layout',()=>{
@@ -292,6 +319,7 @@ test('Existing A shows the full revenue bridge, month-only detail and customer c
   close(plan.monthlyBridge[1].originalExpansionRevenueImpact,1041.6666666667);
   close(plan.monthlyBridge[1].originalExpansionThisMonth,347.2222222222);
   assert.doesNotMatch(node('plTable').innerHTML,/pl-month-impact/);
+  app.togglePlCohort('A');
   app.togglePlQtr(0);
   app.togglePlMonth(0,0);
   assert.equal(win._latestMonthlyPlan,plan);
