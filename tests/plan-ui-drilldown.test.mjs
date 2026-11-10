@@ -166,6 +166,7 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     '>New CARR</div>',
     '>Recognized Revenue</div>',
     '>Closing CARR</div>',
+    '>NRR</div>',
     '>Revenue · Existing</div>',
     '>Revenue · New</div>',
     '>Total Recognized Revenue</div>'
@@ -224,8 +225,9 @@ test('matrix totals view preserves open columns and cohort details when reopened
   app.togglePlMatrix();
   const compact=node('plTable').innerHTML;
   assert.equal(width(node),9);
-  assert.deepEqual([...compact.matchAll(/>(Opening CARR|Closing CARR|Recognized Revenue)<\/div>/g)]
-    .map(match=>match[1]),['Opening CARR','Closing CARR','Recognized Revenue']);
+  assert.deepEqual([...compact.matchAll(/>(Opening CARR|Closing CARR|NRR|Recognized Revenue)<\/div>/g)]
+    .map(match=>match[1]),['Opening CARR','Closing CARR','NRR','Recognized Revenue']);
+  assert.equal((compact.match(/class="pl-matrix-value"/g)??[]).length,4*(width(node)-1));
   assert.doesNotMatch(compact,/EXISTING CUSTOMERS|Revenue · Existing|Gross profit|Unit Economics/);
   assert.equal(node('plMatrixToggle').textContent,'Show details');
   app.togglePlMatrix();
@@ -247,7 +249,7 @@ test('Months + years shows every modeled month without quarterly columns',()=>{
   assert.equal((monthly.match(/>Jan<\/div>/g)??[]).length,2);
   assert.equal((monthly.match(/>Dec<\/div>/g)??[]).length,2);
   assert.doesNotMatch(monthly,/Y[12] Q[1-4]/);
-  assert.match(monthly,/pl-matrix-totals/);
+  assert.match(monthly,/>NRR<\/div>/);
   app.togglePlQtr(1);
   assert.equal(width(node),15);
   app.togglePlMonthsAndYears();

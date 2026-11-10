@@ -13,6 +13,9 @@ period-based inputs remain available to callers of the forecast engine.
 - **Signed MRR:** New ARR / 12. The acquisition phasing rule determines
   recognized revenue for those cohorts in the acquisition month.
 - **Closing ARR:** stock of annualized recurring value remaining at period end.
+- **Net Revenue Retention (NRR):** closing ARR from cohorts active at the
+  start of the displayed period divided by their opening ARR. If there is
+  no opening ARR, the matrix displays a dash.
 - **Recognized Revenue:** revenue earned during the displayed accounting period,
   after applying the relevant cohort timing rules to the monthly run rate.
 - **Cash collections:** the monthly invoices actually collected at the specified

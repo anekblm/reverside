@@ -65,6 +65,22 @@ test("monthly budget has no phantom phasing and quarter/year aggregate exactly",
   approx(r.quarters[3].endARR,r.years[0].endARR);
   for(let i=1;i<r.months.length;i++)approx(r.months[i].startARR,r.months[i-1].endARR);
 });
+test("NRR measures the opening cohorts even when new cohorts later churn",()=>{
+  const model=forecastSaaS(base({
+    months:3,granularity:"month",churnPeriod:"month",churnRate:0.25,
+    newARRByPeriod:[100,0,0],existingRetention:{phasePercent:100},
+  }));
+  const quarter=model.quarters[0];
+  approx(quarter.netRevenueRetention,0.75**3);
+  approx(quarter.endARR,500*0.75**3+100*0.75**2);
+  approx(model.monthlyBridge[1].netRevenueRetention,0.75);
+
+  const preRevenue=forecastSaaS(base({
+    months:3,granularity:"month",openingARR:0,openingCustomers:0,newARRByPeriod:[100,0,0],
+  }));
+  assert.equal(preRevenue.monthlyBridge[0].netRevenueRetention,null);
+  approx(preRevenue.monthlyBridge[1].netRevenueRetention,1);
+});
 test("B and C sum monthly recognized revenue separately in the quarterly view",()=>{
   const model=forecastSaaS(base({months:3,newARRByPeriod:[35]}));
   const months=buildRevenueBridge(model.months,"month");

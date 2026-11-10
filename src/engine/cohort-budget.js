@@ -392,6 +392,7 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       startACV:first.startCustomers>0?first.startARR/first.startCustomers:0,
       endACV:last.endCustomers>0?last.endARR/last.endCustomers:0,
       retainedBaseACV:retainedBaseCustomers>0?retainedBaseARR/retainedBaseCustomers:0,
+      netRevenueRetention:first.startARR>0?retainedBaseARR/first.startARR:null,
       ...cohortARR,
       earlierTransferARR,earlierTransferCustomers,
       recognizedRevenue:flow("recognizedRevenue"),

@@ -1689,9 +1689,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     });
     const widths = {year:110,quarter:72,month:70,yearTotal:88};
     const GAP  = 5;
-    const colDefs = [148, ...visiblePeriods.flatMap(cols=>cols.map(col=>widths[col.kind]))];
-    const colTemplate = colDefs.map(width=>width+'px').join(' ');
-    const totalGridW = colDefs.reduce((s,width)=>s+width, 0) + (colDefs.length - 1) * GAP;
+    const colTemplate = ['148px',...visiblePeriods.flatMap(cols=>
+      cols.map(({kind})=>`minmax(${widths[kind]}px,max-content)`))].join(' ');
 
     const empty = `<div></div>`;
 
@@ -1700,16 +1699,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#bbb;margin-top:1px;">${note}</div>` : ''}
       </div>`;
 
-    // Year-total cell — blue tint, only shown when year is expanded
-    const ycell = (val, bold=true, color='#185FA5', bg='#EDF4FB', note='') =>
-      `<div style="background:${bg};border:0.5px solid #c5daf0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:${bold?'700':'500'};color:${color};">
-        ${fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#888;margin-top:1px;">${note}</div>` : ''}
-      </div>`;
-
     const periodCell = (value,kind,{bold=false,color='#555',bg='white',note=''}={}) => {
-      if(kind==='yearTotal') return ycell(value,bold,color,bg,note);
-      if(kind==='year') return cell(value,bold,color,bg,note);
-      return `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(value))}${note?`<div style="font-size:9px;color:#aaa;">${note}</div>`:''}</div>`;
+      const yearTotal=kind==='yearTotal';
+      const isYear=yearTotal||kind==='year';
+      const fontWeight=(bold?600:400)+(yearTotal?100:0);
+      const noteColor=yearTotal?'#888':isYear?'#bbb':'#aaa';
+      const display=typeof value==='string'?value:fmt(Math.round(value));
+      return `<div class="pl-matrix-value" style="background:${bg};border:0.5px solid ${yearTotal?'#c5daf0':'#e0e0e0'};border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:${isYear?11:10}px;font-weight:${fontWeight};color:${color};">${display}${note?`<div style="font-size:9px;color:${noteColor};margin-top:${isYear?1:0}px;">${note}</div>`:''}</div>`;
     };
     const carrCell = (value,period,kind,options) =>
       periodCell(plCarrView==='period'?value*period.monthsInPeriod/12:value,kind,options);
@@ -1747,8 +1743,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     const divider = () => `<div style="grid-column:1/-1;border-top:0.5px solid #e0e0e0;margin:2px 0;"></div>`;
 
-    const compactClass=plMatrixExpanded?'':' class="pl-matrix-totals"';
-    let html = `<div${compactClass} style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:${totalGridW}px;">`;
+    let html = `<div style="display:grid;grid-template-columns:${colTemplate};gap:${GAP}px;width:max-content;">`;
 
     // ── HEADERS ──
     html += `<div></div>`;
@@ -1776,11 +1771,16 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     }
 
+    const percent = new Intl.NumberFormat(undefined,{style:'percent',maximumFractionDigits:2});
     const totalRow = (name,key) => {
       html += label(name,false,true,'#185FA5');
       for(let y=0;y<years;y++) html += eachPeriod(y,(period,kind)=>{
         const options={bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB'};
         if(key==='recognizedRevenue') return periodCell(period[key],kind,options);
+        if(key==='netRevenueRetention'){
+          const value=period[key]===null?'—':percent.format(period[key]);
+          return periodCell(value,kind,options);
+        }
         const opening=key==='startARR';
         const customers=opening?period.startCustomers:period.endCustomers;
         const count=Math.round(customers);
@@ -1799,6 +1799,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     totalRow('Opening CARR','startARR');
     if(!plMatrixExpanded){
       totalRow('Closing CARR','endARR');
+      totalRow('NRR','netRevenueRetention');
       totalRow('Recognized Revenue','recognizedRevenue');
       el.innerHTML=html+'</div>';
       return;
@@ -1893,6 +1894,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     html += divider();
     totalRow('Closing CARR','endARR');
+    totalRow('NRR','netRevenueRetention');
     html += divider();
     recognizedRow('Revenue · Existing','existingRevenue',{bold:false});
     recognizedRow('Revenue · New','newRevenue',{bold:false});
@@ -1900,7 +1902,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     // Revenue impact and annualized CARR change are different units. The
     // recognized revenue lines cannot be added to the CARR closing stock.
-    html += `<div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
+    html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
       Full Year CARR shows annualized amounts. Period CARR scales those amounts by months in the column / 12.
       Opening and closing CARR are measured at the period boundaries. Recognized revenue is earned during the period.
       A uses the year-opening CARR as its revenue base. Its churn and expansion
@@ -1908,6 +1910,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       In a monthly cell, “of which” shows the portion from that month's own change.
       New customer phasing applies once in the acquisition month.
       Opening CARR - churn + expansion + new CARR = Closing CARR.
+      NRR compares closing CARR from the opening customer base with that base's opening CARR.
       Recognized Existing (A) + Recognized New (B1 + B2) = Total Recognized Revenue.
       B2 shows new CARR and first-month recognized revenue. The following month,
       customers move to B1, or to A at the year boundary. B1's opening balance includes
@@ -1941,8 +1944,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += label('S&M spend <span style="font-size:9px;font-weight:400;color:#999;">← from annual plan</span>', true);
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
-        const ph = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">select strategy ↓</div>`;
-        html += eachPeriod(y,()=>ph);
+        html += eachPeriod(y,(_,kind)=>periodCell('select strategy ↓',kind,{color:'#bbb'}));
       }
     } else {
       for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'smPaid', -1, false, '#E24B4A');
@@ -1953,8 +1955,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += label('Contribution (GP − S&M)', false, true);
     if (!selectedStrategy) {
       for (let y = 0; y < years; y++) {
-        const ph = `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:#bbb;">—</div>`;
-        html += eachPeriod(y,()=>ph);
+        html += eachPeriod(y,(_,kind)=>periodCell('—',kind,{bg:'#fafafa',color:'#bbb'}));
       }
     } else {
       for (let y = 0; y < years; y++) {
@@ -1974,7 +1975,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }
     }
 
-    html += `<div style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
+    html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
       Contracted ARR is annualized at period start/end; recognized revenue and the revenue impacts of churn and expansion are earned during the period. Existing (A) + New (B1 + B2) = Total Recognized Revenue.
     </div>`;
 
