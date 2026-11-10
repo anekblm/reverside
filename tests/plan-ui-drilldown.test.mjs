@@ -141,21 +141,20 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     '>Closing CARR</div>',
     '>Recognized Revenue</div>',
     'B – NEW CUSTOMERS',
-    '(acquired this year - accumulated)',
+    'B1 – Accumulated',
     '>Opening CARR</div>',
-    '+ Transferred from C',
+    '+ Transferred from B2',
     '>− Churn CARR</div>',
     '>+ Expansion CARR</div>',
     '>Closing CARR</div>',
     '>Recognized Revenue</div>',
-    'C – NEW CUSTOMERS',
-    '(acquired this year - new in period)',
+    'B2 – New in period',
     '>New CARR</div>',
     '>Recognized Revenue</div>',
     'Recognized Revenue – Existing (A)',
-    'Recognized Revenue – New (B+C)',
+    'Recognized Revenue – New (B1 + B2)',
     'Total Recognized Revenue',
-    'Closing CARR · A + B + C'
+    '>Closing CARR · A + B</div>'
   ];
   const checkLabels=()=>{
     const html=node('plTable').innerHTML;
@@ -201,7 +200,7 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     'Year totals include revenue from subsequent months in B');
 });
 
-test('A and B toggle independently, while C always shows only its two summary rows',()=>{
+test('A and B1 toggle independently, while B2 always shows its two summary rows',()=>{
   const {app,node,win}=createApp(12);
   const plan=win._latestMonthlyPlan;
   const html=()=>node('plTable').innerHTML;
@@ -210,11 +209,11 @@ test('A and B toggle independently, while C always shows only its two summary ro
   }
   assert.equal((html().match(/>Recognized Revenue<\/div>/g)??[]).length,3);
   assert.doesNotMatch(html(),/plCohortToggleC/);
-  assert.doesNotMatch(html(),/Revenue before changes|− Revenue phasing|Transferred from C/);
+  assert.doesNotMatch(html(),/Revenue before changes|− Revenue phasing|Transferred from B2/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   assert.match(html(),/− Revenue phasing/);
-  assert.match(html(),/Transferred from C/);
+  assert.match(html(),/Transferred from B2/);
   assert.match(html(),/id="plCohortToggleA" aria-expanded="false"/);
   app.togglePlQtr(0);
   app.togglePlMonth(0,1);

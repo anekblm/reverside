@@ -114,9 +114,11 @@ quarters into months. Expanding only changes displayed columns, not the monthly
 source ledger. The grid shows quarters within the forecast horizon. Its
 break-even marker is available after a CAC strategy has been selected.
 
-A and B start collapsed with opening CARR, closing CARR and recognized
+A and B1 start collapsed with opening CARR, closing CARR and recognized
 revenue. Each expands independently of the year and quarter drilldown.
-C shows only new CARR with customer counts and first-month recognized revenue.
+Under B – New Customers, B1 (Accumulated) is the earlier cohort and
+B2 (New in period) is the acquisition-month cohort. B2 shows new CARR with
+customer counts and first-month recognized revenue.
 
 Full Year CARR displays annualized amounts. Period CARR multiplies the
 CARR rows by the actual months in each displayed column divided by 12.
@@ -135,19 +137,19 @@ assumption and explains contracted and expansion ACV.
    Opening, churn and closing rows show customer counts. The revenue rows
    show the complete churn and expansion effects. Expanded months show
    their own contribution as “of which” in the same cells.
-3. Cohort B: customers acquired in **earlier months of the same year**.
-   The CARR bridge shows opening CARR, transfers from C within the
+3. Cohort B1: customers acquired in **earlier months of the same year**.
+   The CARR bridge shows opening CARR, transfers from B2 within the
    column, churn, expansion and closing CARR. B includes recognized
    revenue after the acquisition month.
-4. Cohort C: new CARR and recognized revenue in each customer's
-   **acquisition month**. Subsequent changes to these customers appear in B.
-5. Recognized Revenue Existing (A), Recognized Revenue New (B+C),
+4. Cohort B2: new CARR and recognized revenue in each customer's
+   **acquisition month**. Subsequent changes to these customers appear in B1.
+5. Recognized Revenue Existing (A), Recognized Revenue New (B1+B2),
    Total Recognized Revenue.
-6. Contracted ARR (closing stock = A + B + C).
+6. Contracted ARR (closing stock = A + B).
 
-A/B opening rows are components of total opening CARR. Customers in C at
-the end of a month move to B at the next month's opening within the same
-year. At year-end, both B and C move to next year's A. Quarter and year
+A/B1 opening rows are components of total opening CARR. Customers in B2 at
+the end of a month move to B1 at the next month's opening within the same
+year. At year-end, both B1 and B2 move to next year's A. Quarter and year
 columns sum the monthly flows by cohort and use opening and closing stocks
 at the column boundaries.
 
