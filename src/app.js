@@ -647,6 +647,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plPeriodOverride = null; // explicit New Contracted ARR per budget period
   let plPeriodInputsOpen = false;
   const plExpandedCohorts = new Set();
+  let plCarrView = 'fullYear';
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = 0;
 
@@ -1713,6 +1714,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       if(kind==='year') return cell(value,bold,color,bg,note);
       return `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;font-weight:${bold?'600':'400'};color:${color};">${fmt(Math.round(value))}${note?`<div style="font-size:9px;color:#aaa;">${note}</div>`:''}</div>`;
     };
+    const carrCell = (value,period,kind,options) =>
+      periodCell(plCarrView==='period'?value*period.monthsInPeriod/12:value,kind,options);
     const eachPeriod = (y,fn) => visiblePeriods[y].map(col=>fn(col.period,col.kind,col)).join('');
 
     // Every row renders the same visible period columns, whether year, quarter or month.
@@ -1720,7 +1723,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       eachPeriod(y,(period,kind)=>periodCell((period[key]||0)*sign,kind,{bold,color,bg}));
 
     const yearArrStartCells = (y,note='') => eachPeriod(y,(period,kind)=>
-      periodCell(period.startARR??0,kind,{color:'#555',bg:'#fafafa',
+      carrCell(period.startARR??0,period,kind,{color:'#555',bg:'#fafafa',
         note:kind==='year'||kind==='yearTotal'?note:
           ((period.startCustomers??0)>0?Math.round(period.startCustomers)+' cust.':'')}));
 
@@ -1822,7 +1825,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
           const count=period[prefix+'NewCustomers'];
           note=Math.round(count)+' new cust. · ACV '+fmt(Math.round(period[prefix+'NewARR']/count));
         }
-        return periodCell(value,kind,{
+        return carrCell(value,period,kind,{
           bold,color:negative?'#E24B4A':key==='ExpansionARR'?'#3B6D11':'#555',
           bg:bold?'#fafafa':'white',note,
         });
@@ -1903,7 +1906,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += divider();
     html += label('Closing CARR · A + B + C',false,true);
     for(let y=0;y<years;y++){
-      html += eachPeriod(y,(period,kind)=>periodCell(period.endARR??0,kind,{
+      html += eachPeriod(y,(period,kind)=>carrCell(period.endARR??0,period,kind,{
         bold:true,color:'#185FA5',bg:kind==='yearTotal'?'#EDF4FB':'#E6F1FB',
         note:kind==='year'||kind==='yearTotal'
           ? Math.round(custAtEnd[y])+' cust. · ACV '+
@@ -1915,7 +1918,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // Revenue impact and annualized CARR change are different units. The
     // recognized revenue lines cannot be added to the CARR closing stock.
     html += `<div style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
-      CARR is annualized. Recognized revenue is earned during the period.
+      Full Year CARR shows annualized amounts. Period CARR scales those amounts by months in the column / 12.
+      Opening and closing CARR are measured at the period boundaries. Recognized revenue is earned during the period.
       A uses the year-opening CARR as its revenue base. Its churn and expansion
       rows include the effect of changes from earlier months in the year.
       In a monthly cell, “of which” shows the portion from that month's own change.
@@ -1936,7 +1940,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
     // ACV is a contracted annualized run rate per CURRENT customer,
     // not recognized revenue divided by end-of-period customers.
-    html += label('Contracted ACV (end) = Closing CARR / Customers', false, true);
+    html += label(plCarrView==='period'
+      ? 'Contracted ACV (end) = Annualized Closing CARR / Customers'
+      : 'Contracted ACV (end) = Closing CARR / Customers', false, true);
     for(let y=0;y<years;y++) {
       html += eachPeriod(y,(period,kind)=>periodCell(period.endACV??0,kind,{
         color:'#555',bg:'white',
@@ -2177,6 +2183,18 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('plCohortToggle'+key)?.focus?.({preventScroll:true});
   }
 
+  function setPlCarrView(value) {
+    if (!['fullYear','period'].includes(value) || value===plCarrView) return;
+    plCarrView=value;
+    for (const [mode,id] of [['fullYear','plCarrFullYear'],['period','plCarrPeriod']]) {
+      const button=document.getElementById(id);
+      const active=mode===plCarrView;
+      button?.classList.toggle?.('active',active);
+      button?.setAttribute?.('aria-pressed',String(active));
+    }
+    renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
+  }
+
 // Transitional bridge for inline HTML event handlers. Step-by-step, handlers will
 // move to addEventListener inside the corresponding feature module.
 Object.assign(window, {
@@ -2208,6 +2226,7 @@ Object.assign(window, {
   togglePlQtr,
   togglePlMonth,
   togglePlCohort,
+  setPlCarrView,
   updateCashAssumptions,
   updateQuarterSM
 });

@@ -120,6 +120,11 @@ recognized revenue subtotal. Each section expands independently to show
 the changes behind those figures. The section state is separate from
 the year and quarter drilldown.
 
+Full Year CARR displays annualized amounts. Period CARR multiplies the
+CARR rows by the actual months in each displayed column divided by 12.
+Recognized revenue, customer counts and ACV use their own units in both
+views. Switching the CARR basis reuses the same forecast results.
+
 The controls above the matrix group A's churn, expansion, NRR and timing
 separately from acquisition budget, signing presets and acquisition
 revenue phasing. The Advanced section contains the new customer ACV

@@ -623,7 +623,7 @@
           <details class="pl-advanced">
             <summary>Advanced · ACV and new customer pricing</summary>
             <div class="pl-advanced-content">
-              <p><strong>Contracted ACV</strong> is CARR divided by the customer count at that point in time. The matrix shows opening and closing balances.</p>
+              <p><strong>Contracted ACV</strong> is annualized CARR divided by the customer count at that point in time. The matrix shows opening and closing balances.</p>
               <p><strong>Expansion ACV</strong> is entry ACV × NRR ÷ GRR. New customer pricing defaults to the year's entry ACV.</p>
               <label class="pl-advanced-price" for="plUseExpACVCheck">
                 <input type="checkbox" id="plUseExpACVCheck" onchange="onPLCheckbox()">
@@ -631,6 +631,13 @@
               </label>
             </div>
           </details>
+          <div class="pl-carr-view" role="group" aria-label="CARR display" aria-describedby="plCarrViewNote">
+            <button type="button" class="pl-pattern-btn active" id="plCarrFullYear" aria-pressed="true"
+                    onclick="setPlCarrView('fullYear')">Full Year CARR</button>
+            <button type="button" class="pl-pattern-btn" id="plCarrPeriod" aria-pressed="false"
+                    onclick="setPlCarrView('period')">Period CARR</button>
+            <span id="plCarrViewNote">Period CARR scales the annual run rate to the length of each column.</span>
+          </div>
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <div id="plTable"></div>
           </div>

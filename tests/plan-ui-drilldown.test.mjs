@@ -81,6 +81,26 @@ test('A six-month plan displays only modeled quarters and no premature break-eve
   assert.doesNotMatch(node('plTable').innerHTML,/>Jul<\/div>/);
   assert.equal(win._latestMonthlyPlan,plan);
 });
+test('Period CARR scales the displayed rate to the column length without recalculating the plan',()=>{
+  const {app,node,win}=createApp(6);
+  const plan=win._latestMonthlyPlan;
+  const opening=()=>node('plTable').innerHTML.split('>Opening CARR</div>')[1];
+  const firstCell=()=>opening().match(/^<div[^>]*>\s*([^<]+)/)[1].trim();
+  assert.equal(firstCell(),currencyFormats.SEK(500000));
+  app.setPlCarrView('period');
+  assert.equal(firstCell(),currencyFormats.SEK(250000));
+  app.togglePlQtr(0);
+  assert.equal(firstCell(),currencyFormats.SEK(125000));
+  app.togglePlMonth(0,0);
+  assert.equal(firstCell(),currencyFormats.SEK(500000/12));
+  const withMonths=node('plTable').innerHTML;
+  app.setPlCarrView('fullYear');
+  assert.equal(firstCell(),currencyFormats.SEK(500000));
+  assert.equal(win._latestMonthlyPlan,plan);
+  assert.equal(width(node),7);
+  const revenueCell=html=>html.split('>Recognized Revenue · A</div>')[1].match(/^<div[^>]*>\s*([^<]+)/)[1].trim();
+  assert.equal(revenueCell(node('plTable').innerHTML),revenueCell(withMonths));
+});
 test('quarter phasing slider modifies the same cohort engine while preserving open month columns',()=>{
   const {app,node,win}=createApp(36);
   app.togglePlQtr(0);
