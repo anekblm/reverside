@@ -37,7 +37,9 @@ evenly within each quarter. These reuse the acquisition presets as an
 implementation choice for A. Partial years use the elapsed months' weights
 from the annual schedule.
 
-The separate A phasing control defaults to 50%. For each month, the
+The separate A phasing control defaults to 100% in PLAN. Churn and
+expansion then have their full revenue effect in the month of change.
+The slider can model a partial first month. For each month, the
 revenue baseline is year-opening CARR / 12. Each signed revenue effect is
 `(prior months’ CARR changes + this month’s CARR change × first-month phase) / 12`.
 Monthly cells show the current-month share below the total, marked
@@ -49,9 +51,11 @@ Reference case: opening CARR 500,000, annual churn 25%, expansion 20%,
 EVEN and 50% first-month effect. Closing CARR is 475,000. The annual
 revenue bridge is 500,000 − 62,500 + 50,000 = 487,500. February churn impact
 is −1,302.08, of which −434.03 comes from February's CARR change. January
-recognized revenue is 41,579.86 and Q1 is 124,218.75.
+recognized revenue is 41,579.86 and Q1 is 124,218.75. With the 100%
+default, the same CARR movements give 486,458.33 in annual recognized
+revenue.
 
-This rule supersedes earlier period-opening retention and full-first-month
+This annual allocation supersedes earlier period-opening retention
 examples for A in PLAN. The budget granularity and New ARR phasing below
 apply to current-year acquisitions until they join A at the next year start.
 See the [retention tests](../tests/budget-granularity-retention.test.mjs)

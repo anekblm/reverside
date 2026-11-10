@@ -642,7 +642,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plQtrScenario = 'EVEN'; // New CARR between quarters
   let plMonthScenario = 'EVEN'; // New CARR between months INSIDE each quarter
   let plNewCustomerPhase = 100;
-  let plExistingRetention = { pattern: 'EVEN', phasePercent: 50 };
+  let plExistingRetention = { pattern: 'EVEN', phasePercent: 100 };
   let plBudgetGranularity = 'quarter';
   let plPeriodOverride = null; // explicit New Contracted ARR per budget period
   let plPeriodInputsOpen = false;
@@ -1195,7 +1195,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   function resetPL() {
     plNewCustomerPhase = 100;
-    plExistingRetention = { pattern: 'EVEN', phasePercent: 50 };
+    plExistingRetention = { pattern: 'EVEN', phasePercent: 100 };
     initPLSliders();
     updateStep3Display();
   }
@@ -1450,6 +1450,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if(existingPhase) existingPhase.value=String(plExistingRetention.phasePercent);
     const existingPhaseValue=document.getElementById('plExistingPhaseValue');
     if(existingPhaseValue) existingPhaseValue.textContent=plExistingRetention.phasePercent+'%';
+    const existingPhaseNote=document.getElementById('plExistingPhaseNote');
+    if(existingPhaseNote) existingPhaseNote.textContent=plExistingRetention.phasePercent===100
+      ? 'Full effect in the month of change'
+      : 'Full effect from the following month';
     const presetsEnabled=plBudgetGranularity!=='month' && plPeriodOverride===null;
     for(const pattern of ['EVEN','FRONT','BACK']) {
       const btn=document.getElementById('planPattern'+pattern);

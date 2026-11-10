@@ -300,9 +300,12 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   close(y.newARR,0);
   close(y.endARR,630000);
   close(y.originalBaseRevenue,500000);
-  close(y.originalChurnRevenueImpact,-62500);
-  close(y.originalExpansionRevenueImpact,127500);
-  close(y.recognizedRevenue,565000);
+  close(y.originalChurnRevenueImpact,-125000*13/24);
+  close(y.originalExpansionRevenueImpact,255000*13/24);
+  close(y.recognizedRevenue,500000+130000*13/24);
+  close(win._latestMonthlyPlan.monthlyBridge[0].originalChurnThisMonth,-125000/144);
+  assert.equal(node('plExistingPhaseValue').textContent,'100%');
+  assert.equal(node('plExistingPhaseNote').textContent,'Full effect in the month of change');
   close(y.endACV,y.endARR/y.endCustomers);
   assert.match(node('plTable').innerHTML,/Contracted ACV \(end\) = Closing CARR \/ Customers/);
   assert.match(node('planBudgetGranularityNote').textContent,/New ARR budget: YEAR/);
@@ -325,6 +328,8 @@ test('Existing A shows the full revenue bridge, month-only detail and customer c
   node('plChurnSlider').value='25';
   node('plExpansionSlider').value='20';
   app.onPLSlider();
+  node('plExistingPhase').value='50';
+  app.onExistingRetentionChange();
   const plan=win._latestMonthlyPlan;
   const year=plan.years[0];
   close(year.originalEndARR,475000);
@@ -355,6 +360,9 @@ test('Existing A shows the full revenue bridge, month-only detail and customer c
   close(win._latestMonthlyPlan.monthlyBridge[0].existingRevenue,500000/12);
   close(win._latestMonthlyPlan.years[0].originalEndARR,475000);
   assert.equal(node('plExistingPhaseValue').textContent,'0%');
+  assert.equal(node('plExistingPhaseNote').textContent,'Full effect from the following month');
+  app.resetPL();
+  assert.equal(node('plExistingPhaseValue').textContent,'100%');
 });
 
 test('A valid explicit phase survives a new quarter preset without changing Existing A',()=>{
