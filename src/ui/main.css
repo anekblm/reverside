@@ -120,7 +120,6 @@
     .pl-cohort-title,.pl-cohort-subtitle { display:block; }
     .pl-cohort-title { font-size:10px; }
     .pl-cohort-subtitle { color:#666; font-size:10px; font-weight:400; }
-    .pl-cohort-heading-static { padding:3px 0 3px 11px; }
     .pl-matrix-toolbar { display:flex; align-items:center; justify-content:space-between;
       flex-wrap:wrap; gap:6px 12px; margin-bottom:0.55rem; }
     .pl-matrix-actions { display:flex; flex-wrap:wrap; gap:5px; }

@@ -82,14 +82,16 @@ use the opening and closing stocks at their boundaries.
 1. **Original base (pre-existing at the current year's start):**
    starting MRR revenue, less revenue impact from churn, plus revenue impact
    from expansion, all summed over months in the displayed period.
-2. **B1, accumulated:** revenue in months after acquisition within the same
-   year. Sum monthly opening MRR and eligible churn and expansion effects.
-3. **B2, new in period:** recognized revenue in the acquisition month,
-   after first-month phasing.
+2. **B, new customers acquired this year:** revenue before changes is the
+   sum of monthly opening MRR for those customers. Add the eligible churn
+   and expansion effects and New Revenue to obtain Recognized Revenue.
+   New Revenue is first-month revenue from new acquisitions after phasing.
 
-For a January customer, January's revenue is in B2 and February's revenue is
-in B1. This split also applies within the Q1 and annual totals. At the start
-of the following year the customer joins A.
+Within B, New CARR appears immediately before Closing CARR and New Revenue
+immediately before Recognized Revenue. B's closing CARR includes all active
+customers acquired during the current year. A January customer's first-month
+revenue appears in New Revenue, and February's revenue is part of revenue
+before changes. At the start of the next year that customer joins A.
 
 The ARR Bridge separately reconciles:
 `opening ARR − churn ARR + expansion ARR + new ARR = closing ARR`.
@@ -102,8 +104,9 @@ In PLAN, recognized revenue for the acquisition month equals
 `new CARR / 12 × first-month revenue %`. The slider ranges from 0% to
 100% and defaults to 100%. Each cohort earns full active monthly revenue
 from the following month. Quarter and year columns sum the monthly ledger.
-For example, 12,000 in January New CARR at 67% yields 670 in January B2
-and 1,000 from that cohort in February B1 before any retention changes.
+For example, 12,000 in January New CARR at 67% yields 670 in January
+New Revenue and 1,000 from that cohort in February revenue before changes,
+before any retention changes.
 
 ### Engine compatibility for budget-period phasing
 
@@ -164,10 +167,9 @@ feasible range depending on actual months.
   churn period and distributes them across that period. Quarterly timing
   uses the selected shares within each quarter. Monthly churn applies
   directly in each month.
-- New cohorts show revenue in B2 in the acquisition month and move to B1
-  the following month within the same year. Churn and expansion first
-  apply in the next selected churn period. Cohorts already present at
-  the start of the next year are in A.
+- New cohorts appear in B throughout the acquisition year. Churn and
+  expansion first apply in the next selected churn period. Cohorts already
+  present at the start of the next year are in A.
 - COGS cash proxy = recognized revenue × (1 − gross margin), paid in the
   same month. Other OPEX cash payments are a separately entered monthly value.
 - Monthly cash collection = monthly earned subscription revenue shifted by
@@ -188,16 +190,16 @@ The matrix shows total opening and closing CARR with cohort detail from
 the same monthly ledger:
 
 - **A · Existing:** cohorts active at the start of the year.
-- **B1 · Accumulated:** cohorts acquired earlier in the current year.
-  Transfers from B2 at the start of a period are part of B1 opening CARR.
-  Transfers during the period are shown separately.
-- **B2 · New in period:** signing flows and first-month revenue. Only the
-  last month's signings remain in B2 at the end of a displayed period.
+- **B · New:** all cohorts acquired during the current year, including
+  the displayed month's acquisitions.
 
-Closing CARR adds the closing stocks of A, B1 and B2. Recognized revenue
-adds the flows from those three groups. NRR measures only cohorts in the
+Closing CARR adds the closing stocks of A and B. Recognized revenue
+adds the flows from those groups. NRR measures only cohorts in the
 displayed period's opening base. Quarter and year columns add the monthly
 flows and use opening and closing balances at the period boundaries.
+The engine retains first-month and earlier-month cohort detail to apply
+phasing and retention. Those internal movements cancel within combined B,
+so the matrix has no transfer row.
 
 The annual budget, cash view and conversion funnel use the customer
 volumes from the cohort forecast. Planned S&M is the modeled customers ×

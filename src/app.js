@@ -1747,15 +1747,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       return;
     }
 
-    const cohortHeading = (key,title,{subtitle,nested=false}={}) => {
+    const cohortHeading = (key,title,{subtitle}) => {
       const expanded=plExpandedCohorts.has(key);
-      if(!nested) html += divider();
+      html += divider();
       const headingText=`<span><span class="pl-cohort-title">${title}</span>
         ${subtitle?`<span class="pl-cohort-subtitle">(${subtitle})</span>`:''}</span>`;
-      const heading=key?`<button type="button" class="pl-cohort-toggle" id="plCohortToggle${key}" aria-expanded="${expanded}" onclick="togglePlCohort('${key}')">
+      const heading=`<button type="button" class="pl-cohort-toggle" id="plCohortToggle${key}" aria-expanded="${expanded}" onclick="togglePlCohort('${key}')">
         <span aria-hidden="true">${expanded?'▾':'▸'}</span>${headingText}
-      </button>`:`<span class="pl-cohort-heading-static">${headingText}</span>`;
-      html += label(heading, nested, true, '#444');
+      </button>`;
+      html += label(heading, false, true, '#444');
       for (let y=0;y<years;y++) html += eachPeriod(y,()=>'<div></div>');
       return expanded;
     };
@@ -1813,15 +1813,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     recognizedRow('Recognized Revenue','originalNetRevenue',{indent:true});
 
-    cohortHeading(null,'B – NEW CUSTOMERS');
-    const expandedB=cohortHeading('B','B1 – Accumulated',{nested:true});
-    cohortARRRow('Opening CARR','earlier','StartARR',{noteKey:'StartCustomers'});
+    const expandedB=cohortHeading('B','B – NEW CUSTOMERS',{subtitle:'acquired this year'});
+    cohortARRRow('Opening CARR','acquired','StartARR',{noteKey:'StartCustomers'});
     if(expandedB) {
-      cohortARRRow('+ Transferred from B2','earlier','TransferARR',{noteKey:'TransferCustomers'});
-      cohortARRRow('− Churn CARR','earlier','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-      cohortARRRow('+ Expansion CARR','earlier','ExpansionARR');
+      cohortARRRow('− Churn CARR','acquired','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+      cohortARRRow('+ Expansion CARR','acquired','ExpansionARR');
+      cohortARRRow('New CARR','acquired','NewARR',{noteKey:'NewCustomers'});
     }
-    cohortARRRow('Closing CARR','earlier','EndARR',{bold:true});
+    cohortARRRow('Closing CARR','acquired','EndARR',{bold:true,noteKey:'EndCustomers'});
     if(expandedB) {
       recognizedRow('Revenue before changes','earlierNewBaseRevenue',
         {bold:false,indent:true});
@@ -1829,12 +1828,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         {bold:false,indent:true,color:'#E24B4A'});
       recognizedRow('+ Expansion impact','earlierNewExpansionRevenueImpact',
         {bold:false,indent:true,color:'#3B6D11'});
+      recognizedRow('New Revenue','currentNewNetRevenue',{bold:false,indent:true});
     }
-    recognizedRow('Recognized Revenue','earlierNewNetRevenue',{indent:true});
-
-    cohortHeading(null,'B2 – New in period',{nested:true});
-    cohortARRRow('New CARR','current','NewARR',{noteKey:'NewCustomers'});
-    recognizedRow('Recognized Revenue','currentNewNetRevenue',{indent:true});
+    recognizedRow('Recognized Revenue','newRevenue',{indent:true});
 
     html += divider();
     totalRow('Closing CARR','endARR');
@@ -1855,11 +1851,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       New customer phasing applies once in the acquisition month.
       Opening CARR - churn + expansion + new CARR = Closing CARR.
       NRR compares closing CARR from the opening customer base with that base's opening CARR.
-      Recognized Existing (A) + Recognized New (B1 + B2) = Total Recognized Revenue.
-      B2 shows new CARR and first-month recognized revenue. The following month,
-      customers move to B1, or to A at the year boundary. B1's opening balance includes
-      transfers at the start of the displayed period. Transfers within the period
-      appear separately in B1. Quarterly and annual revenue sum the same monthly split.
+      Recognized Existing (A) + Recognized New (B) = Total Recognized Revenue.
+      B includes customers acquired during the current year. New CARR is the period's
+      acquisition flow. New Revenue is the first-month revenue from those acquisitions,
+      after phasing. B's closing CARR includes all active current-year acquisitions.
+      At the year boundary, these customers join A. Quarterly and annual revenue sum the monthly ledger.
       Money and expected customer counts are rounded independently for display.
     </div>`;
 
@@ -1920,7 +1916,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
 
     html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
-      Contracted ARR is annualized at period start/end; recognized revenue and the revenue impacts of churn and expansion are earned during the period. Existing (A) + New (B1 + B2) = Total Recognized Revenue.
+      Contracted ARR is annualized at period start/end; recognized revenue and the revenue impacts of churn and expansion are earned during the period. Existing (A) + New (B) = Total Recognized Revenue.
     </div>`;
 
     html += '</div>';

@@ -170,7 +170,7 @@ test('annual S&M, cash and the funnel use the same customer plan',()=>{
   assert.doesNotMatch(node('waterfallContent').innerHTML,/>[1-9][0-9,]*<\/span>/);
 });
 
-test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in every view',()=>{
+test('the existing and new customer sections reconcile in every view',()=>{
   const {app,node,win}=createApp(36);
   const required=[
     '>Opening CARR</div>',
@@ -182,15 +182,16 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     '>Closing CARR</div>',
     '>Recognized Revenue</div>',
     'B – NEW CUSTOMERS',
-    'B1 – Accumulated',
+    '(acquired this year)',
     '>Opening CARR</div>',
-    '+ Transferred from B2',
     '>− Churn CARR</div>',
     '>+ Expansion CARR</div>',
-    '>Closing CARR</div>',
-    '>Recognized Revenue</div>',
-    'B2 – New in period',
     '>New CARR</div>',
+    '>Closing CARR</div>',
+    '>Revenue before changes</div>',
+    '>− Churn impact</div>',
+    '>+ Expansion impact</div>',
+    '>New Revenue</div>',
     '>Recognized Revenue</div>',
     '>Closing CARR</div>',
     '>NRR</div>',
@@ -223,6 +224,11 @@ test('existing forecast grid shows full A/B/C Revenue Bridge and reconciles in e
     close(p.existingRevenue+p.newRevenue,p.recognizedRevenue);
     close(p.originalStartARR+p.earlierStartARR+p.currentStartARR,p.startARR);
     close(p.originalEndARR+p.earlierEndARR+p.currentEndARR,p.endARR);
+    close(p.acquiredStartARR-p.acquiredChurnARR+p.acquiredExpansionARR+p.acquiredNewARR,p.acquiredEndARR);
+    close(p.acquiredStartCustomers-p.acquiredChurnCustomers+p.acquiredNewCustomers,p.acquiredEndCustomers);
+    close(p.acquiredEndARR+p.originalEndARR,p.endARR);
+    close(p.earlierNewBaseRevenue+p.earlierNewChurnRevenueImpact+
+      p.earlierNewExpansionRevenueImpact+p.currentNewNetRevenue,p.newRevenue);
     for(const x of ['original','earlier','current']) {
       const transferDirection=x==='earlier'?1:x==='current'?-1:0;
       close(p[x+'StartARR']-p[x+'ChurnARR']+p[x+'ExpansionARR']+
@@ -291,26 +297,29 @@ test('Months + years shows every modeled month without quarterly columns',()=>{
   assert.doesNotMatch(halfYear.node('plTable').innerHTML,/>Jul<\/div>/);
 });
 
-test('A and B1 toggle independently, while B2 always shows its two summary rows',()=>{
+test('A and B expand independently and show three rows each when collapsed',()=>{
   const {app,node,win}=createApp(12);
   const plan=win._latestMonthlyPlan;
   const html=()=>node('plTable').innerHTML;
   for(const key of ['A','B']) {
     assert.match(html(),new RegExp('id="plCohortToggle'+key+'" aria-expanded="false"'));
   }
-  assert.equal((html().match(/>Recognized Revenue<\/div>/g)??[]).length,3);
+  assert.equal((html().match(/>Recognized Revenue<\/div>/g)??[]).length,2);
   assert.doesNotMatch(html(),/plCohortToggleC/);
+  assert.doesNotMatch(html(),/>New CARR<\/div>|>New Revenue<\/div>|B1 –|B2 –/);
   assert.doesNotMatch(html(),/>Revenue before changes<\/div>|− Revenue phasing|Transferred from B2/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   assert.doesNotMatch(html(),/− Revenue phasing/);
-  assert.match(html(),/Transferred from B2/);
+  assert.match(html(),/>New CARR<\/div>/);
+  assert.match(html(),/>New Revenue<\/div>/);
+  assert.doesNotMatch(html(),/Transferred from B2/);
   assert.match(html(),/id="plCohortToggleA" aria-expanded="false"/);
   app.togglePlQtr(0);
   app.togglePlMonth(0,1);
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   app.togglePlCohort('B');
-  assert.doesNotMatch(html(),/Transferred from B2/);
+  assert.doesNotMatch(html(),/>New CARR<\/div>|>New Revenue<\/div>/);
   assert.equal(win._latestMonthlyPlan,plan);
 });
 

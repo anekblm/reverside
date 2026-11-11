@@ -299,9 +299,10 @@ export function buildRevenueBridge(monthly, view = "quarter") {
       currentNewRealizationImpact:0,
     };
     const cohortARR = {};
+    const cohortMovementKeys=["StartARR","ChurnARR","ExpansionARR","NewARR","EndARR",
+      "StartCustomers","ChurnCustomers","NewCustomers","EndCustomers"];
     for(const prefix of ["original","earlier","current"]){
-      for(const key of ["StartARR","ChurnARR","ExpansionARR","NewARR","EndARR",
-                         "StartCustomers","ChurnCustomers","NewCustomers","EndCustomers"])
+      for(const key of cohortMovementKeys)
         cohortARR[prefix+key] = 0;
     }
     const classify = (vintage,monthIndex) => vintage<yearStart
@@ -381,6 +382,8 @@ export function buildRevenueBridge(monthly, view = "quarter") {
         throw new Error("Cohort customer bridge does not reconcile: "+prefix+
           " months "+(start+1)+"-"+(start+slice.length));
     }
+    for(const key of cohortMovementKeys)
+      cohortARR["acquired"+key]=cohortARR["earlier"+key]+cohortARR["current"+key];
     const retainedOpeningCohorts=last.cohortFlows.filter(c=>c.firstInvoiceMonth<start);
     const retainedBaseARR=sum(retainedOpeningCohorts.map(c=>c.endARR));
     const retainedBaseCustomers=sum(retainedOpeningCohorts.map(c=>c.endCustomers));
