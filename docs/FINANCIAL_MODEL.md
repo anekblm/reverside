@@ -220,6 +220,21 @@ selected CAC × allocated spending share. Category amounts use unrounded
 values until display. Blended planned CAC is total S&M divided by total
 new customers. The funnel rounds required volumes up to whole units.
 
+Unit Economics is independently expandable after recognized revenue and
+before Gross Profit. It uses the same visible month, quarter and year columns:
+closing ACV is annualized closing CARR divided by active customers; estimated
+gross-profit LTV is closing ACV × gross margin divided by equivalent annual
+churn. Max CAC and Recommended CAC are LTV / 3 and LTV / 5. Planned CAC
+is S&M paid divided by acquisitions in that column, and payback divides it
+by closing ACV × gross margin / 12. Zero churn has no finite LTV estimate.
+
+S&M Efficiency expands separately after Contribution. Magic Number is the
+change in annualized CARR × gross margin divided by the column's S&M paid;
+S&M / GP divides that spend by the column's gross profit. Ratios are
+recomputed from each column's underlying amounts rather than summed.
+Both sections remain accessible in the totals-only matrix. Their open
+states persist across period, CARR-display and scenario changes.
+
 ## Guarantees and acceptance
 
 - The engine throws if an ARR or recognized revenue bridge does not reconcile.

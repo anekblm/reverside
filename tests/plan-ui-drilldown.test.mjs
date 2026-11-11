@@ -263,12 +263,82 @@ test('matrix totals view preserves open columns and cohort details when reopened
   assert.deepEqual([...compact.matchAll(/>(Opening CARR|New CARR|Closing CARR|NRR|Recognized Revenue)<\/div>/g)]
     .map(match=>match[1]),['Opening CARR','New CARR','Closing CARR','NRR','Recognized Revenue']);
   assert.equal((compact.match(/class="pl-matrix-value"/g)??[]).length,5*(width(node)-1));
-  assert.doesNotMatch(compact,/EXISTING CUSTOMERS|Revenue · Existing|Gross profit|Unit Economics/);
+  assert.doesNotMatch(compact,/EXISTING CUSTOMERS|Revenue · Existing|Gross profit|>LTV<\/div>/);
+  assert.match(compact,/Unit Economics/);
+  assert.match(compact,/S&amp;M Efficiency|S&M Efficiency/);
   assert.equal(node('plMatrixToggle').textContent,'Show details');
   app.togglePlMatrix();
   assert.equal(node('plTable').innerHTML,detailed);
   assert.equal(node('plMatrixToggle').textContent,'Show totals only');
   assert.equal(win._latestMonthlyPlan,plan);
+});
+
+test('metric sections open independently in totals view and persist through period and scenario changes',()=>{
+  const {app,node,win}=createApp(24);
+  const plan=win._latestMonthlyPlan;
+  const html=()=>node('plTable').innerHTML;
+  assert.ok(html().indexOf('Unit Economics')<html().indexOf('Gross profit'));
+  assert.ok(html().indexOf('S&M Efficiency')>html().indexOf('Contribution (GP − S&M)'));
+  app.togglePlMatrix();
+  app.togglePlMetrics('unit');
+  assert.match(html(),/id="plMetricsToggleunit" aria-expanded="true"/);
+  assert.match(html(),/>Closing ACV<\/div>/);
+  assert.doesNotMatch(html(),/>Magic Number<\/div>/);
+  app.togglePlMetrics('efficiency');
+  assert.match(html(),/>Magic Number<\/div>/);
+  app.togglePlMonthsAndYears();
+  assert.equal(width(node),27);
+  assert.equal((html().match(/class="pl-matrix-value"/g)??[]).length,14*26);
+  assert.equal(win._latestMonthlyPlan,plan);
+  setTarget({app,node},3000000);
+  assert.match(html(),/id="plMetricsToggleunit" aria-expanded="true"/);
+  assert.match(html(),/id="plMetricsToggleefficiency" aria-expanded="true"/);
+  app.togglePlMatrix();
+  assert.match(html(),/>Gross profit<\/div>/);
+  app.togglePlMetrics('unit');
+  assert.doesNotMatch(html(),/>Closing ACV<\/div>/);
+  assert.match(html(),/>Magic Number<\/div>/);
+});
+
+test('matrix unit and efficiency metrics use each visible period ledger and annual churn units',()=>{
+  const {app,node,win}=createApp(24);
+  setTarget({app,node},3000000);
+  app.onChurnPeriodChange('quarter');
+  app.onCustomCACChange('5000');
+  app.selectStrategy('custom');
+  [40,20,20,20].forEach((value,q)=>app.updateQuarterSM(0,q,value));
+  app.togglePlMetrics('unit');
+  app.togglePlMetrics('efficiency');
+  app.togglePlQtr(0);
+  app.togglePlMonth(0,0);
+  const cells=name=>{
+    const tail=node('plTable').innerHTML.split('>'+name+'</div>')[1];
+    assert.ok(tail,'Missing '+name);
+    return [...tail.matchAll(/class="pl-matrix-value"[^>]*>([^<]+)/g)]
+      .slice(0,width(node)-1).map(match=>match[1]);
+  };
+  const model=win._latestMonthlyPlan;
+  const periods=[...model.monthlyBridge.slice(0,3),...model.quarters.slice(0,4),...model.years];
+  const ltv=period=>period.endACV*0.8/(1-0.75**4);
+  const cac=period=>period.smPaid/period.newCustomers;
+  const money=value=>currencyFormats.SEK(Math.round(value));
+  const percent=new Intl.NumberFormat(undefined,{style:'percent',maximumFractionDigits:2});
+  assert.deepEqual(cells('Closing ACV'),periods.map(p=>money(p.endACV)));
+  assert.deepEqual(cells('LTV'),periods.map(p=>money(ltv(p))));
+  assert.deepEqual(cells('Max CAC'),periods.map(p=>money(ltv(p)/3)));
+  assert.deepEqual(cells('Recommended CAC'),periods.map(p=>money(ltv(p)/5)));
+  assert.deepEqual(cells('Planned CAC'),periods.map(p=>money(cac(p))));
+  assert.deepEqual(cells('LTV:CAC'),periods.map(p=>(ltv(p)/cac(p)).toFixed(1)+'×'));
+  assert.deepEqual(cells('CAC Payback'),periods.map(p=>(cac(p)/(p.endACV*0.8/12)).toFixed(1)+' mo'));
+  assert.deepEqual(cells('Magic Number'),periods.map(p=>((p.endARR-p.startARR)*0.8/p.smPaid).toFixed(2)));
+  assert.deepEqual(cells('S&M / GP'),periods.map(p=>percent.format(p.smPaid/p.grossProfit)));
+  const before=cells('LTV');
+  app.setPlCarrView('period');
+  assert.deepEqual(cells('LTV'),before,'CARR display scaling must not rescale ACV or LTV');
+  node('plChurnSlider').value='0';
+  app.onPLSlider();
+  assert.ok(cells('LTV').every(value=>value==='—'));
+  assert.doesNotMatch(node('plTable').innerHTML,/NaN|Infinity/);
 });
 
 test('Months + years shows every modeled month without quarterly columns',()=>{
@@ -392,7 +462,8 @@ test('YEAR retention explicitly derives 25% churn and 51% expansion from opening
   assert.equal(node('plExistingPhaseValue').textContent,'100%');
   assert.equal(node('plExistingPhaseNote').textContent,'Full effect in the month of change');
   close(y.endACV,y.endARR/y.endCustomers);
-  assert.match(node('plTable').innerHTML,/Contracted ACV \(end\) = Closing CARR \/ Customers/);
+  app.togglePlMetrics('unit');
+  assert.match(node('plTable').innerHTML,/>Closing ACV<\/div>/);
   assert.match(node('planNewARRNote').textContent,/Existing customers/);
   assert.ok(node('plNewCustomerPhasingSlider').disabled,'No new cohort means phasing has no relevance');
   assert.equal(node('plNewCustomerPhasingDisplay').textContent,'—');

@@ -638,6 +638,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let plNewCustomerRetention = true;
   let plExistingPhase = 100;
   const plExpandedCohorts = new Set();
+  const plExpandedMetrics = new Set();
   let plCarrView = 'fullYear';
   let plMatrixExpanded = true;
   let plMonthsAndYears = false;
@@ -1598,7 +1599,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const el = document.getElementById('plTable');
     if (!el || !model) return;
     const years = model.years.length;
-    const acv = state.acv || 0;
     const grossMargin = state.grossMargin ?? 0.80;
     const churnRate = 1-churnPeriodRates(plChurn??state.churn,plChurnPeriod,plExpansion??0).annualGrossRetention;
     let cumulativeResult = 0, breakEvenYear = null;
@@ -1617,10 +1617,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         rampPct: r.newARR > 0 ? Math.round(r.newRevenue / r.newARR * 100) : 0,
       };
     });
-    const getArrPhase = y => rows[y].newCustARR > 0 ? rows[y].newRevenue / rows[y].newCustARR : 0;
     const baselineRevenue = state.revenue * state.timeframe / 12;
     const incrementalRevenue = model.summary.totalRecognizedRevenue - baselineRevenue;
-    const incrementalGP = incrementalRevenue * grossMargin;
     const totalSM = model.summary.totalSM;
 
     // ── BUILD TABLE ───────────────────────────────────────────────────────────
@@ -1656,11 +1654,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       cols.map(({kind})=>`minmax(${widths[kind]}px,max-content)`))].join(' ');
 
     const empty = `<div></div>`;
-
-    const cell = (val, bold=false, color='#333', bg='white', note='') =>
-      `<div style="background:${bg};border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:11px;font-weight:${bold?'600':'400'};color:${color};">
-        ${typeof val==='string'?val:fmt(Math.round(val))}${note ? `<div style="font-size:9px;color:#bbb;margin-top:1px;">${note}</div>` : ''}
-      </div>`;
 
     const periodCell = (value,kind,{bold=false,color='#555',bg='white',note=''}={}) => {
       const yearTotal=kind==='yearTotal';
@@ -1815,261 +1808,212 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       totalRow('Closing CARR','endARR');
       totalRow('NRR','netRevenueRetention');
       totalRow('Recognized Revenue','recognizedRevenue');
-      el.innerHTML=html+'</div>';
-      return;
+    } else {
+      const expandedA=cohortHeading('A','A – EXISTING CUSTOMERS',{subtitle:'from previous year'});
+      cohortARRRow('Opening CARR','original','StartARR',{noteKey:'StartCustomers'});
+      if(expandedA) {
+        cohortARRRow('− Churn CARR','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+        cohortARRRow('+ Expansion CARR','original','ExpansionARR');
+      }
+      cohortARRRow('Closing CARR','original','EndARR',{bold:true,noteKey:'EndCustomers'});
+      if(expandedA) {
+        recognizedRow('Revenue Opening CARR','originalOpeningRevenue',{bold:false,indent:true});
+        recognizedRow('− Churn impact','originalMonthlyChurnImpact',
+          {bold:false,indent:true,color:'#E24B4A',yearOpeningImpactKey:'originalChurnRevenueImpact'});
+        recognizedRow('+ Expansion impact','originalMonthlyExpansionImpact',
+          {bold:false,indent:true,color:'#3B6D11',yearOpeningImpactKey:'originalExpansionRevenueImpact'});
+      }
+      recognizedRow('Recognized Revenue','originalNetRevenue',{indent:true});
+
+      const expandedB=cohortHeading('B','B – NEW CUSTOMERS',{subtitle:'acquired this year'});
+      cohortARRRow('Opening CARR','acquired','StartARR',{noteKey:'StartCustomers'});
+      if(expandedB) {
+        cohortARRRow('− Churn CARR','acquired','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
+        cohortARRRow('+ Expansion CARR','acquired','ExpansionARR');
+      }
+      cohortARRRow('New CARR','acquired','NewARR',{noteKey:'NewCustomers'});
+      cohortARRRow('Closing CARR','acquired','EndARR',{bold:true,noteKey:'EndCustomers'});
+      if(expandedB) {
+        recognizedRow('Revenue Opening CARR','earlierNewBaseRevenue',
+          {bold:false,indent:true});
+        recognizedRow('− Churn impact','earlierNewChurnRevenueImpact',
+          {bold:false,indent:true,color:'#E24B4A'});
+        recognizedRow('+ Expansion impact','earlierNewExpansionRevenueImpact',
+          {bold:false,indent:true,color:'#3B6D11'});
+        recognizedRow('New Revenue','currentNewNetRevenue',{bold:false,indent:true});
+      }
+      recognizedRow('Recognized Revenue','newRevenue',{indent:true});
+
+      html += divider();
+      totalRow('Closing CARR','endARR');
+      totalRow('NRR','netRevenueRetention');
+      html += divider();
+      recognizedRow('Revenue · Existing','existingRevenue',{bold:false});
+      recognizedRow('Revenue · New','newRevenue',{bold:false});
+      totalRow('Total Recognized Revenue','recognizedRevenue');
     }
 
-    const expandedA=cohortHeading('A','A – EXISTING CUSTOMERS',{subtitle:'from previous year'});
-    cohortARRRow('Opening CARR','original','StartARR',{noteKey:'StartCustomers'});
-    if(expandedA) {
-      cohortARRRow('− Churn CARR','original','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-      cohortARRRow('+ Expansion CARR','original','ExpansionARR');
+    if(plMatrixExpanded){
+      // Revenue impact and annualized CARR change are different units. The
+      // recognized revenue lines cannot be added to the CARR closing stock.
+      html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
+        Full Year CARR shows annualized amounts. Period CARR scales those amounts by months in the column / 12.
+        Opening and closing CARR are measured at the period boundaries. Recognized revenue is earned during the period.
+        Revenue Opening CARR uses each month's opening CARR. The main churn and
+        expansion amounts show the effect recognized in the month of change. Quarter and year amounts sum the
+        months. “vs. year opening” shows the impact against the year's starting run rate.
+        New customer phasing applies once in the acquisition month.
+        Opening CARR - churn + expansion + new CARR = Closing CARR.
+        NRR compares closing CARR from the opening customer base with that base's opening CARR.
+        Recognized Existing (A) + Recognized New (B) = Total Recognized Revenue.
+        B includes customers acquired during the current year. New CARR is the period's
+        acquisition flow. New Revenue is the first-month revenue from those acquisitions,
+        after phasing. B's closing CARR includes all active current-year acquisitions.
+        At the year boundary, these customers join A. Quarterly and annual revenue sum the monthly ledger.
+        Money and expected customer counts are rounded independently for display.
+      </div>`;
     }
-    cohortARRRow('Closing CARR','original','EndARR',{bold:true,noteKey:'EndCustomers'});
-    if(expandedA) {
-      recognizedRow('Revenue Opening CARR','originalOpeningRevenue',{bold:false,indent:true});
-      recognizedRow('− Churn impact','originalMonthlyChurnImpact',
-        {bold:false,indent:true,color:'#E24B4A',yearOpeningImpactKey:'originalChurnRevenueImpact'});
-      recognizedRow('+ Expansion impact','originalMonthlyExpansionImpact',
-        {bold:false,indent:true,color:'#3B6D11',yearOpeningImpactKey:'originalExpansionRevenueImpact'});
-    }
-    recognizedRow('Recognized Revenue','originalNetRevenue',{indent:true});
 
-    const expandedB=cohortHeading('B','B – NEW CUSTOMERS',{subtitle:'acquired this year'});
-    cohortARRRow('Opening CARR','acquired','StartARR',{noteKey:'StartCustomers'});
-    if(expandedB) {
-      cohortARRRow('− Churn CARR','acquired','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
-      cohortARRRow('+ Expansion CARR','acquired','ExpansionARR');
-    }
-    cohortARRRow('New CARR','acquired','NewARR',{noteKey:'NewCustomers'});
-    cohortARRRow('Closing CARR','acquired','EndARR',{bold:true,noteKey:'EndCustomers'});
-    if(expandedB) {
-      recognizedRow('Revenue Opening CARR','earlierNewBaseRevenue',
-        {bold:false,indent:true});
-      recognizedRow('− Churn impact','earlierNewChurnRevenueImpact',
-        {bold:false,indent:true,color:'#E24B4A'});
-      recognizedRow('+ Expansion impact','earlierNewExpansionRevenueImpact',
-        {bold:false,indent:true,color:'#3B6D11'});
-      recognizedRow('New Revenue','currentNewNetRevenue',{bold:false,indent:true});
-    }
-    recognizedRow('Recognized Revenue','newRevenue',{indent:true});
+    const metricsHeading=(key,title)=>{
+      const expanded=plExpandedMetrics.has(key);
+      html+=divider();
+      html+=label('<button type="button" class="pl-cohort-toggle" id="plMetricsToggle'+key+
+        '" aria-expanded="'+expanded+'" onclick="togglePlMetrics(\''+key+'\')">'+
+        '<span aria-hidden="true">'+(expanded?'▾':'▸')+'</span>'+title+'</button>',false,true);
+      for(let y=0;y<years;y++) html+=eachPeriod(y,()=>'<div></div>');
+      return expanded;
+    };
+    const money=value=>fmt(Math.round(value));
+    const metricRow=(name,calculate,format=money,style=()=>({}))=>{
+      html+=label(name,true);
+      for(let y=0;y<years;y++) html+=eachPeriod(y,(period,kind)=>{
+        const value=calculate(period);
+        return periodCell(value===null?'—':format(value),kind,value===null?{}:style(value));
+      });
+    };
+    const ltvForPeriod=period=>period.endCustomers>0
+      ? annualGrossProfitLtv(period.endACV,grossMargin,churnRate) : null;
+    const cacForPeriod=period=>selectedStrategy&&period.newCustomers>0
+      ? period.smPaid/period.newCustomers : null;
 
-    html += divider();
-    totalRow('Closing CARR','endARR');
-    totalRow('NRR','netRevenueRetention');
-    html += divider();
-    recognizedRow('Revenue · Existing','existingRevenue',{bold:false});
-    recognizedRow('Revenue · New','newRevenue',{bold:false});
-    totalRow('Total Recognized Revenue','recognizedRevenue');
-
-    // Revenue impact and annualized CARR change are different units. The
-    // recognized revenue lines cannot be added to the CARR closing stock.
-    html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
-      Full Year CARR shows annualized amounts. Period CARR scales those amounts by months in the column / 12.
-      Opening and closing CARR are measured at the period boundaries. Recognized revenue is earned during the period.
-      Revenue Opening CARR uses each month's opening CARR. The main churn and
-      expansion amounts show the effect recognized in the month of change. Quarter and year amounts sum the
-      months. “vs. year opening” shows the impact against the year's starting run rate.
-      New customer phasing applies once in the acquisition month.
-      Opening CARR - churn + expansion + new CARR = Closing CARR.
-      NRR compares closing CARR from the opening customer base with that base's opening CARR.
-      Recognized Existing (A) + Recognized New (B) = Total Recognized Revenue.
-      B includes customers acquired during the current year. New CARR is the period's
-      acquisition flow. New Revenue is the first-month revenue from those acquisitions,
-      after phasing. B's closing CARR includes all active current-year acquisitions.
-      At the year boundary, these customers join A. Quarterly and annual revenue sum the monthly ledger.
-      Money and expected customer counts are rounded independently for display.
-    </div>`;
-
-    const totRev = rows.reduce((sum,r)=>sum+r.totalRevenue,0);
-    const totGP  = rows.reduce((sum,r)=>sum+r.grossProfit,0);
-    const totSM2 = rows.reduce((sum,r)=>sum+r.smSpend,0);
-    const totOP  = rows.reduce((sum,r)=>sum+r.opResult,0);
-
-    // ACV is a contracted annualized run rate per CURRENT customer,
-    // not recognized revenue divided by end-of-period customers.
-    html += label(plCarrView==='period'
-      ? 'Contracted ACV (end) = Annualized Closing CARR / Customers'
-      : 'Contracted ACV (end) = Closing CARR / Customers', false, true);
-    for(let y=0;y<years;y++) {
-      html += eachPeriod(y,(period,kind)=>periodCell(period.endACV??0,kind,{
-        color:'#555',bg:'white',
-        note:Math.round(period.endCustomers??0)+' customers'
+    if(metricsHeading('unit','Unit Economics')){
+      html+='<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;">'+
+        'ACV and LTV use closing CARR. CAC limits use LTV ÷ 3 and LTV ÷ 5. '+
+        'Planned CAC uses S&M spend divided by new customers in each column.</div>';
+      metricRow('Closing ACV',period=>period.endCustomers>0?period.endACV:null);
+      metricRow('LTV',ltvForPeriod);
+      metricRow('Max CAC',period=>{
+        const ltv=ltvForPeriod(period);
+        return ltv===null?null:ltv/3;
+      });
+      metricRow('Recommended CAC',period=>{
+        const ltv=ltvForPeriod(period);
+        return ltv===null?null:ltv/5;
+      });
+      metricRow('Planned CAC',cacForPeriod);
+      metricRow('LTV:CAC',period=>{
+        const ltv=ltvForPeriod(period), cac=cacForPeriod(period);
+        return ltv!==null&&cac>0?ltv/cac:null;
+      },value=>value.toFixed(1)+'×',value=>({
+        color:value>=5?'#3B6D11':value>=3?'#555':'#E24B4A',
+        note:value>=5?'healthy':value>=3?'ok':'low'
+      }));
+      metricRow('CAC Payback',period=>{
+        const cac=cacForPeriod(period);
+        return cac!==null&&period.endACV*grossMargin>0?cac/(period.endACV*grossMargin/12):null;
+      },value=>value.toFixed(1)+' mo',value=>({
+        color:value<=12?'#3B6D11':value<=24?'#BA7517':'#E24B4A'
       }));
     }
 
-    html += divider();
+    if(plMatrixExpanded){
+      html += divider();
 
-    html += label('Gross profit', true);
-    for (let y = 0; y < years; y++) html += yearGPcells(y);
+      html += label('Gross profit', true);
+      for (let y = 0; y < years; y++) html += yearGPcells(y);
 
-    html += label('S&M spend <span style="font-size:9px;font-weight:400;color:#999;">← from annual plan</span>', true);
-    if (!selectedStrategy) {
-      for (let y = 0; y < years; y++) {
-        html += eachPeriod(y,(_,kind)=>periodCell('select strategy ↓',kind,{color:'#bbb'}));
-      }
-    } else {
-      for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'smPaid', -1, false, '#E24B4A');
-    }
-
-    html += divider();
-
-    html += label('Contribution (GP − S&M)', false, true);
-    if (!selectedStrategy) {
-      for (let y = 0; y < years; y++) {
-        html += eachPeriod(y,(_,kind)=>periodCell('—',kind,{bg:'#fafafa',color:'#bbb'}));
-      }
-    } else {
-      for (let y = 0; y < years; y++) {
-        const v = rows[y].opResult;
-        html += yearQuarterCells(y, 'operatingContribution', 1, true, v>=0?'#3B6D11':'#E24B4A', v>=0?'#EAF3DE':'#FCEBEB');
-      }
-      html += label('Cumulative', true);
-      for (let y = 0; y < years; y++) {
-        const v = rows[y].cumResult;
-        const ph = `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.35rem 0.5rem;text-align:right;font-size:10px;color:${v>=0?'#3B6D11':'#E24B4A'};">${fmt(Math.round(v))}</div>`;
-        html += eachPeriod(y,(period,kind)=>{
-          const end = period.endMonth ?? Math.min(state.timeframe,(y+1)*12);
-          const subtotal = model.months.slice(0,end).reduce((sum,m)=>sum+m.operatingContribution,0);
-          const color = subtotal>=0?'#3B6D11':'#E24B4A';
-          return periodCell(subtotal,kind,{color});
-        });
-      }
-    }
-
-    html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
-      Contracted ARR is annualized at period start/end; recognized revenue and the revenue impacts of churn and expansion are earned during the period. Existing (A) + New (B) = Total Recognized Revenue.
-    </div>`;
-
-    html += '</div>';
-
-    // ── REVENUE MULTIPLIER — only show when strategy is selected ──
-    if (selectedStrategy && totSM2 > 0) {
-      const revMultiplier = incrementalRevenue / totSM2;
-      const mulColor = revMultiplier >= 3 ? '#3B6D11' : revMultiplier >= 1 ? '#BA7517' : '#E24B4A';
-      html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;margin-top:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-        <div>
-          <div style="font-size:10px;color:#999;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.25rem;">Incremental revenue / S&M spend — ${state.timeframe} months</div>
-          <div style="font-size:11px;color:#666;">Incremental revenue (${fmt(Math.round(incrementalRevenue))}) ÷ S&M spend (${fmt(Math.round(totSM2))})</div>
-        </div>
-        <div style="font-size:26px;font-weight:700;color:${mulColor};white-space:nowrap;">${revMultiplier.toFixed(1)}×</div>
-      </div>`;
-    }
-
-    html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
-      + 'ⓘ New CARR and the recognition of new customer revenue are shown separately. '
-      + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
-
-    // ── BREAK-EVEN ──
-    if (selectedStrategy) {
-      if (breakEvenYear) {
-        html += `<div style="font-size:11px;color:#3B6D11;margin-top:0.75rem;">✓ Cumulative contribution reached break-even in Year ${breakEvenYear}.</div>`;
+      html += label('S&M spend <span style="font-size:9px;font-weight:400;color:#999;">← from annual plan</span>', true);
+      if (!selectedStrategy) {
+        for (let y = 0; y < years; y++) {
+          html += eachPeriod(y,(_,kind)=>periodCell('select strategy ↓',kind,{color:'#bbb'}));
+        }
       } else {
-        html += `<div style="font-size:11px;color:#BA7517;margin-top:0.75rem;">⚠ Cumulative break-even not reached within the plan period.</div>`;
+        for (let y = 0; y < years; y++) html += yearQuarterCells(y, 'smPaid', -1, false, '#E24B4A');
+      }
+
+      html += divider();
+
+      html += label('Contribution (GP − S&M)', false, true);
+      if (!selectedStrategy) {
+        for (let y = 0; y < years; y++) {
+          html += eachPeriod(y,(_,kind)=>periodCell('—',kind,{bg:'#fafafa',color:'#bbb'}));
+        }
+      } else {
+        for (let y = 0; y < years; y++) {
+          const v = rows[y].opResult;
+          html += yearQuarterCells(y, 'operatingContribution', 1, true, v>=0?'#3B6D11':'#E24B4A', v>=0?'#EAF3DE':'#FCEBEB');
+        }
+        html += label('Cumulative', true);
+        for (let y = 0; y < years; y++) {
+          html += eachPeriod(y,(period,kind)=>{
+            const end = period.endMonth ?? Math.min(state.timeframe,(y+1)*12);
+            const subtotal = model.months.slice(0,end).reduce((sum,m)=>sum+m.operatingContribution,0);
+            const color = subtotal>=0?'#3B6D11':'#E24B4A';
+            return periodCell(subtotal,kind,{color});
+          });
+        }
+      }
+
+      html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#bbb;margin-top:4px;">
+        Contracted ARR is annualized at period start/end; recognized revenue and the revenue impacts of churn and expansion are earned during the period. Existing (A) + New (B) = Total Recognized Revenue.
+      </div>`;
+    }
+
+    if(metricsHeading('efficiency','S&M Efficiency')){
+      html+='<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;">'+
+        'Magic Number = change in annualized CARR × gross margin ÷ S&M spend in the column. '+
+        'S&M / GP = S&M spend ÷ gross profit in the column.</div>';
+      metricRow('Magic Number',period=>selectedStrategy&&period.smPaid>0
+        ? (period.endARR-period.startARR)*grossMargin/period.smPaid : null,
+        value=>value.toFixed(2),value=>({
+          color:value>=0.75?'#3B6D11':value>=0.5?'#BA7517':'#E24B4A',
+          note:value>=0.75?'efficient':value>=0.5?'acceptable':'review'
+        }));
+      metricRow('S&M / GP',period=>selectedStrategy&&period.grossProfit>0
+        ? period.smPaid/period.grossProfit : null,percent.format,value=>({
+          color:value<=0.5?'#3B6D11':value<=0.8?'#555':value<=1?'#BA7517':'#E24B4A',
+          note:value<=0.5?'healthy':value<=0.8?'moderate':value<=1?'aggressive':'burning'
+        }));
+      // ── REVENUE MULTIPLIER — only show when strategy is selected ──
+      if (selectedStrategy && totalSM > 0) {
+        const revMultiplier = incrementalRevenue / totalSM;
+        const mulColor = revMultiplier >= 3 ? '#3B6D11' : revMultiplier >= 1 ? '#BA7517' : '#E24B4A';
+        html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.75rem 1rem;margin-top:1rem;grid-column:1/-1;contain:inline-size;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:10px;color:#999;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.25rem;">Incremental revenue / S&M spend — ${state.timeframe} months</div>
+            <div style="font-size:11px;color:#666;">Incremental revenue (${fmt(Math.round(incrementalRevenue))}) ÷ S&M spend (${fmt(Math.round(totalSM))})</div>
+          </div>
+          <div style="font-size:26px;font-weight:700;color:${mulColor};white-space:nowrap;">${revMultiplier.toFixed(1)}×</div>
+        </div>`;
       }
     }
 
-    // ── HEALTH CHECK ──
-    // Per-year metrics based on actual P&L
-    html += `<div style="margin-top:1.5rem;">`;
-    html += `<div style="font-size:12px;font-weight:500;color:#333;margin-bottom:0.25rem;">Unit Economics — per year</div><div style="font-size:10px;color:#999;margin-bottom:0.75rem;">LTV and CAC payback use closing contracted ACV.</div>`;
-    const ueColW = 90;
-    const ueLabelW = 140;
-    const ueTotW = 90;
-    html += `<div style="display:grid;grid-template-columns:${ueLabelW}px ${Array(years).fill(ueColW+'px').join(' ')} ${ueTotW}px;gap:5px;">`;
+    html+='</div>';
 
-    // Headers
-    html += `<div></div>`;
-    for (let y = 0; y < years; y++) {
-      html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">Year ${y+1}</div>`;
+    if(plMatrixExpanded){
+      html += '<div style="margin-top:0.5rem;font-size:11px;color:#666;">'
+        + 'ⓘ New CARR and the recognition of new customer revenue are shown separately. '
+        + 'ARR, recognized revenue and cash collections are distinct. Contribution is not operating cash flow.</div>';
+
+      // ── BREAK-EVEN ──
+      if (selectedStrategy) {
+        if (breakEvenYear) {
+          html += `<div style="font-size:11px;color:#3B6D11;margin-top:0.75rem;">✓ Cumulative contribution reached break-even in Year ${breakEvenYear}.</div>`;
+        } else {
+          html += `<div style="font-size:11px;color:#BA7517;margin-top:0.75rem;">⚠ Cumulative break-even not reached within the plan period.</div>`;
+        }
+      }
     }
-    html += `<div style="font-size:11px;font-weight:500;color:#333;text-align:center;padding:0.35rem;background:#f0f0f0;border-radius:6px;">Avg</div>`;
-
-    // LTV uses closing contracted ACV.
-    html += label('LTV (contracted ACV × GM / annual churn)', false, true);
-    const ltvVals = rows.map((r, y) => {
-      const rACV = model.years[y].endACV || acv;
-      return annualGrossProfitLtv(rACV,grossMargin,churnRate);
-    });
-    const avgLTV = churnRate>0 ? ltvVals.reduce((s,v)=>s+v,0)/years : null;
-    const metricCell=value=>cell(value??'—',false,'#555');
-    for (const value of ltvVals) html += metricCell(value);
-    html += metricCell(avgLTV);
-
-    html += label('Planned CAC', false, true);
-    const cacVals = rows.map(r => selectedStrategy&&r.newCust>0 ? r.smSpend/r.newCust : null);
-    const avgCAC = selectedStrategy&&model.summary.newCustomersNeeded>0
-      ? model.summary.totalSM/model.summary.newCustomersNeeded : null;
-    for (const value of cacVals) html += metricCell(value);
-    html += metricCell(avgCAC);
-
-    // LTV:CAC ratio
-    html += label('LTV:CAC', false, true);
-    for (let y = 0; y < years; y++) {
-      const ratioNum = ltvVals[y]!==null&&cacVals[y]>0 ? ltvVals[y]/cacVals[y] : null;
-      const ratio = ratioNum===null?'—':ratioNum.toFixed(1)+'×';
-      const color = ratioNum>=5?'#3B6D11':ratioNum===null||ratioNum>=3?'#555':'#E24B4A';
-      const note = ratioNum===null?'':ratioNum>=5?'healthy':ratioNum>=3?'ok':'low';
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:600;color:${color};">${ratio}</div>
-        <div style="font-size:9px;color:#bbb;">${note}</div>
-      </div>`;
-    }
-    const avgRatioNum = avgLTV!==null&&avgCAC>0 ? avgLTV/avgCAC : null;
-    const avgRatio = avgRatioNum===null?'—':avgRatioNum.toFixed(1)+'×';
-    const avgRatioColor = avgRatioNum>=5?'#3B6D11':avgRatioNum===null||avgRatioNum>=3?'#555':'#E24B4A';
-    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:700;color:${avgRatioColor};">${avgRatio}</div>
-    </div>`;
-
-    // CAC payback uses closing contracted ACV.
-    html += label('CAC Payback (CAC / monthly ACV gross profit)', false, true);
-    for (let y = 0; y < years; y++) {
-      const expACV = model.years[y].endACV || acv;
-      const monthlyGP = (expACV / 12) * grossMargin;
-      const payback = monthlyGP>0&&cacVals[y]!==null ? Math.round(cacVals[y]/monthlyGP) : null;
-      const color = payback===null?'#555':payback<=12?'#3B6D11':payback<=24?'#BA7517':'#E24B4A';
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:500;color:${color};">${payback===null?'—':payback+' mo'}</div>
-      </div>`;
-    }
-    html += `<div></div>`;
-
-    // Magic Number = (ARR growth × grossMargin) / trailing S&M
-    html += label('Magic Number <span style="font-size:9px;font-weight:400;color:#999;" title="Magic Number = (ARR growth × gross margin) ÷ S&M spend. Measures how efficiently S&M spend converts to recurring gross profit. >0.75 = efficient, 0.5–0.75 = acceptable, <0.5 = review spend.">ⓘ</span>', false, true);
-    for (let y = 0; y < years; y++) {
-      const arrGrowth = rows[y].arrEnd - rows[y].arrStart;
-      const magic = rows[y].smSpend > 0 ? (arrGrowth * grossMargin / rows[y].smSpend).toFixed(2) : '—';
-      const magicNum = rows[y].smSpend > 0 ? arrGrowth * grossMargin / rows[y].smSpend : 0;
-      const color = magicNum >= 0.75 ? '#3B6D11' : magicNum >= 0.5 ? '#BA7517' : '#E24B4A';
-      const note = magicNum >= 0.75 ? 'efficient' : magicNum >= 0.5 ? 'acceptable' : magicNum > 0 ? 'review' : '—';
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:500;color:${color};">${magic}</div>
-        <div style="font-size:9px;color:#bbb;">${note}</div>
-      </div>`;
-    }
-    html += `<div></div>`;
-
-    // S&M as % of Gross Profit
-    html += label('S&M / GP', false, true);
-    for (let y = 0; y < years; y++) {
-      const ratio=rows[y].grossProfit>0?Math.round(rows[y].smSpend/rows[y].grossProfit*100):null;
-      const color=ratio===null?'#555':ratio<=50?'#3B6D11':ratio<=80?'#555':ratio<=100?'#BA7517':'#E24B4A';
-      const note=ratio===null?'':ratio<=50?'healthy':ratio<=80?'moderate':ratio<=100?'aggressive':'burning';
-      html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-        <div style="font-size:11px;font-weight:500;color:${color};">${ratio===null?'—':ratio+'%'}</div>
-        <div style="font-size:9px;color:#bbb;">${note}</div>
-      </div>`;
-    }
-    const avgSMGP=totGP>0?Math.round(totSM2/totGP*100):null;
-    const avgSMGPcolor=avgSMGP===null?'#555':avgSMGP<=50?'#3B6D11':avgSMGP<=80?'#BA7517':'#E24B4A';
-    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.4rem 0.5rem;text-align:right;">
-      <div style="font-size:11px;font-weight:700;color:${avgSMGPcolor};">${avgSMGP===null?'—':avgSMGP+'%'}</div>
-    </div>`;
-
-    html += `</div></div>`;
-
-
 
     el.innerHTML = html;
   }
@@ -2155,6 +2099,14 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     renderPL(window._latestMonthlyPlan, currencyFormats[state.currency]);
   }
 
+  function togglePlMetrics(key) {
+    if(!['unit','efficiency'].includes(key)) return;
+    if(plExpandedMetrics.has(key)) plExpandedMetrics.delete(key);
+    else plExpandedMetrics.add(key);
+    renderPL(window._latestMonthlyPlan,currencyFormats[state.currency]);
+    document.getElementById('plMetricsToggle'+key)?.focus?.({preventScroll:true});
+  }
+
   function togglePlMonthsAndYears() {
     plMonthsAndYears=!plMonthsAndYears;
     const button=document.getElementById('plMonthsAndYears');
@@ -2194,6 +2146,7 @@ Object.assign(window, {
   togglePlMonth,
   togglePlCohort,
   togglePlMatrix,
+  togglePlMetrics,
   togglePlMonthsAndYears,
   setPlCarrView,
   updateCashAssumptions,
