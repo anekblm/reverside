@@ -117,6 +117,41 @@ test("B and C sum monthly recognized revenue separately in the quarterly view",(
   for(const key of ["currentNewNetRevenue","earlierNewNetRevenue"])
     approx(model.quarters[0][key],months.reduce((n,m)=>n+m[key],0));
 });
+test("new customer retention converts rates monthly and can be deferred until the next year",()=>{
+  for(const [churnPeriod,width] of [["year",12],["quarter",3],["month",1]]) {
+    const churn=0.25,annualExpansion=0.2;
+    const periodExpansion=1.2**(width/12)-1;
+    const monthlyGross=(1-churn)**(1/width);
+    const monthlyNet=(1-churn+periodExpansion)**(1/width);
+    const cfg=base({
+      months:24,openingARR:120000,openingCustomers:120,acv:1000,
+      granularity:"month",churnPeriod,churnRate:churn,annualExpansionComp:annualExpansion,
+      newARRByPeriod:Array.from({length:24},(_,i)=>i===0?12000:0),
+      existingRetention:{pattern:"EVEN",phasePercent:50},newCustomerFirstMonthPhasePercent:67,
+    });
+    const enabled=forecastSaaS({...cfg,newCustomerRetentionEnabled:true});
+    const disabled=forecastSaaS({...cfg,newCustomerRetentionEnabled:false});
+    const [jan,feb]=enabled.monthlyBridge;
+    approx(jan.acquiredChurnARR,0);
+    approx(jan.acquiredExpansionARR,0);
+    approx(jan.currentNewNetRevenue,670);
+    approx(feb.acquiredChurnARR,12000*(1-monthlyGross));
+    approx(feb.acquiredExpansionARR,12000*(monthlyNet-monthlyGross));
+    approx(feb.acquiredEndARR,12000*monthlyNet);
+    approx(enabled.years[0].acquiredEndARR,12000*monthlyNet**11);
+    approx(disabled.years[0].acquiredEndARR,12000);
+    approx(disabled.years[0].acquiredChurnARR,0);
+    approx(disabled.years[0].acquiredExpansionARR,0);
+    for(const model of [enabled,disabled]) {
+      approx(model.years[1].originalStartARR,model.years[0].endARR);
+      assert.ok(model.years[1].originalChurnARR>0);
+      for(const period of [...model.monthlyBridge,...model.quarters,...model.years]) {
+        approx(period.originalEndARR+period.acquiredEndARR,period.endARR);
+        approx(period.existingRevenue+period.newRevenue,period.recognizedRevenue);
+      }
+    }
+  }
+});
 test("new cohorts don't churn within the input quarter, but churn in following quarter",()=>{
   const r=forecastSaaS(base({months:6,newARRByPeriod:[35,0],annualChurn:0.24,annualExpansionComp:0.08}));
   r.months.slice(0,3).forEach(m=>m.cohortFlows.filter(c=>c.firstInvoiceMonth>=0)

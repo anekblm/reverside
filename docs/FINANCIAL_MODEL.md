@@ -169,9 +169,18 @@ feasible range depending on actual months.
   churn period and distributes them across that period. Quarterly timing
   uses the selected shares within each quarter. Monthly churn applies
   directly in each month.
-- New cohorts appear in B throughout the acquisition year. Churn and
-  expansion first apply in the next selected churn period. Cohorts already
-  present at the start of the next year are in A.
+- New cohorts appear in B throughout the acquisition year.
+  **Churn & expansion on new customers** defaults to On. From the month
+  after acquisition, B uses equivalent monthly rates on each cohort's
+  current opening CARR. Monthly gross retention is annual gross retention
+  to the power `1/12`. Monthly net retention is annual NRR to the power
+  `1/12`, and expansion is their difference. For example, 25% annual
+  churn means 2.37% monthly churn in B. B uses this monthly conversion
+  independently of A's annual distribution.
+- With the switch Off, B has no churn or expansion during the acquisition
+  year. At the next year boundary, those customers join A and follow its
+  churn period and distribution. First-month acquisition revenue phasing
+  and the shared revenue effect of retention changes remain separate controls.
 - COGS cash proxy = recognized revenue × (1 − gross margin), paid in the
   same month. Other OPEX cash payments are a separately entered monthly value.
 - Monthly cash collection = monthly earned subscription revenue shifted by

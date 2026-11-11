@@ -593,6 +593,14 @@
 
           <section class="pl-forecast-section" aria-labelledby="plNewHeading">
             <h3 id="plNewHeading">New customers</h3>
+            <div class="pl-pattern-group" role="group" aria-label="Churn and expansion on new customers" aria-describedby="plNewRetentionNote">
+              <span class="pl-pattern-caption">Churn &amp; expansion on new customers</span>
+              <button type="button" class="pl-pattern-btn active" id="plNewRetentionOn" aria-pressed="true"
+                      onclick="setNewCustomerRetention(true)">On</button>
+              <button type="button" class="pl-pattern-btn" id="plNewRetentionOff" aria-pressed="false"
+                      onclick="setNewCustomerRetention(false)">Off</button>
+            </div>
+            <div class="pl-assumption-note" id="plNewRetentionNote">Equivalent monthly rates apply from the month after acquisition.</div>
             <div class="pl-distribution" id="plDistributionacquisition">
               <div class="pl-pattern-group" role="group" aria-label="New CARR distribution">
                 <span class="pl-pattern-caption">New CARR distribution</span>

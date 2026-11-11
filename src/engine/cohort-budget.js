@@ -161,12 +161,17 @@ export function maximumNewRevenuePhase({months,granularity,yearShares,signingPat
 /** Different acquisition cohorts are never collapsed before churn / expansion. */
 function makeARRRows(input, monthlySignedARR) {
   const {months,openingARR,annualChurn,annualExpansionComp,granularity,acv,existingRetention,retention}=input;
+  const newCustomerRetentionEnabled=input.newCustomerRetentionEnabled;
   const openingCustomers=input.openingCustomers??openingARR/acv;
   const newACVByMonth=input.newACVByMonth??Array(months).fill(acv);
   const budgetWidth=periodMonths(granularity);
   const width=retention?.width??budgetWidth;
   const annualGrossRetention=1-annualChurn;
   const annualNRR=annualGrossRetention+annualExpansionComp;
+  const monthlyGrossRetention=(retention?.annualGrossRetention??annualGrossRetention)**(1/12);
+  const monthlyNetRetention=(retention?.annualNRR??annualNRR)**(1/12);
+  const monthlyChurn=1-monthlyGrossRetention;
+  const monthlyExpansion=monthlyNetRetention-monthlyGrossRetention;
   const cohorts=[{firstInvoiceMonth:-1,arr:openingARR,count:openingCustomers}];
   const rows=[];
   let yearOpeningARR=0, priorExistingChurn=0, priorExistingExpansion=0;
@@ -216,13 +221,20 @@ function makeARRRows(input, monthlySignedARR) {
       const beforeCustomers=newlyAdded?0:c.count;
       const useYearOpening=existingRetention && c.firstInvoiceMonth<yearStart;
       const cohortWeight=retention&&existingRetention?existingWeight*periodLength:1;
-      const churn=useYearOpening
+      let churn=useYearOpening
         ? c.retentionOpeningARR*existingRetention.churn*existingWeight : c.periodChurnPerMonth*cohortWeight;
-      const expansion=useYearOpening
+      let expansion=useYearOpening
         ? c.retentionOpeningARR*existingRetention.expansion*existingWeight : c.periodExpansionPerMonth*cohortWeight;
-      const lostCustomers=useYearOpening
+      let lostCustomers=useYearOpening
         ? c.retentionOpeningCustomers*existingRetention.churn*existingWeight : c.periodLostCustomersPerMonth*cohortWeight;
-      const retentionPhase=existingRetention&&(useYearOpening||retention)?existingRetention.phase:1;
+      if(newCustomerRetentionEnabled!=null && c.firstInvoiceMonth>=yearStart) {
+        const eligible=newCustomerRetentionEnabled&&!newlyAdded;
+        churn=eligible?before*monthlyChurn:0;
+        expansion=eligible?before*monthlyExpansion:0;
+        lostCustomers=eligible?beforeCustomers*monthlyChurn:0;
+      }
+      const retentionPhase=existingRetention&&(useYearOpening||retention||newCustomerRetentionEnabled!=null)
+        ?existingRetention.phase:1;
       if(!newlyAdded) {
         c.arr=before-churn+expansion;
         c.count=beforeCustomers-lostCustomers;
@@ -462,6 +474,8 @@ export function forecastSaaS(input) {
       throw new RangeError("Opening customers and opening ARR must both be zero, or both be positive");
   }
   const targetARR=finite(input.targetARR,"targetARR");
+  if(input.newCustomerRetentionEnabled!=null&&typeof input.newCustomerRetentionEnabled!=="boolean")
+    throw new TypeError("New customer retention must be enabled or disabled");
   const annualExpansionComp=finite(input.annualExpansionComp,"annualExpansionComp");
   const retention=input.churnPeriod==null?null:
     churnPeriodRates(input.churnRate,input.churnPeriod,annualExpansionComp);
@@ -503,7 +517,8 @@ export function forecastSaaS(input) {
     };
   }
   const retentionInput={months,openingARR,openingCustomers:input.openingCustomers,acv,
-    annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV,existingRetention,retention};
+    annualChurn,annualExpansionComp,granularity,newACVByMonth:newACV,existingRetention,retention,
+    newCustomerRetentionEnabled:input.newCustomerRetentionEnabled};
   let newCustomersNeeded;
   let monthNewARR;
   if(input.newARRByPeriod != null) {
@@ -614,6 +629,7 @@ export function forecastSaaS(input) {
     signingPattern:input.signingPattern||"EVEN",
     monthlySigningPattern:input.monthlySigningPattern||"EVEN",
     granularity, churnPeriod:input.churnPeriod, periodPhasing:phase,periodPhaseRanges:phaseRanges,
+    newCustomerRetentionEnabled:input.newCustomerRetentionEnabled,
     periodCount:periodTotals.length,
     manualBudget:input.newARRByPeriod!=null,
     assumptions:{
@@ -622,8 +638,12 @@ export function forecastSaaS(input) {
       phasing:firstMonthPhase!=null
         ? "First-month phasing is applied once to signed CARR / 12. Full recurring revenue starts the following month."
         : "Year/quarter/month budget recognition percentage is applied once to the new cohort's maximum period revenue; the result is allocated to months and preserved in views.",
-      churn:retention?"New cohorts start churn and expansion in the next churn period."
-        :"New cohorts start churn and expansion in the next budget period.",
+      churn:input.newCustomerRetentionEnabled===true
+        ? "New cohorts use equivalent monthly churn and expansion from the month after acquisition."
+        :input.newCustomerRetentionEnabled===false
+          ? "Current-year acquisitions start churn and expansion next year when they join the opening base."
+          :retention?"New cohorts start churn and expansion in the next churn period."
+            :"New cohorts start churn and expansion in the next budget period.",
       costs:"COGS paid in revenue month; other operating outflows entered separately.",
       collections:"Monthly invoices, whole-month collection delay; no opening receivables.",
       cash:"No annual upfront billing, financing, tax or capex in this PLAN version.",

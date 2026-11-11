@@ -635,6 +635,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     acquisition: defaultDistribution('EVEN'),
   };
   let plNewCustomerPhase = 100;
+  let plNewCustomerRetention = true;
   let plExistingPhase = 100;
   const plExpandedCohorts = new Set();
   let plCarrView = 'fullYear';
@@ -1139,6 +1140,12 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     updateStep3Display();
   }
 
+  function setNewCustomerRetention(enabled) {
+    if(typeof enabled!=='boolean'||enabled===plNewCustomerRetention) return;
+    plNewCustomerRetention=enabled;
+    updateStep3Display();
+  }
+
   function updatePLSliderDisplay() {
     const cd = document.getElementById('plChurnDisplay');
     const ed = document.getElementById('plExpansionDisplay');
@@ -1200,6 +1207,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   function resetPL() {
     plNewCustomerPhase = 100;
+    plNewCustomerRetention = true;
     plChurnPeriod = 'year';
     plExistingPhase = 100;
     planDistributions.retention=defaultDistribution('EVEN');
@@ -1464,6 +1472,18 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   }
 
   function renderPlanToolbar(model) {
+    for(const [enabled,id] of [[true,'plNewRetentionOn'],[false,'plNewRetentionOff']]){
+      const button=document.getElementById(id);
+      button.classList.toggle?.('active',plNewCustomerRetention===enabled);
+      button.setAttribute?.('aria-pressed',String(plNewCustomerRetention===enabled));
+    }
+    const rates=churnPeriodRates(plChurn??state.churn,plChurnPeriod,plExpansion??0);
+    const monthlyGross=rates.annualGrossRetention**(1/12);
+    const monthlyNet=rates.annualNRR**(1/12);
+    document.getElementById('plNewRetentionNote').textContent=plNewCustomerRetention
+      ? 'From the month after acquisition · '+((1-monthlyGross)*100).toFixed(2)+'% churn · '+
+        ((monthlyNet-monthlyGross)*100).toFixed(2)+'% expansion per month.'
+      : 'Churn and expansion start next year when these customers join A.';
     const existingPhase=document.getElementById('plExistingPhase');
     if(existingPhase) existingPhase.value=String(plExistingPhase);
     const existingPhaseValue=document.getElementById('plExistingPhaseValue');
@@ -1554,6 +1574,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       openingARR: state.revenue, openingCustomers: state.customers,
       acv, targetARR: state.targetRevenue, granularity: 'month',
       churnPeriod: plChurnPeriod, churnRate,
+      newCustomerRetentionEnabled: plNewCustomerRetention,
       newCustomerFirstMonthPhasePercent: plNewCustomerPhase,
       existingRetention: {monthlyWeights:planDistributionWeights('retention'),phasePercent:plExistingPhase},
       newARRMonthlyWeights: planDistributionWeights('acquisition'),
@@ -2155,6 +2176,7 @@ Object.assign(window, {
   resetPL,
   onPLSlider,
   onExistingRetentionChange,
+  setNewCustomerRetention,
   onNewCustomerPhasingChange,
   onPlanInputsChange,
   onChurnPeriodChange,

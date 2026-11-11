@@ -332,7 +332,7 @@ test('Churn period changes the rate interval while forecasts remain monthly and 
   node('plChurnSlider').value='25';
   node('plExpansionSlider').value='0';
   app.onPLSlider();
-  const expected={year:[63,1],quarter:[124,4],month:[305,12]};
+  const expected={year:[72,1],quarter:[136,4],month:[305,12]};
   for(const [period,[customers,periods]] of Object.entries(expected)){
     app.onChurnPeriodChange(period);
     const plan=win._latestMonthlyPlan;
@@ -484,6 +484,7 @@ test('A valid explicit phase survives a new quarter preset without changing Exis
 
 test('67% first-month phasing reduces B2 without reducing later B1 revenue',()=>{
   const {app,node,win}=createApp(12);
+  app.setNewCustomerRetention(false);
   setTarget({app,node},2000000);
   const before=win._latestMonthlyPlan;
   app.onNewCustomerPhasingChange('67');
@@ -502,6 +503,29 @@ test('67% first-month phasing reduces B2 without reducing later B1 revenue',()=>
   close(plan.quarters[0].recognizedRevenue,
     jan.recognizedRevenue+feb.recognizedRevenue+mar.recognizedRevenue);
   assert.equal(node('plNewCustomerPhasingDisplay').textContent,'67.0%');
+});
+
+test('new customer retention defaults on and switching off preserves the selected scenario',()=>{
+  const scenario=createApp(12);
+  const {app,node,win}=scenario;
+  setTarget(scenario,1000000);
+  node('plChurnSlider').value='25';
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  const enabled=win._latestMonthlyPlan;
+  assert.equal(enabled.newCustomerRetentionEnabled,true);
+  assert.ok(enabled.monthlyBridge[1].acquiredChurnARR>0);
+  assert.equal(enabled.monthlyBridge[0].acquiredChurnARR,0);
+  app.setNewCustomerRetention(false);
+  const disabled=win._latestMonthlyPlan;
+  assert.equal(disabled.newCustomerRetentionEnabled,false);
+  assert.ok(disabled.monthlyBridge.every(month=>month.acquiredChurnARR===0&&month.acquiredExpansionARR===0));
+  assert.ok(disabled.summary.newCustomersNeeded<enabled.summary.newCustomersNeeded);
+  close(disabled.years[0].originalEndARR,enabled.years[0].originalEndARR);
+  assert.equal(disabled.churnPeriod,'year');
+  assert.match(node('plNewRetentionNote').textContent,/next year/);
+  app.resetPL();
+  assert.equal(win._latestMonthlyPlan.newCustomerRetentionEnabled,true);
 });
 
 test('the churn slider updates the equivalent compound monthly and quarterly rates',()=>{
