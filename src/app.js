@@ -1738,15 +1738,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       });
     };
 
-    totalRow('Opening CARR','startARR');
-    if(!plMatrixExpanded){
-      totalRow('Closing CARR','endARR');
-      totalRow('NRR','netRevenueRetention');
-      totalRow('Recognized Revenue','recognizedRevenue');
-      el.innerHTML=html+'</div>';
-      return;
-    }
-
     const cohortHeading = (key,title,{subtitle}) => {
       const expanded=plExpandedCohorts.has(key);
       html += divider();
@@ -1759,8 +1750,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       for (let y=0;y<years;y++) html += eachPeriod(y,()=>'<div></div>');
       return expanded;
     };
-    const cohortARRRow = (name, prefix, key, {bold=false, negative=false, noteKey=null}={}) => {
-      html += label(name, true, bold);
+    const cohortARRRow = (name, prefix, key, {bold=false, negative=false, noteKey=null,indent=true}={}) => {
+      html += label(name, indent, bold);
       for (let y=0;y<years;y++) html += eachPeriod(y,(period,kind)=>{
         const value=(period[prefix+key]??0)*(negative?-1:1);
         const isYear=kind==='year'||kind==='yearTotal';
@@ -1797,6 +1788,16 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       });
     };
 
+    totalRow('Opening CARR','startARR');
+    if(!plMatrixExpanded){
+      cohortARRRow('New CARR','acquired','NewARR',{noteKey:'NewCustomers',indent:false});
+      totalRow('Closing CARR','endARR');
+      totalRow('NRR','netRevenueRetention');
+      totalRow('Recognized Revenue','recognizedRevenue');
+      el.innerHTML=html+'</div>';
+      return;
+    }
+
     const expandedA=cohortHeading('A','A – EXISTING CUSTOMERS',{subtitle:'from previous year'});
     cohortARRRow('Opening CARR','original','StartARR',{noteKey:'StartCustomers'});
     if(expandedA) {
@@ -1805,7 +1806,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     cohortARRRow('Closing CARR','original','EndARR',{bold:true,noteKey:'EndCustomers'});
     if(expandedA) {
-      recognizedRow('Revenue before changes','originalOpeningRevenue',{bold:false,indent:true});
+      recognizedRow('Revenue Opening CARR','originalOpeningRevenue',{bold:false,indent:true});
       recognizedRow('− Churn impact','originalMonthlyChurnImpact',
         {bold:false,indent:true,color:'#E24B4A',yearOpeningImpactKey:'originalChurnRevenueImpact'});
       recognizedRow('+ Expansion impact','originalMonthlyExpansionImpact',
@@ -1818,11 +1819,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if(expandedB) {
       cohortARRRow('− Churn CARR','acquired','ChurnARR',{negative:true,noteKey:'ChurnCustomers'});
       cohortARRRow('+ Expansion CARR','acquired','ExpansionARR');
-      cohortARRRow('New CARR','acquired','NewARR',{noteKey:'NewCustomers'});
     }
+    cohortARRRow('New CARR','acquired','NewARR',{noteKey:'NewCustomers'});
     cohortARRRow('Closing CARR','acquired','EndARR',{bold:true,noteKey:'EndCustomers'});
     if(expandedB) {
-      recognizedRow('Revenue before changes','earlierNewBaseRevenue',
+      recognizedRow('Revenue Opening CARR','earlierNewBaseRevenue',
         {bold:false,indent:true});
       recognizedRow('− Churn impact','earlierNewChurnRevenueImpact',
         {bold:false,indent:true,color:'#E24B4A'});
@@ -1845,7 +1846,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     html += `<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;margin-top:4px;">
       Full Year CARR shows annualized amounts. Period CARR scales those amounts by months in the column / 12.
       Opening and closing CARR are measured at the period boundaries. Recognized revenue is earned during the period.
-      Revenue before changes uses each month's opening CARR. The main churn and
+      Revenue Opening CARR uses each month's opening CARR. The main churn and
       expansion amounts show the effect recognized in the month of change. Quarter and year amounts sum the
       months. “vs. year opening” shows the impact against the year's starting run rate.
       New customer phasing applies once in the acquisition month.

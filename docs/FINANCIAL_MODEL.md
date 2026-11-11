@@ -37,7 +37,7 @@ the elapsed months' weights of the annual retention schedule.
 The separate A phasing control defaults to 100% in PLAN. Churn and
 expansion then have their full revenue effect in the month of change.
 The slider can model a partial first month. The main bridge shows each
-month's opening CARR / 12 as revenue before changes, then applies this
+month's opening CARR / 12 as Revenue Opening CARR, then applies this
 month's signed CARR changes × first-month phase / 12. Previous changes
 are included in opening CARR. The secondary “vs. year opening” amount
 shows the impact against the year-opening run rate, including the full
@@ -82,12 +82,13 @@ use the opening and closing stocks at their boundaries.
 1. **Original base (pre-existing at the current year's start):**
    starting MRR revenue, less revenue impact from churn, plus revenue impact
    from expansion, all summed over months in the displayed period.
-2. **B, new customers acquired this year:** revenue before changes is the
+2. **B, new customers acquired this year:** Revenue Opening CARR is the
    sum of monthly opening MRR for those customers. Add the eligible churn
    and expansion effects and New Revenue to obtain Recognized Revenue.
    New Revenue is first-month revenue from new acquisitions after phasing.
 
-Within B, New CARR appears immediately before Closing CARR and New Revenue
+Within B, New CARR remains visible when the section is collapsed and
+appears immediately before Closing CARR. New Revenue appears
 immediately before Recognized Revenue. B's closing CARR includes all active
 customers acquired during the current year. A January customer's first-month
 revenue appears in New Revenue, and February's revenue is part of revenue
@@ -197,6 +198,8 @@ Closing CARR adds the closing stocks of A and B. Recognized revenue
 adds the flows from those groups. NRR measures only cohorts in the
 displayed period's opening base. Quarter and year columns add the monthly
 flows and use opening and closing balances at the period boundaries.
+The compact matrix includes a white New CARR row between total Opening
+CARR and Closing CARR.
 The engine retains first-month and earlier-month cohort detail to apply
 phasing and retention. Those internal movements cancel within combined B,
 so the matrix has no transfer row.

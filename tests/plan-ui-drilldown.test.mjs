@@ -188,7 +188,7 @@ test('the existing and new customer sections reconcile in every view',()=>{
     '>+ Expansion CARR</div>',
     '>New CARR</div>',
     '>Closing CARR</div>',
-    '>Revenue before changes</div>',
+    '>Revenue Opening CARR</div>',
     '>− Churn impact</div>',
     '>+ Expansion impact</div>',
     '>New Revenue</div>',
@@ -260,9 +260,9 @@ test('matrix totals view preserves open columns and cohort details when reopened
   app.togglePlMatrix();
   const compact=node('plTable').innerHTML;
   assert.equal(width(node),9);
-  assert.deepEqual([...compact.matchAll(/>(Opening CARR|Closing CARR|NRR|Recognized Revenue)<\/div>/g)]
-    .map(match=>match[1]),['Opening CARR','Closing CARR','NRR','Recognized Revenue']);
-  assert.equal((compact.match(/class="pl-matrix-value"/g)??[]).length,4*(width(node)-1));
+  assert.deepEqual([...compact.matchAll(/>(Opening CARR|New CARR|Closing CARR|NRR|Recognized Revenue)<\/div>/g)]
+    .map(match=>match[1]),['Opening CARR','New CARR','Closing CARR','NRR','Recognized Revenue']);
+  assert.equal((compact.match(/class="pl-matrix-value"/g)??[]).length,5*(width(node)-1));
   assert.doesNotMatch(compact,/EXISTING CUSTOMERS|Revenue · Existing|Gross profit|Unit Economics/);
   assert.equal(node('plMatrixToggle').textContent,'Show details');
   app.togglePlMatrix();
@@ -297,7 +297,7 @@ test('Months + years shows every modeled month without quarterly columns',()=>{
   assert.doesNotMatch(halfYear.node('plTable').innerHTML,/>Jul<\/div>/);
 });
 
-test('A and B expand independently and show three rows each when collapsed',()=>{
+test('A and B expand independently and keep New CARR visible in collapsed B',()=>{
   const {app,node,win}=createApp(12);
   const plan=win._latestMonthlyPlan;
   const html=()=>node('plTable').innerHTML;
@@ -306,8 +306,9 @@ test('A and B expand independently and show three rows each when collapsed',()=>
   }
   assert.equal((html().match(/>Recognized Revenue<\/div>/g)??[]).length,2);
   assert.doesNotMatch(html(),/plCohortToggleC/);
-  assert.doesNotMatch(html(),/>New CARR<\/div>|>New Revenue<\/div>|B1 –|B2 –/);
-  assert.doesNotMatch(html(),/>Revenue before changes<\/div>|− Revenue phasing|Transferred from B2/);
+  assert.equal((html().match(/>New CARR<\/div>/g)??[]).length,1);
+  assert.doesNotMatch(html(),/>New Revenue<\/div>|B1 –|B2 –/);
+  assert.doesNotMatch(html(),/>Revenue Opening CARR<\/div>|− Revenue phasing|Transferred from B2/);
   app.togglePlCohort('B');
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   assert.doesNotMatch(html(),/− Revenue phasing/);
@@ -319,7 +320,8 @@ test('A and B expand independently and show three rows each when collapsed',()=>
   app.togglePlMonth(0,1);
   assert.match(html(),/id="plCohortToggleB" aria-expanded="true"/);
   app.togglePlCohort('B');
-  assert.doesNotMatch(html(),/>New CARR<\/div>|>New Revenue<\/div>/);
+  assert.equal((html().match(/>New CARR<\/div>/g)??[]).length,1);
+  assert.doesNotMatch(html(),/>New Revenue<\/div>/);
   assert.equal(win._latestMonthlyPlan,plan);
 });
 
