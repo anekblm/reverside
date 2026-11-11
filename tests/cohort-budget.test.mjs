@@ -81,6 +81,34 @@ test("NRR measures the opening cohorts even when new cohorts later churn",()=>{
   assert.equal(preRevenue.monthlyBridge[0].netRevenueRetention,null);
   approx(preRevenue.monthlyBridge[1].netRevenueRetention,1);
 });
+test("PLAN shares the revenue effect of churn and expansion between existing and new cohorts",()=>{
+  const periodExpansion=1.12**(1/12)-1;
+  let closingARR;
+  for(const phasePercent of [0,50,100]) {
+    const phase=phasePercent/100;
+    const model=forecastSaaS(base({
+      months:3,granularity:"month",openingARR:120000,openingCustomers:120,
+      churnPeriod:"month",churnRate:0.25,annualExpansionComp:0.12,
+      newARRByPeriod:[12000,0,0],newCustomerFirstMonthPhasePercent:67,
+      existingRetention:{pattern:"EVEN",phasePercent},
+    }));
+    const [jan,feb]=model.monthlyBridge;
+    const newChurn=12000*0.25;
+    const newExpansion=12000*periodExpansion;
+    approx(jan.currentNewNetRevenue,670);
+    approx(jan.originalNetRevenue,(120000+phase*120000*(periodExpansion-0.25))/12);
+    approx(feb.earlierNewChurnRevenueImpact,-newChurn*phase/12);
+    approx(feb.earlierNewExpansionRevenueImpact,newExpansion*phase/12);
+    approx(feb.earlierNewNetRevenue,(12000+phase*(newExpansion-newChurn))/12);
+    approx(feb.acquiredEndARR,12000-newChurn+newExpansion);
+    if(closingARR!==undefined) approx(model.summary.endingARR,closingARR);
+    closingARR=model.summary.endingARR;
+    for(const period of [...model.monthlyBridge,...model.quarters,...model.years]) {
+      approx(period.earlierNewBaseRevenue+period.earlierNewChurnRevenueImpact+
+        period.earlierNewExpansionRevenueImpact+period.currentNewNetRevenue,period.newRevenue);
+    }
+  }
+});
 test("B and C sum monthly recognized revenue separately in the quarterly view",()=>{
   const model=forecastSaaS(base({months:3,newARRByPeriod:[35]}));
   const months=buildRevenueBridge(model.months,"month");

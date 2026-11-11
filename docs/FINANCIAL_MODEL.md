@@ -34,7 +34,8 @@ respectively, with an even initial split within each quarter. The
 distribution editor can override both levels. A partial year recognizes only
 the elapsed months' weights of the annual retention schedule.
 
-The separate A phasing control defaults to 100% in PLAN. Churn and
+The shared churn and expansion phasing control defaults to 100% in PLAN.
+It applies to both A and eligible current-year cohorts in B. Churn and
 expansion then have their full revenue effect in the month of change.
 The slider can model a partial first month. The main bridge shows each
 month's opening CARR / 12 as Revenue Opening CARR, then applies this

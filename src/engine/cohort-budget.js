@@ -222,6 +222,7 @@ function makeARRRows(input, monthlySignedARR) {
         ? c.retentionOpeningARR*existingRetention.expansion*existingWeight : c.periodExpansionPerMonth*cohortWeight;
       const lostCustomers=useYearOpening
         ? c.retentionOpeningCustomers*existingRetention.churn*existingWeight : c.periodLostCustomersPerMonth*cohortWeight;
+      const retentionPhase=existingRetention&&(useYearOpening||retention)?existingRetention.phase:1;
       if(!newlyAdded) {
         c.arr=before-churn+expansion;
         c.count=beforeCustomers-lostCustomers;
@@ -234,9 +235,8 @@ function makeARRRows(input, monthlySignedARR) {
       churnARR+=churn;
       expansionARR+=expansion;
       endARR+=c.arr;
-      let recognizedRevenue=c.arr/12;
+      const recognizedRevenue=(newlyAdded?c.arr:before+(expansion-churn)*retentionPhase)/12;
       if(useYearOpening) {
-        recognizedRevenue=(before+(expansion-churn)*existingRetention.phase)/12;
         existingChurn+=churn;
         existingExpansion+=expansion;
       }
@@ -245,7 +245,7 @@ function makeARRRows(input, monthlySignedARR) {
         startARR:before,churnARR:churn,expansionARR:expansion,
         startCustomers:beforeCustomers,churnCustomers:lostCustomers,
         newCustomers:newlyAdded?c.count:0,endCustomers:c.count,
-        newARR:newlySigned,endARR:c.arr,recognizedRevenue,
+        newARR:newlySigned,endARR:c.arr,recognizedRevenue,retentionPhase,
       });
     }
     const newARR=monthlySignedARR[m];
@@ -346,8 +346,8 @@ export function buildRevenueBridge(monthly, view = "quarter") {
             earlierTransferCustomers+=c.startCustomers;
           }
           metrics.earlierNewBaseRevenue+=c.startARR/12;
-          metrics.earlierNewChurnRevenueImpact-=c.churnARR/12;
-          metrics.earlierNewExpansionRevenueImpact+=c.expansionARR/12;
+          metrics.earlierNewChurnRevenueImpact-=c.churnARR*(c.retentionPhase??1)/12;
+          metrics.earlierNewExpansionRevenueImpact+=c.expansionARR*(c.retentionPhase??1)/12;
           metrics.earlierNewRealizationImpact+=c.realizationAdjustment??0;
         } else {
           metrics.currentNewRevenue+=c.newARR/12;
