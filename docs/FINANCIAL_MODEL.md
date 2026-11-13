@@ -235,6 +235,24 @@ recomputed from each column's underlying amounts rather than summed.
 Both sections remain accessible in the totals-only matrix. Their open
 states persist across period, CARR-display and scenario changes.
 
+PLAN's CAC strategies use those same annual closing economics, independently
+of the illustrative target-state calculations in Step 2. Efficient growth
+uses each year's LTV / 5. Aggressive growth starts with the profile multiplier
+on that recommendation, capped at that year's LTV / 3; its premium over
+Recommended CAC tapers linearly to zero in the last year of a multi-year plan.
+Custom CAC remains a fixed explicit input (an empty value follows Recommended
+CAC). Strategy cards and the budget summary label their targets as Year 1;
+the annual budget displays each year's CAC target and Max budget.
+
+Cohort balances and customer needs are calculated before pricing acquisition
+costs. The forecast is then costed with those annual CAC targets; this does
+not change the customer ledger. Cards, limits, warnings, S&M and cash update
+on each scenario edit. Display rounding is applied after budget calculations.
+With zero churn there is no finite LTV-derived recommendation: automatic
+strategies are unavailable and PLAN requires an explicit Custom CAC, including
+an intentional zero. Removing that input clears the priced strategy rather
+than reusing an old budget or silently assuming free acquisition.
+
 ## Guarantees and acceptance
 
 - The engine throws if an ARR or recognized revenue bridge does not reconcile.

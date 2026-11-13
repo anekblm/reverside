@@ -12,3 +12,12 @@ export function annualGrossProfitLtv(acv, grossMargin, annualChurn) {
   }
   return (acv * grossMargin) / annualChurn;
 }
+
+// Shared by PLAN's period metrics and annual acquisition strategy. All CARR
+// inputs are annualized, even when the matrix displays Period CARR.
+export function contractedUnitEconomics(period, grossMargin, annualChurn) {
+  const acv = period.endCustomers > 0 ? period.endACV : null;
+  const ltv = acv === null ? null : annualGrossProfitLtv(acv, grossMargin, annualChurn);
+  return { acv, ltv, maxCAC: ltv === null ? null : ltv / 3,
+    recommendedCAC: ltv === null ? null : ltv / 5 };
+}

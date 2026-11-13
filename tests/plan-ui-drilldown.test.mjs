@@ -5,7 +5,7 @@ import {
   animals,targetDefaults,toEUR,currencyFormats,paybackBenchmarks,cacRatios,
   growthMultipliers,growthMaxMonths,budgetDefaults,funnels
 } from '../src/domain/saas-profiles.js';
-import { annualGrossProfitLtv } from '../src/engine/unit-economics.js';
+import { annualGrossProfitLtv, contractedUnitEconomics } from '../src/engine/unit-economics.js';
 import { forecastSaaS,buildRevenueBridge,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS } from '../src/engine/cohort-budget.js';
 import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
@@ -45,11 +45,11 @@ function createApp(timeframe=36){
   const win={_qtr:{},scrollTo(){},confirm(){return true;}};
   const factory=new Function('document','window','animals','targetDefaults','toEUR',
     'currencyFormats','paybackBenchmarks','cacRatios','growthMultipliers',
-    'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv',
+    'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv','contractedUnitEconomics',
     'forecastSaaS','churnPeriodRates','PLAN_GRANULARITIES','SIGNING_PATTERNS','renderCashPanel',appBody);
   const app=factory(doc,win,animals,targetDefaults,toEUR,currencyFormats,
     paybackBenchmarks,cacRatios,growthMultipliers,growthMaxMonths,budgetDefaults,
-    funnels,annualGrossProfitLtv,forecastSaaS,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS,renderCashPanel);
+    funnels,annualGrossProfitLtv,contractedUnitEconomics,forecastSaaS,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS,renderCashPanel);
   app.goToStep2();
   app.goToStep3();
   return {app,node,win};
@@ -141,6 +141,109 @@ test('normal strategy and cash panel stay operational with nested expansion',()=
   assert.match(node('cashFlowPanel').innerHTML,/Operating cash flow/);
   assert.match(node('plTable').innerHTML,/B – NEW CUSTOMERS/);
   assert.equal(win._latestMonthlyPlan.months.length,12);
+});
+
+test('efficient CAC follows forecast unit economics and reprices spend when churn period changes',()=>{
+  const scenario=createApp(12);
+  const {app,node,win}=scenario;
+  setTarget(scenario,1000000);
+  const illustrative=node('metricsNewRecCAC').textContent;
+  node('plChurnSlider').value='25';
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  app.togglePlMetrics('unit');
+  app.selectStrategy('efficient');
+  const year=win._latestMonthlyPlan;
+  assert.equal(node('stratEffCAC').textContent,'6,400 kr');
+  assert.notEqual(node('stratEffCAC').textContent,illustrative);
+  close(year.annualCAC[0],6400);
+  close(year.summary.totalSM,year.summary.newCustomersNeeded*6400);
+  assert.match(node('annualPlanTable').innerHTML,/>CAC target<\/div>/);
+  assert.match(node('plTable').innerHTML.split('>Recommended CAC</div>')[1],/>6,400 kr<\/div>/);
+  app.onChurnPeriodChange('month');
+  const month=win._latestMonthlyPlan;
+  const expected=10000*0.8/(1-0.75**12)/5;
+  close(month.annualCAC[0],expected);
+  assert.equal(node('stratEffCAC').textContent,'1,652 kr');
+  assert.equal(node('s3MaxCAC').textContent,node('stratEffCAC').textContent);
+  close(month.summary.totalSM,month.summary.newCustomersNeeded*expected);
+  assert.equal(node('metricsNewRecCAC').textContent,illustrative,'PLAN must not rewrite the Step 2 illustration');
+  node('planGrossMargin').value='60';
+  app.onPlanInputsChange();
+  close(win._latestMonthlyPlan.annualCAC[0],expected*0.75);
+  assert.equal(node('s3MaxCAC').textContent,node('stratEffCAC').textContent);
+});
+
+test('automatic annual CAC targets share closing economics across horizons, churn periods and strategies',()=>{
+  for(const horizon of [6,12,24,36,60]) for(const period of ['year','quarter','month']) {
+    const scenario=createApp(horizon);
+    const {app,node,win}=scenario;
+    setTarget(scenario,3000000);
+    node('plChurnSlider').value='10';
+    node('plExpansionSlider').value='30';
+    app.onPLSlider();
+    app.onChurnPeriodChange(period);
+    for(const strategy of ['efficient','growth']){
+      app.selectStrategy(strategy);
+      const model=win._latestMonthlyPlan;
+      const annualChurn=1-0.9**({year:1,quarter:4,month:12}[period]);
+      const expected=model.years.map(p=>p.endACV*0.8/annualChurn/5);
+      model.years.forEach((p,y)=>{
+        const cac=model.annualCAC[y];
+        const maxCAC=p.endACV*0.8/annualChurn/3;
+        if(strategy==='efficient') close(cac,expected[y]);
+        else {
+          assert.ok(cac>=expected[y]-1e-8&&cac<=maxCAC+1e-8);
+          if(y===model.years.length-1&&y>0) close(cac,expected[y]);
+        }
+        close(model.annualSM[y],p.newCustomers*cac);
+        close(p.smPaid,model.annualSM[y]);
+        close(p.endCash,p.startCash+p.opCF);
+      });
+      assert.equal(node(strategy==='efficient'?'stratEffCAC':'stratGrowCAC').textContent,
+        currencyFormats.SEK(model.annualCAC[0]));
+      assert.equal(node('s3TotalBudget').textContent,currencyFormats.SEK(model.summary.totalSM));
+      const annualTable=node('annualPlanTable').innerHTML;
+      const maxBudget=annualTable.split('(max CAC)</span></div>')[1];
+      assert.ok(maxBudget);
+      assert.match(maxBudget,new RegExp('>'+currencyFormats.SEK(model.years[0].newCustomers*model.years[0].endACV*0.8/annualChurn/3)+'</div>'));
+    }
+  }
+});
+
+test('zero churn requests explicit custom CAC and custom warnings update from forecast ceilings',()=>{
+  const {app,node,win}=createApp(12);
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  app.selectStrategy('efficient');
+  node('plChurnSlider').value='0';
+  app.onPLSlider();
+  assert.equal(node('stratEffCAC').textContent,'—');
+  assert.equal(node('stratGrowCAC').textContent,'—');
+  assert.equal(node('budgetSummarySection').style.display,'none');
+  assert.match(node('strategyWarning').innerHTML,/Enter a custom CAC/);
+  assert.match(node('plTable').innerHTML,/select strategy/);
+  app.selectStrategy('growth');
+  assert.equal(node('budgetSummarySection').style.display,'none');
+  app.onCustomCACChange('10000');
+  assert.equal(node('budgetSummarySection').style.display,'block');
+  close(win._latestMonthlyPlan.annualCAC[0],10000);
+  app.onCustomCACChange('0');
+  close(win._latestMonthlyPlan.summary.totalSM,0);
+  app.onCustomCACChange('');
+  assert.equal(node('budgetSummarySection').style.display,'none');
+  assert.match(node('plTable').innerHTML,/select strategy/);
+  app.onCustomCACChange('10000');
+  node('plChurnSlider').value='25';
+  app.onPLSlider();
+  assert.equal(node('strategyWarning').style.display,'none');
+  app.onChurnPeriodChange('month');
+  assert.equal(node('strategyWarning').style.display,'block');
+  assert.match(node('strategyWarning').innerHTML,/exceeds Year 1's Max CAC/);
+  close(win._latestMonthlyPlan.annualCAC[0],10000,'Explicit custom CAC stays fixed');
+  app.onChurnPeriodChange('year');
+  assert.equal(node('strategyWarning').style.display,'none');
+  assert.doesNotMatch(node('plTable').innerHTML,/NaN|Infinity/);
 });
 
 test('annual S&M, cash and the funnel use the same customer plan',()=>{

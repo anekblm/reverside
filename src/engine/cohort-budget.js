@@ -625,7 +625,7 @@ export function forecastSaaS(input) {
   };
   return{
     months:monthly,monthlyBridge,quarters,years,summary,
-    annualCustomers,annualSM,quarterSM,
+    annualCustomers,annualCAC,annualSM,quarterSM,
     signingPattern:input.signingPattern||"EVEN",
     monthlySigningPattern:input.monthlySigningPattern||"EVEN",
     granularity, churnPeriod:input.churnPeriod, periodPhasing:phase,periodPhaseRanges:phaseRanges,

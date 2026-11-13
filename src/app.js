@@ -1,5 +1,5 @@
 import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
-import { annualGrossProfitLtv } from "./engine/unit-economics.js";
+import { annualGrossProfitLtv, contractedUnitEconomics } from "./engine/unit-economics.js";
 import { forecastSaaS, churnPeriodRates, PLAN_GRANULARITIES, SIGNING_PATTERNS } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
@@ -646,6 +646,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let planInitialized = false;
   let selectedStrategy = null; // 'efficient' | 'growth' | 'custom'
   let customCAC = null;
+  let planEconomics = [];
 
 
 
@@ -656,10 +657,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if(!planInitialized) {
       planInitialized=true;
       document.getElementById('budgetSummarySection').style.display = 'none';
-      populateStrategyCards();
       initPLSliders();
-    } else {
-      populateStrategyCards(false);
     }
     if(yearSplit.length!==years) initYearSplit();
     renderPlanInputs();
@@ -709,80 +707,64 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if(previousYears!==Math.ceil(state.timeframe/12)) initYearSplit();
     document.getElementById('headerAnimalEmoji').textContent=animals[state.animal].emoji+' '+state.animal;
     renderPlanInputs();
-    populateStrategyCards(false);
     if(selectedStrategy) selectStrategy(selectedStrategy,false);
     else updateStep3Display();
   }
 
-  function populateStrategyCards(resetSelection = true) {
+  function populateStrategyCards() {
     if (!state.animal) return;
     const fmt = currencyFormats[state.currency];
-    const benchPayback = paybackBenchmarks[state.animal];
-    const recCAC = state.newRecCAC || 0;
-    const maxCAC = state.newMaxCAC || state.maxCAC || 0;
-    const growthCACraw = Math.round(recCAC * (growthMultipliers[state.animal] || 2.0));
-    const maxCAC_ = state.newMaxCAC || state.maxCAC || 0;
-    const growthCAC = Math.min(growthCACraw, maxCAC_); // never exceed Max CAC
-    const maxGrowthMonths = growthMaxMonths[state.animal];
-
-    document.getElementById('stratEffCAC').textContent = fmt(recCAC);
-    document.getElementById('stratEffPayback').textContent = benchPayback + '-month profile benchmark';
-    document.getElementById('stratGrowCAC').textContent = fmt(growthCAC);
-    document.getElementById('stratGrowNote').textContent = 'Max ' + maxGrowthMonths + ' months at this level';
-    document.getElementById('customCACInput').placeholder = fmt(recCAC);
-    if (!resetSelection) return;
-    customCAC = null;
-    document.getElementById('customCACInput').value = '';
-
-    // Reset card styles
-    ['efficient','growth','custom'].forEach(s => {
-      const el = document.getElementById('strat-' + s);
-      if (el) { el.style.border = '1.5px solid #e0e0e0'; el.style.background = 'white'; }
-    });
-  }
-
-  function selectStrategy(strategy, resetSplit = true) {
-    selectedStrategy = strategy;
-    const fmt = currencyFormats[state.currency];
-    const recCAC = state.newRecCAC || 0;
-    const growthCACraw_ = Math.round(recCAC * (growthMultipliers[state.animal] || 2.0));
-    const growthCAC = Math.min(growthCACraw_, state.newMaxCAC || state.maxCAC || growthCACraw_);
-
-    // Highlight selected card
+    const first=planEconomics[0];
+    const recCAC=first?.recommendedCAC??null;
+    const growthCAC=strategyCAC('growth',0,planEconomics.length);
+    const monthlyGP=(first?.acv??0)*state.grossMargin/12;
+    document.getElementById('stratEffCAC').textContent=recCAC===null?'—':fmt(recCAC);
+    document.getElementById('stratEffPayback').textContent=recCAC===null
+      ? 'Enter a custom CAC to plan spend'
+      : 'Year 1 · '+(recCAC/monthlyGP).toFixed(1)+'-month payback at closing ACV';
+    document.getElementById('stratGrowCAC').textContent=growthCAC===null?'—':fmt(growthCAC);
+    document.getElementById('stratGrowNote').textContent='Year 1 · capped at Max CAC; premium tapers to recommended';
+    document.getElementById('customCACInput').placeholder=recCAC===null?'Enter CAC':fmt(recCAC);
+    const automaticAvailable=planEconomics.every(e=>e.recommendedCAC!==null);
     ['efficient','growth','custom'].forEach(s => {
       const el = document.getElementById('strat-' + s);
       if (!el) return;
-      if (s === strategy) {
-        el.style.border = '1.5px solid #378ADD';
-        el.style.background = '#E6F1FB';
-      } else {
-        el.style.border = '1.5px solid #e0e0e0';
-        el.style.background = 'white';
-      }
+      const disabled=s!=='custom'&&!automaticAvailable;
+      el.setAttribute?.('aria-disabled',String(disabled));
+      el.style.opacity=disabled?'0.5':'1';
+      el.style.cursor=disabled?'not-allowed':'pointer';
+      el.style.border=selectedStrategy===s?'1.5px solid #378ADD':'1.5px solid #e0e0e0';
+      el.style.background=selectedStrategy===s?'#E6F1FB':'white';
     });
+  }
 
-    // Timeframe warning
-    const years = Math.max(1, Math.round(state.timeframe / 12));
+  function renderStrategyWarning() {
+    const fmt=currencyFormats[state.currency];
     const minMonths = growthMaxMonths[state.animal] || 18;
     const warningEl = document.getElementById('strategyWarning');
-
-    if (strategy === 'growth' && state.timeframe < minMonths + 12) {
+    const unavailable=planEconomics.some(e=>e.recommendedCAC===null);
+    if(unavailable){
+      warningEl.style.display='block';
+      warningEl.innerHTML='<div class="alert alert-info">A finite CAC recommendation needs positive churn and active closing customers. Enter a custom CAC to plan S&M spend.</div>';
+    } else if (selectedStrategy === 'growth' && state.timeframe < minMonths + 12) {
       warningEl.style.display = 'block';
       warningEl.innerHTML = `<div style="background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 6px 6px 0;padding:0.75rem 1rem;font-size:12px;color:#BA7517;line-height:1.6;">
         ⚠️ <strong>Timeframe may be too short for aggressive growth.</strong> This strategy requires up to ${minMonths} months at elevated CAC plus time to normalize — ideally ${minMonths + 12}+ months total. Your current timeframe is ${state.timeframe} months. You can proceed, but plan for extended runway.
       </div>`;
-    } else if (strategy === 'custom') {
-      const cac = getActiveCACForStrategy();
-      const maxCAC = state.newMaxCAC || state.maxCAC;
-      if (cac > maxCAC) {
+    } else if (selectedStrategy === 'custom') {
+      const overMax=planEconomics.findIndex((e,y)=>getCACForYear(y,planEconomics.length)>e.maxCAC);
+      const overGrowth=planEconomics.findIndex((e,y)=>getCACForYear(y,planEconomics.length)>strategyCAC('growth',y,planEconomics.length));
+      if (overMax>=0) {
+        const maxCAC=planEconomics[overMax].maxCAC;
         warningEl.style.display = 'block';
         warningEl.innerHTML = `<div style="background:#FCEBEB;border-left:3px solid #E24B4A;border-radius:0 6px 6px 0;padding:0.75rem 1rem;font-size:12px;color:#A32D2D;line-height:1.6;">
-          ⚠️ <strong>Custom CAC exceeds the planned ceiling (${fmt(maxCAC)}).</strong> The projected LTV:CAC ratio is below 3×.
+          ⚠️ <strong>Custom CAC exceeds Year ${overMax+1}'s Max CAC (${fmt(maxCAC)}).</strong> The projected LTV:CAC ratio is below 3× in that year.
         </div>`;
-      } else if (cac > growthCAC) {
+      } else if (overGrowth>=0) {
+        const growthCAC=strategyCAC('growth',overGrowth,planEconomics.length);
         warningEl.style.display = 'block';
         warningEl.innerHTML = `<div style="background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 6px 6px 0;padding:0.75rem 1rem;font-size:12px;color:#BA7517;line-height:1.6;">
-          ⚠️ <strong>Custom CAC is above the growth ceiling (${fmt(growthCAC)}).</strong> This is only justifiable with very strong NRR (130%+) or multi-year contracts.
+          ⚠️ <strong>Custom CAC is above Year ${overGrowth+1}'s aggressive target (${fmt(growthCAC)}).</strong> Review the additional acquisition spend.
         </div>`;
       } else {
         warningEl.style.display = 'none';
@@ -791,39 +773,44 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       warningEl.style.display = 'none';
     }
 
+  }
+
+  function selectStrategy(strategy, resetSplit = true) {
+    if(!['efficient','growth','custom'].includes(strategy)) return;
+    if(planEconomics.some(e=>e.recommendedCAC===null)&&
+      (strategy!=='custom'||customCAC===null)) {
+      renderStrategyWarning();
+      return;
+    }
+    selectedStrategy=strategy;
     if (resetSplit) initYearSplit();
     updateStep3Display();
-    document.getElementById('budgetSummarySection').style.display = 'block';
   }
 
   function onCustomCACChange(val) {
     const cac=Number(val);
     if (!Number.isFinite(cac) || cac<0) return;
     customCAC=String(val).trim()===''?null:cac;
-    if (selectedStrategy === 'custom') selectStrategy('custom',false);
+    if(selectedStrategy==='custom') updateStep3Display();
+    else if(selectedStrategy===null&&customCAC!==null) selectStrategy('custom',false);
   }
 
   function getActiveCACForStrategy() {
-    const recCAC  = state.newRecCAC || 0;
-    const maxCAC_ = state.newMaxCAC || state.maxCAC || 0;
-    const growthCACraw = Math.round(recCAC * (growthMultipliers[state.animal] || 2.0));
-    const growthCAC = Math.min(growthCACraw, maxCAC_); // capped at Max CAC
-    if (selectedStrategy === 'efficient') return recCAC;
-    if (selectedStrategy === 'growth')   return growthCAC;
-    if (selectedStrategy === 'custom')   return customCAC ?? recCAC;
-    return recCAC;
+    return getCACForYear(0,planEconomics.length);
   }
 
-  // For aggressive growth, return year-specific CAC ramping down from Max CAC → Rec CAC
+  function strategyCAC(strategy,y,years) {
+    const economics=planEconomics[y];
+    const recCAC=economics?.recommendedCAC??null;
+    if(strategy==='custom') return customCAC??recCAC;
+    if(strategy!=='growth'||recCAC===null) return recCAC;
+    const growthCAC=Math.min(recCAC*(growthMultipliers[state.animal]||2),economics.maxCAC);
+    const t=years>1?y/(years-1):0;
+    return growthCAC+(recCAC-growthCAC)*t;
+  }
+
   function getCACForYear(y, years) {
-    if (selectedStrategy !== 'growth' || years <= 1) return getActiveCACForStrategy();
-    const recCAC  = state.newRecCAC || 0;
-    const maxCAC_ = state.newMaxCAC || state.maxCAC || 0;
-    const growthCACraw = Math.round(recCAC * (growthMultipliers[state.animal] || 2.0));
-    const growthCAC = Math.min(growthCACraw, maxCAC_);
-    // Linear ramp: Year 1 = growthCAC, Last year = recCAC
-    const t = years > 1 ? y / (years - 1) : 0;
-    return Math.round(growthCAC + (recCAC - growthCAC) * t);
+    return strategyCAC(selectedStrategy,y,years);
   }
 
   function initYearSplit() {
@@ -863,13 +850,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const years = Math.max(1, Math.round(state.timeframe / 12));
     // Always render P&L first (sets state.newCustomersNeeded dynamically)
     buildPL(years, fmt);
-
+    populateStrategyCards();
+    renderStrategyWarning();
+    document.getElementById('budgetSummarySection').style.display=selectedStrategy?'block':'none';
     if (!selectedStrategy) return;
 
     const model=window._latestMonthlyPlan;
     const budgetCAC=getActiveCACForStrategy();
     state.totalBudget=model.summary.totalSM;
-    const monthlyGP=state.acv*state.grossMargin/12;
+    const monthlyGP=planEconomics[0].acv*state.grossMargin/12;
     const paybackMonths=monthlyGP>0?(budgetCAC/monthlyGP).toFixed(1)+' months':'—';
 
     // Labels
@@ -880,7 +869,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('s3TotalBudget').textContent = fmt(state.totalBudget);
     document.getElementById('s3TimeframeLabel').textContent = state.timeframe + ' months';
     document.getElementById('s3Payback').textContent =
-      'CAC payback at entry ACV · '+paybackMonths+' (profile benchmark '+paybackBenchmarks[state.animal]+' months)';
+      'CAC target payback at Year 1 closing ACV · '+paybackMonths+' (profile benchmark '+paybackBenchmarks[state.animal]+' months)';
 
     buildAnnualTable(model, fmt);
     buildWaterfall(model.annualCustomers);
@@ -899,8 +888,9 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     for (let y = 0; y < years; y++) {
       const pct = yearSplit[y] || 0;
       const cust = model.annualCustomers[y];
-      const yearCAC    = getCACForYear(y, years);                  // strategy-aware, ramps for aggressive
-      const maxBudget  = cust * (state.newMaxCAC || state.maxCAC); // absolute ceiling from Step 2
+      const yearCAC    = model.annualCAC[y];
+      const maxCAC     = planEconomics[y].maxCAC;
+      const maxBudget  = maxCAC===null?null:cust*maxCAC;
       const allocBudget = cust * yearCAC;                          // actual budget for this year
       const alloc = yearAllocs[y] || { sales: defs.sales, salesact: defs.salesact, mkt: defs.mkt };
       const salesAmt = allocBudget * alloc.sales / 100;
@@ -914,8 +904,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       else if (salesAmt < fullSalary) { salesperText = Math.round(salesAmt / fullSalary * 100) + '% of 1 AE'; }
       else { salesperText = Math.floor(salesAmt / fullSalary) + ' AE(s)'; }
       totCust += cust;
-      totBudget += maxBudget;
-      cols.push({ y, pct, cust, budget: maxBudget, allocBudget, salesAmt, actAmt, mktAmt, salesperText, alloc });
+      totBudget = totBudget===null||maxBudget===null?null:totBudget+maxBudget;
+      cols.push({ y, pct, cust, yearCAC, budget: maxBudget, allocBudget, salesAmt, actAmt, mktAmt, salesperText, alloc });
     }
 
     const totalShare = yearSplit.reduce((a,b) => a+b, 0);
@@ -943,10 +933,15 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     }
     html += `<div style="background:#fafafa;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;font-weight:600;color:${shareColor};">${totalShare}%${shareOk?'':' ⚠'}</div>`;
 
-    // Budget row — shows Max CAC × customers (ceiling from Step 2)
+    // Annual targets use the same closing economics as the PLAN matrix.
+    html += `<div style="font-size:11px;color:#666;display:flex;align-items:center;">CAC target</div>`;
+    for(const col of cols) html+=`<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;">${fmt(col.yearCAC)}</div>`;
+    html+=`<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;">${totCust>0?fmt(cols.reduce((sum,col)=>sum+col.allocBudget,0)/totCust):'—'}</div>`;
+
+    // Budget row — shows each year's Max CAC × customers.
     html += `<div style="font-size:11px;color:#666;font-weight:500;display:flex;align-items:center;">Max budget <span style="font-size:9px;color:#bbb;margin-left:4px;">(max CAC)</span></div>`;
-    for (let y = 0; y < years; y++) html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;font-weight:500;color:#333;">${fmt(cols[y].budget)}</div>`;
-    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;font-weight:600;color:#333;">${fmt(totBudget)}</div>`;
+    for (let y = 0; y < years; y++) html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;font-weight:500;color:#333;">${cols[y].budget===null?'—':fmt(cols[y].budget)}</div>`;
+    html += `<div style="background:white;border:0.5px solid #e0e0e0;border-radius:6px;padding:0.45rem;text-align:center;font-size:12px;font-weight:600;color:#333;">${totBudget===null?'—':fmt(totBudget)}</div>`;
 
     // Divider
     html += `<div style="grid-column:1/-1;border-top:0.5px solid #e0e0e0;margin:2px 0;"></div>`;
@@ -1570,7 +1565,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       return ['sales', 'salesact', 'mkt'].reduce((total, key) =>
         total + (yearAllocs['disabled_' + key] ? 0 : (alloc[key] || 0)), 0);
     });
-    const model = forecastSaaS({
+    const inputs = {
       months: state.timeframe,
       openingARR: state.revenue, openingCustomers: state.customers,
       acv, targetARR: state.targetRevenue, granularity: 'month',
@@ -1581,13 +1576,21 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       newARRMonthlyWeights: planDistributionWeights('acquisition'),
       annualExpansionComp: expRate, grossMargin, yearShares: yearSplit,
       priceNewOnExpansion: plUseExpACV,
-      cacByYear: Array.from({ length: years }, (_, y) => selectedStrategy ? getCACForYear(y, years) : 0),
+      cacByYear: Array(years).fill(0),
       smBudgetPercentByYear,
       quarterSMSharesByYear: Array.from({ length: years }, (_, y) => quarterSharesForYear(y)),
       openingCash: Number(document.getElementById('cashOpening')?.value || 0),
       otherOpexMonthly: Number(document.getElementById('cashOtherOpex')?.value || 0),
       collectionLagMonths: Number(document.getElementById('cashCollectionLag')?.value || 0),
-    });
+    };
+    // CARR and customer cohorts do not depend on acquisition cost. Derive CAC
+    // limits from that forecast, then price the same plan before rendering cash.
+    let model=forecastSaaS(inputs);
+    const annualChurn=1-churnPeriodRates(churnRate,plChurnPeriod,expRate).annualGrossRetention;
+    planEconomics=model.years.map(period=>contractedUnitEconomics(period,grossMargin,annualChurn));
+    if(selectedStrategy&&model.years.some((_,y)=>getCACForYear(y,years)===null)) selectedStrategy=null;
+    if(selectedStrategy) model=forecastSaaS({...inputs,
+      cacByYear:model.years.map((_,y)=>getCACForYear(y,years))});
     window._latestMonthlyPlan = model;
     state.newCustomersNeeded = model.summary.newCustomersNeeded;
     renderPL(model, fmt);
@@ -1891,8 +1894,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         return periodCell(value===null?'—':format(value),kind,value===null?{}:style(value));
       });
     };
-    const ltvForPeriod=period=>period.endCustomers>0
-      ? annualGrossProfitLtv(period.endACV,grossMargin,churnRate) : null;
+    const economicsForPeriod=period=>contractedUnitEconomics(period,grossMargin,churnRate);
+    const ltvForPeriod=period=>economicsForPeriod(period).ltv;
     const cacForPeriod=period=>selectedStrategy&&period.newCustomers>0
       ? period.smPaid/period.newCustomers : null;
 
@@ -1900,16 +1903,10 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       html+='<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;">'+
         'ACV and LTV use closing CARR. CAC limits use LTV ÷ 3 and LTV ÷ 5. '+
         'Planned CAC uses S&M spend divided by new customers in each column.</div>';
-      metricRow('Closing ACV',period=>period.endCustomers>0?period.endACV:null);
+      metricRow('Closing ACV',period=>economicsForPeriod(period).acv);
       metricRow('LTV',ltvForPeriod);
-      metricRow('Max CAC',period=>{
-        const ltv=ltvForPeriod(period);
-        return ltv===null?null:ltv/3;
-      });
-      metricRow('Recommended CAC',period=>{
-        const ltv=ltvForPeriod(period);
-        return ltv===null?null:ltv/5;
-      });
+      metricRow('Max CAC',period=>economicsForPeriod(period).maxCAC);
+      metricRow('Recommended CAC',period=>economicsForPeriod(period).recommendedCAC);
       metricRow('Planned CAC',cacForPeriod);
       metricRow('LTV:CAC',period=>{
         const ltv=ltvForPeriod(period), cac=cacForPeriod(period);
