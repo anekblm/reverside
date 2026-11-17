@@ -14,6 +14,15 @@ export const targetDefaults = { EUR: 100000, USD: 100000, SEK: 1000000 };
 
 export const toEUR = { EUR: 1.0, USD: 0.92, SEK: 0.088 };
 
+// Same classification for the opening business and acquisition-ACV profiles.
+export function animalForACV(acv, currency) {
+  if (!Number.isFinite(acv) || acv <= 0) return null;
+  const eur=acv*(toEUR[currency]||1);
+  return Object.keys(animals).reduce((closest,name)=>
+    Math.abs(Math.log(eur/animals[name].acv)) < Math.abs(Math.log(eur/animals[closest].acv)) ? name : closest,
+    Object.keys(animals)[0]);
+}
+
 export const currencyFormats = {
     EUR: n => '€' + Math.round(n).toLocaleString(),
     USD: n => '$' + Math.round(n).toLocaleString(),

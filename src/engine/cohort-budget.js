@@ -497,7 +497,7 @@ export function forecastSaaS(input) {
   const nrrAnnual=retention?.annualNRR??1-annualChurn+annualExpansionComp;
   const factor=nrrAnnual/(retention?.annualGrossRetention??1-annualChurn);
   const newACV=Array.from({length:months},(_,m)=>
-    acv*Math.pow(factor,Math.floor(m/12)+(input.priceNewOnExpansion?1:0)));
+    acv*(input.priceNewOnExpansion?Math.pow(factor,Math.floor(m/12)+1):1));
   let existingRetention;
   if(input.existingRetention) {
     const {pattern="EVEN",phasePercent=50,monthlyWeights}=input.existingRetention;

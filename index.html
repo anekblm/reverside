@@ -166,7 +166,7 @@
                 <div style="font-size:13px;font-weight:500;color:#333;margin-bottom:0.4rem;">LTV — Lifetime Value</div>
                 <div style="font-size:12px;color:#666;line-height:1.6;">
                   The total gross profit a customer generates over their entire relationship with you. Higher LTV means you can afford to spend more acquiring each customer.<br>
-                  <span style="color:#999;font-size:11px;">Formula: (ACV × Gross Margin) ÷ Churn Rate</span>
+                  <span style="color:#999;font-size:11px;">Expected lifetime gross profit at entry ACV, using churn timing</span>
                 </div>
               </div>
 
@@ -636,7 +636,7 @@
             <summary>Advanced · ACV and new customer pricing</summary>
             <div class="pl-advanced-content">
               <p><strong>Contracted ACV</strong> is annualized CARR divided by the customer count at that point in time. The matrix shows opening and closing balances.</p>
-              <p><strong>Expansion ACV</strong> is entry ACV × NRR ÷ GRR. New customer pricing defaults to the year's entry ACV.</p>
+              <p><strong>Historical ACV</strong> stays fixed for new customers throughout the plan. With <strong>Expansion ACV</strong> selected, new customer pricing follows entry ACV × (annual NRR ÷ annual GRR) to the power of the forecast year (Year 1 = one step). Existing customers continue to follow the chosen churn and expansion assumptions in either mode.</p>
               <label class="pl-advanced-price" for="plUseExpACVCheck">
                 <input type="checkbox" id="plUseExpACVCheck" onchange="onPLCheckbox()">
                 Price new customers on Expansion ACV
@@ -669,11 +669,12 @@
         <div style="font-size:12px;color:#666;margin-bottom:1.25rem;">
           CAC targets use the same forecast as Unit Economics. Cards show Year 1; the annual plan shows each year's target.
         </div>
+        <div id="stratProfileNote" style="font-size:11px;color:#666;line-height:1.5;margin-bottom:1rem;"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;" id="strategyCards">
 
           <div class="strategy-card" id="strat-efficient" onclick="selectStrategy('efficient')" style="border:1.5px solid #e0e0e0;border-radius:8px;padding:1rem;cursor:pointer;transition:all 0.2s;">
             <div style="font-size:12px;font-weight:500;color:#333;margin-bottom:0.4rem;">Efficient growth</div>
-            <div style="font-size:11px;color:#666;line-height:1.5;margin-bottom:0.75rem;">Follow each year's Recommended CAC (LTV ÷ 5). Cash flow shows the funding required.</div>
+            <div style="font-size:11px;color:#666;line-height:1.5;margin-bottom:0.75rem;">Follow each year's Recommended CAC, limited by LTV and the acquisition profile's payback guideline. Cash flow shows the funding required.</div>
             <div style="font-size:10px;color:#999;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;">CAC target</div>
             <div style="font-size:16px;font-weight:600;color:#333;" id="stratEffCAC">-</div>
             <div style="font-size:10px;color:#999;margin-top:0.25rem;" id="stratEffPayback">- month payback</div>
@@ -689,7 +690,7 @@
 
           <div class="strategy-card" id="strat-custom" onclick="selectStrategy('custom')" style="border:1.5px solid #e0e0e0;border-radius:8px;padding:1rem;cursor:pointer;transition:all 0.2s;">
             <div style="font-size:12px;font-weight:500;color:#333;margin-bottom:0.4rem;">Custom</div>
-            <div style="font-size:11px;color:#666;line-height:1.5;margin-bottom:0.75rem;">Set your own CAC. The model will show the budget and warn if you exceed safe limits.</div>
+            <div style="font-size:11px;color:#666;line-height:1.5;margin-bottom:0.75rem;">Set your own CAC. The model shows the budget and flags when CAC exceeds its modeled limits.</div>
             <div style="font-size:10px;color:#999;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.4rem;">Your CAC</div>
             <input type="number" id="customCACInput" min="0" step="any" onclick="event.stopPropagation();selectStrategy('custom')" oninput="onCustomCACChange(this.value)" style="width:100%;padding:0.4rem 0.5rem;border:0.5px solid #ddd;border-radius:6px;font-size:13px;font-weight:500;" placeholder="-">
           </div>

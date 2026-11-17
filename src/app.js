@@ -1,5 +1,5 @@
-import { animals, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
-import { annualGrossProfitLtv, contractedUnitEconomics } from "./engine/unit-economics.js";
+import { animals, animalForACV, targetDefaults, toEUR, currencyFormats, paybackBenchmarks, cacRatios, growthMultipliers, growthMaxMonths, budgetDefaults, funnels } from "./domain/saas-profiles.js";
+import { annualGrossProfitLtv, cohortLifetimeGrossProfit, cacLimits } from "./engine/unit-economics.js";
 import { forecastSaaS, churnPeriodRates, PLAN_GRANULARITIES, SIGNING_PATTERNS } from "./engine/cohort-budget.js";
 import { renderCashPanel } from "./features/plan/cash-panel.js";
 
@@ -55,13 +55,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     state.expectedACV = expected;
     state.acv = pre ? expected : revenue / customers;
     // Classify using assumed ACV for pre-revenue startups; otherwise observed ACV.
-    const acvEUR = acvToEUR(state.acv);
-    let closest = null, minDist = Infinity;
-    for (let [name, data] of Object.entries(animals)) {
-      const d = Math.abs(Math.log(acvEUR) - Math.log(data.acv));
-      if (d < minDist) { minDist = d; closest = name; }
-    }
-    state.animal = closest;
+    state.animal = animalForACV(state.acv,state.currency);
     return true;
   }
 
@@ -100,7 +94,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const benchmarkMargin=Number(document.getElementById('cogsSlider').value)/100;
     const benchmarkACV=bench.acv/(toEUR[state.currency]||1);
     const dynamicBenchLTV=annualGrossProfitLtv(benchmarkACV,benchmarkMargin,bench.churn);
-    const dynamicBenchRecCAC=dynamicBenchLTV/5;
+    const dynamicBenchRecCAC=cacLimits(dynamicBenchLTV,benchmarkACV*benchmarkMargin/12,paybackBenchmarks[state.animal]).recommendedCAC;
     const benchEffPayback=Math.round(dynamicBenchRecCAC/(benchmarkACV*benchmarkMargin/12));
 
     document.getElementById('benchLTV').textContent = fmt(dynamicBenchLTV);
@@ -267,14 +261,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('timeframeDisplay').textContent = state.timeframe + ' months';
     document.getElementById('newCustomersPercentDisplay').textContent = Math.round(state.newCustomersPercent * 100) + '%';
 
-    // Max CAC = LTV / 3  → "what is the absolute limit before destroying value?" (industry standard LTV:CAC ≥ 3×)
-    // Rec CAC = LTV / 5  → "what do well-run companies actually spend?" (LTV:CAC ~5× is healthy norm)
-    // They can legitimately be equal when LTV is very low — that itself signals economic pressure
-    const maxLtvcac = 3.0;  // below this = destroying value
-    const recLtvcac = 5.0;  // well-run companies target this
+    // Model policy: Max CAC = LTV / 3; recommendation also respects animal payback.
+    const maxLtvcac = 3.0;
     const cacRatio = 1 / maxLtvcac; // kept for label display
 
-    // Current LTV: based on current ACV × grossMargin / churn
+    // Step 2 illustration: lifetime gross profit at current entry ACV, Year + Even.
     state.ltv = Math.round(annualGrossProfitLtv(state.acv, state.grossMargin, state.churn));
     state.maxCAC = Math.round(state.ltv / maxLtvcac);
 
@@ -384,7 +375,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('newCustomersPerYearValue').textContent = newCustPerYear.toLocaleString();
     document.getElementById('newCustomersAmount').textContent = fmt(revFromNew);
 
-    // New LTV: based on newACV (NRR-adjusted) × grossMargin / churn
+    // Target-state illustration at NRR-adjusted ACV, using the same lifetime helper.
     const newLTV = Math.round(annualGrossProfitLtv(newACV, state.grossMargin, state.churn));
     const newMaxCAC = Math.round(newLTV * cacRatio);
 
@@ -412,20 +403,19 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('metricsNewCAC').textContent = fmt(newMaxCAC);
     document.getElementById('cacRatioLabel').textContent = 'LTV:CAC ≥ 3× limit';
 
-    // Recommended CAC = LTV / 5 (well-run companies target LTV:CAC ~5×)
-    const paybackBenchmarks = { Mice: 7, Rabbits: 12, Deer: 21, Elephants: 27, Whales: 36 };
-    const currentRecCAC = Math.round(state.ltv / recLtvcac);
-    const newRecCAC     = Math.round(newLTV / recLtvcac);
+    // Recommended CAC respects LTV / 5 and the existing animal payback guideline.
+    const currentRecCAC = Math.round(cacLimits(state.ltv,state.acv*state.grossMargin/12,paybackBenchmarks[state.animal]).recommendedCAC);
+    const newRecCAC = Math.round(cacLimits(newLTV,newACV*state.grossMargin/12,paybackBenchmarks[animalForACV(newACV,state.currency)]).recommendedCAC);
 
     // Back-calculate effective payback for display
     const monthlyGPCurrent = (state.acv / 12) * state.grossMargin;
     const benchPayback = monthlyGPCurrent > 0 ? Math.round(currentRecCAC / monthlyGPCurrent) : 0;
-    const paybackWasCapped = false;
+    const paybackWasCapped = currentRecCAC < Math.round(state.ltv/5);
 
     document.getElementById('metricsCurrentRecCAC').textContent = fmt(currentRecCAC);
     document.getElementById('metricsRecCACChange').textContent  = fmtChange(currentRecCAC, newRecCAC);
     document.getElementById('metricsNewRecCAC').textContent     = fmt(newRecCAC);
-    document.getElementById('cacPaybackLabel').textContent = benchPayback + '-month payback (LTV:CAC 5×)';
+    document.getElementById('cacPaybackLabel').textContent = benchPayback + '-month payback (LTV:CAC ≥ 5×; profile cap)';
 
     // Unit economics feedback — shown whenever churn caps the payback or metrics look off
     const cacWarningEl = document.getElementById('cacEconomicsWarning');
@@ -437,9 +427,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       let msgs = [];
 
       if (paybackWasCapped) {
-        msgs.push(`⚠️ <strong>High churn is limiting your CAC budget.</strong> Your churn (${churnPct}%) is well above the ${state.animal} benchmark (${animalBenchChurn}%). 
-          Recommended payback has been capped at ${benchPayback} months (vs ideal ${benchPaybackIdeal} months) to keep Rec CAC within Max CAC. 
-          Reducing churn from ${churnPct}% to ${animalBenchChurn}% would increase your Rec CAC by ~${fmt(Math.round((state.acv/12 * state.grossMargin * benchPaybackIdeal) - currentRecCAC))}.`);
+        msgs.push(`<strong>${state.animal} payback guideline limits Recommended CAC.</strong> The profile's ${benchPaybackIdeal}-month guideline is lower than the LTV-only allowance. Your entered churn is retained.`);
       }
 
       if (state.churn > 0.30 && state.animal !== 'Mice') {
@@ -648,6 +636,31 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
   let customCAC = null;
   let planEconomics = [];
 
+  function acquisitionEconomicsForPeriod(model,period) {
+    const months=model.months.slice(period.startMonth-1,period.endMonth);
+    const count=months.reduce((sum,m)=>sum+m.newCustomers,0);
+    const total=count>0?count:months.length;
+    let acv=0,ltv=0;
+    for(const month of months){
+      const weight=(count>0?month.newCustomers:1)/total;
+      if(weight===0) continue;
+      acv+=month.newACV*weight;
+      const lifetime=cohortLifetimeGrossProfit(month.newACV,state.grossMargin,{
+        churnRate:plChurn??state.churn,churnPeriod:plChurnPeriod,
+        acquisitionMonth:month.index%12,monthlyWeights:planDistributionWeights('retention'),
+        retentionPhasePercent:plExistingPhase,firstMonthPhasePercent:plNewCustomerPhase,
+        newCustomerRetentionEnabled:plNewCustomerRetention,
+      });
+      if(lifetime===null) ltv=null;
+      else if(ltv!==null) ltv+=lifetime*weight;
+    }
+    const profile=animalForACV(acv,state.currency);
+    const profilePaybackMonths=paybackBenchmarks[profile];
+    const monthlyGrossProfit=acv*state.grossMargin/12;
+    return {acv,ltv,profile,profilePaybackMonths,monthlyGrossProfit,
+      ...cacLimits(ltv,monthlyGrossProfit,profilePaybackMonths)};
+  }
+
 
 
   // Conversion funnel benchmarks per animal
@@ -721,10 +734,13 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('stratEffCAC').textContent=recCAC===null?'—':fmt(recCAC);
     document.getElementById('stratEffPayback').textContent=recCAC===null
       ? 'Enter a custom CAC to plan spend'
-      : 'Year 1 · '+(recCAC/monthlyGP).toFixed(1)+'-month payback at closing ACV';
+      : 'Year 1 · '+(recCAC/monthlyGP).toFixed(1)+'-month payback at entry ACV';
     document.getElementById('stratGrowCAC').textContent=growthCAC===null?'—':fmt(growthCAC);
     document.getElementById('stratGrowNote').textContent='Year 1 · capped at Max CAC; premium tapers to recommended';
     document.getElementById('customCACInput').placeholder=recCAC===null?'Enter CAC':fmt(recCAC);
+    document.getElementById('stratProfileNote').textContent=first
+      ? animals[first.profile].emoji+' '+first.profile+' acquisition profile · Year 1 entry ACV '+fmt(first.acv)+
+        ' · payback guideline '+first.profilePaybackMonths+' months. Recommended CAC is capped by both LTV / 5 and this profile guideline.' : '';
     const automaticAvailable=planEconomics.every(e=>e.recommendedCAC!==null);
     ['efficient','growth','custom'].forEach(s => {
       const el = document.getElementById('strat-' + s);
@@ -740,7 +756,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
 
   function renderStrategyWarning() {
     const fmt=currencyFormats[state.currency];
-    const minMonths = growthMaxMonths[state.animal] || 18;
+    const minMonths = growthMaxMonths[planEconomics[0]?.profile] || 18;
     const warningEl = document.getElementById('strategyWarning');
     const unavailable=planEconomics.some(e=>e.recommendedCAC===null);
     if(unavailable){
@@ -804,7 +820,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     const recCAC=economics?.recommendedCAC??null;
     if(strategy==='custom') return customCAC??recCAC;
     if(strategy!=='growth'||recCAC===null) return recCAC;
-    const growthCAC=Math.min(recCAC*(growthMultipliers[state.animal]||2),economics.maxCAC);
+    const growthCAC=Math.min(recCAC*(growthMultipliers[economics.profile]||2),economics.maxCAC);
     const t=years>1?y/(years-1):0;
     return growthCAC+(recCAC-growthCAC)*t;
   }
@@ -869,7 +885,7 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     document.getElementById('s3TotalBudget').textContent = fmt(state.totalBudget);
     document.getElementById('s3TimeframeLabel').textContent = state.timeframe + ' months';
     document.getElementById('s3Payback').textContent =
-      'CAC target payback at Year 1 closing ACV · '+paybackMonths+' (profile benchmark '+paybackBenchmarks[state.animal]+' months)';
+      'CAC target payback at Year 1 entry ACV · '+paybackMonths+' ('+planEconomics[0].profile+' guideline '+planEconomics[0].profilePaybackMonths+' months)';
 
     buildAnnualTable(model, fmt);
     buildWaterfall(model.annualCustomers);
@@ -1586,11 +1602,11 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     // CARR and customer cohorts do not depend on acquisition cost. Derive CAC
     // limits from that forecast, then price the same plan before rendering cash.
     let model=forecastSaaS(inputs);
-    const annualChurn=1-churnPeriodRates(churnRate,plChurnPeriod,expRate).annualGrossRetention;
-    planEconomics=model.years.map(period=>contractedUnitEconomics(period,grossMargin,annualChurn));
+    planEconomics=model.years.map(period=>acquisitionEconomicsForPeriod(model,period));
     if(selectedStrategy&&model.years.some((_,y)=>getCACForYear(y,years)===null)) selectedStrategy=null;
     if(selectedStrategy) model=forecastSaaS({...inputs,
       cacByYear:model.years.map((_,y)=>getCACForYear(y,years))});
+    model.acquisitionEconomicsByYear=planEconomics;
     window._latestMonthlyPlan = model;
     state.newCustomersNeeded = model.summary.newCustomersNeeded;
     renderPL(model, fmt);
@@ -1603,7 +1619,6 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
     if (!el || !model) return;
     const years = model.years.length;
     const grossMargin = state.grossMargin ?? 0.80;
-    const churnRate = 1-churnPeriodRates(plChurn??state.churn,plChurnPeriod,plExpansion??0).annualGrossRetention;
     let cumulativeResult = 0, breakEvenYear = null;
     const rows = model.years.map((r, y) => {
       const opResult = r.operatingContribution;
@@ -1894,16 +1909,24 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
         return periodCell(value===null?'—':format(value),kind,value===null?{}:style(value));
       });
     };
-    const economicsForPeriod=period=>contractedUnitEconomics(period,grossMargin,churnRate);
+    const economicsForPeriod=period=>acquisitionEconomicsForPeriod(model,period);
     const ltvForPeriod=period=>economicsForPeriod(period).ltv;
     const cacForPeriod=period=>selectedStrategy&&period.newCustomers>0
       ? period.smPaid/period.newCustomers : null;
 
     if(metricsHeading('unit','Unit Economics')){
       html+='<div class="pl-matrix-note" style="grid-column:1/-1;font-size:10px;color:#999;">'+
-        'ACV and LTV use closing CARR. CAC limits use LTV ÷ 3 and LTV ÷ 5. '+
-        'Planned CAC uses S&M spend divided by new customers in each column.</div>';
-      metricRow('Closing ACV',period=>economicsForPeriod(period).acv);
+        'LTV uses entry ACV and cohort churn, without future expansion. Recommended CAC also follows the profile payback guideline.'+
+        '<details><summary>Calculation assumptions</summary>'+
+        'LTV includes acquisition timing and first-month phasing. Recommended CAC is the lower of LTV / 5 and entry monthly gross profit × profile payback; Max CAC is LTV / 3. '+
+        'With no acquisitions, metrics describe a hypothetical acquisition distributed across the column. '+
+        'Planned CAC is S&M paid / new customers in the column; annual cost targets can differ from monthly ratios. '+
+        'CAC payback is CAC / entry monthly gross profit, a run-rate ratio rather than cash break-even.</details></div>';
+      metricRow('Closing ACV',period=>period.endCustomers>0?period.endACV:null);
+      metricRow('Entry ACV',period=>economicsForPeriod(period).acv);
+      metricRow('Acquisition profile',period=>economicsForPeriod(period).profile,
+        value=>animals[value].emoji+' '+value);
+      metricRow('Profile payback',period=>economicsForPeriod(period).profilePaybackMonths,value=>value+' mo');
       metricRow('LTV',ltvForPeriod);
       metricRow('Max CAC',period=>economicsForPeriod(period).maxCAC);
       metricRow('Recommended CAC',period=>economicsForPeriod(period).recommendedCAC);
@@ -1917,7 +1940,8 @@ import { renderCashPanel } from "./features/plan/cash-panel.js";
       }));
       metricRow('CAC Payback',period=>{
         const cac=cacForPeriod(period);
-        return cac!==null&&period.endACV*grossMargin>0?cac/(period.endACV*grossMargin/12):null;
+        const monthlyGP=economicsForPeriod(period).monthlyGrossProfit;
+        return cac!==null&&monthlyGP>0?cac/monthlyGP:null;
       },value=>value.toFixed(1)+' mo',value=>({
         color:value<=12?'#3B6D11':value<=24?'#BA7517':'#E24B4A'
       }));

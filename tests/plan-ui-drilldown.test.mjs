@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  animals,targetDefaults,toEUR,currencyFormats,paybackBenchmarks,cacRatios,
+  animals,animalForACV,targetDefaults,toEUR,currencyFormats,paybackBenchmarks,cacRatios,
   growthMultipliers,growthMaxMonths,budgetDefaults,funnels
 } from '../src/domain/saas-profiles.js';
-import { annualGrossProfitLtv, contractedUnitEconomics } from '../src/engine/unit-economics.js';
+import { annualGrossProfitLtv, cohortLifetimeGrossProfit, cacLimits } from '../src/engine/unit-economics.js';
 import { forecastSaaS,buildRevenueBridge,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS } from '../src/engine/cohort-budget.js';
 import { renderCashPanel } from '../src/features/plan/cash-panel.js';
 
@@ -43,13 +43,13 @@ function createApp(timeframe=36){
     querySelectorAll:()=>[],
   };
   const win={_qtr:{},scrollTo(){},confirm(){return true;}};
-  const factory=new Function('document','window','animals','targetDefaults','toEUR',
+  const factory=new Function('document','window','animals','animalForACV','targetDefaults','toEUR',
     'currencyFormats','paybackBenchmarks','cacRatios','growthMultipliers',
-    'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv','contractedUnitEconomics',
+    'growthMaxMonths','budgetDefaults','funnels','annualGrossProfitLtv','cohortLifetimeGrossProfit','cacLimits',
     'forecastSaaS','churnPeriodRates','PLAN_GRANULARITIES','SIGNING_PATTERNS','renderCashPanel',appBody);
-  const app=factory(doc,win,animals,targetDefaults,toEUR,currencyFormats,
+  const app=factory(doc,win,animals,animalForACV,targetDefaults,toEUR,currencyFormats,
     paybackBenchmarks,cacRatios,growthMultipliers,growthMaxMonths,budgetDefaults,
-    funnels,annualGrossProfitLtv,contractedUnitEconomics,forecastSaaS,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS,renderCashPanel);
+    funnels,annualGrossProfitLtv,cohortLifetimeGrossProfit,cacLimits,forecastSaaS,churnPeriodRates,PLAN_GRANULARITIES,SIGNING_PATTERNS,renderCashPanel);
   app.goToStep2();
   app.goToStep3();
   return {app,node,win};
@@ -154,17 +154,17 @@ test('efficient CAC follows forecast unit economics and reprices spend when chur
   app.togglePlMetrics('unit');
   app.selectStrategy('efficient');
   const year=win._latestMonthlyPlan;
-  assert.equal(node('stratEffCAC').textContent,'6,400 kr');
+  assert.equal(node('stratEffCAC').textContent,currencyFormats.SEK(year.acquisitionEconomicsByYear[0].recommendedCAC));
   assert.notEqual(node('stratEffCAC').textContent,illustrative);
-  close(year.annualCAC[0],6400);
-  close(year.summary.totalSM,year.summary.newCustomersNeeded*6400);
+  assert.ok(year.annualCAC[0]>5500&&year.annualCAC[0]<5700);
+  close(year.summary.totalSM,year.summary.newCustomersNeeded*year.annualCAC[0]);
   assert.match(node('annualPlanTable').innerHTML,/>CAC target<\/div>/);
-  assert.match(node('plTable').innerHTML.split('>Recommended CAC</div>')[1],/>6,400 kr<\/div>/);
+  assert.ok(node('plTable').innerHTML.split('>Recommended CAC</div>')[1].includes('>'+node('stratEffCAC').textContent+'</div>'));
   app.onChurnPeriodChange('month');
   const month=win._latestMonthlyPlan;
-  const expected=10000*0.8/(1-0.75**12)/5;
+  const expected=(10000*0.8/12)/0.25/5;
   close(month.annualCAC[0],expected);
-  assert.equal(node('stratEffCAC').textContent,'1,652 kr');
+  assert.equal(node('stratEffCAC').textContent,'533 kr');
   assert.equal(node('s3MaxCAC').textContent,node('stratEffCAC').textContent);
   close(month.summary.totalSM,month.summary.newCustomersNeeded*expected);
   assert.equal(node('metricsNewRecCAC').textContent,illustrative,'PLAN must not rewrite the Step 2 illustration');
@@ -174,7 +174,7 @@ test('efficient CAC follows forecast unit economics and reprices spend when chur
   assert.equal(node('s3MaxCAC').textContent,node('stratEffCAC').textContent);
 });
 
-test('automatic annual CAC targets share closing economics across horizons, churn periods and strategies',()=>{
+test('automatic annual CAC targets share acquisition economics across horizons, churn periods and strategies',()=>{
   for(const horizon of [6,12,24,36,60]) for(const period of ['year','quarter','month']) {
     const scenario=createApp(horizon);
     const {app,node,win}=scenario;
@@ -187,10 +187,10 @@ test('automatic annual CAC targets share closing economics across horizons, chur
       app.selectStrategy(strategy);
       const model=win._latestMonthlyPlan;
       const annualChurn=1-0.9**({year:1,quarter:4,month:12}[period]);
-      const expected=model.years.map(p=>p.endACV*0.8/annualChurn/5);
+      const expected=model.acquisitionEconomicsByYear.map(e=>e.recommendedCAC);
       model.years.forEach((p,y)=>{
         const cac=model.annualCAC[y];
-        const maxCAC=p.endACV*0.8/annualChurn/3;
+        const maxCAC=model.acquisitionEconomicsByYear[y].maxCAC;
         if(strategy==='efficient') close(cac,expected[y]);
         else {
           assert.ok(cac>=expected[y]-1e-8&&cac<=maxCAC+1e-8);
@@ -206,7 +206,7 @@ test('automatic annual CAC targets share closing economics across horizons, chur
       const annualTable=node('annualPlanTable').innerHTML;
       const maxBudget=annualTable.split('(max CAC)</span></div>')[1];
       assert.ok(maxBudget);
-      assert.match(maxBudget,new RegExp('>'+currencyFormats.SEK(model.years[0].newCustomers*model.years[0].endACV*0.8/annualChurn/3)+'</div>'));
+      assert.match(maxBudget,new RegExp('>'+currencyFormats.SEK(model.years[0].newCustomers*model.acquisitionEconomicsByYear[0].maxCAC)+'</div>'));
     }
   }
 });
@@ -225,25 +225,75 @@ test('zero churn requests explicit custom CAC and custom warnings update from fo
   assert.match(node('plTable').innerHTML,/select strategy/);
   app.selectStrategy('growth');
   assert.equal(node('budgetSummarySection').style.display,'none');
-  app.onCustomCACChange('10000');
+  app.onCustomCACChange('5000');
   assert.equal(node('budgetSummarySection').style.display,'block');
-  close(win._latestMonthlyPlan.annualCAC[0],10000);
+  close(win._latestMonthlyPlan.annualCAC[0],5000);
   app.onCustomCACChange('0');
   close(win._latestMonthlyPlan.summary.totalSM,0);
   app.onCustomCACChange('');
   assert.equal(node('budgetSummarySection').style.display,'none');
   assert.match(node('plTable').innerHTML,/select strategy/);
-  app.onCustomCACChange('10000');
+  app.onCustomCACChange('5000');
   node('plChurnSlider').value='25';
   app.onPLSlider();
   assert.equal(node('strategyWarning').style.display,'none');
   app.onChurnPeriodChange('month');
   assert.equal(node('strategyWarning').style.display,'block');
   assert.match(node('strategyWarning').innerHTML,/exceeds Year 1's Max CAC/);
-  close(win._latestMonthlyPlan.annualCAC[0],10000,'Explicit custom CAC stays fixed');
+  close(win._latestMonthlyPlan.annualCAC[0],5000,'Explicit custom CAC stays fixed');
   app.onChurnPeriodChange('year');
   assert.equal(node('strategyWarning').style.display,'none');
   assert.doesNotMatch(node('plTable').innerHTML,/NaN|Infinity/);
+});
+
+test('historical versus expansion ACV drives customer needs and acquisition profiles across all years',()=>{
+  const scenario=createApp(60);
+  const {app,node,win}=scenario;
+  setTarget(scenario,3000000);
+  node('plChurnSlider').value='40';
+  node('plExpansionSlider').value='40';
+  app.onPLSlider();
+  const fixed=win._latestMonthlyPlan;
+  assert.ok(fixed.months.every(m=>m.newACV===10000));
+  assert.equal(fixed.summary.newCustomersNeeded,250);
+  app.selectStrategy('efficient');
+  const rec=win._latestMonthlyPlan.annualCAC[0];
+  node('plExpansionSlider').value='80';
+  app.onPLSlider();
+  close(win._latestMonthlyPlan.annualCAC[0],rec,'Future expansion must not inflate entry LTV in historical mode');
+  node('plUseExpACVCheck').checked=true;
+  app.onPLCheckbox();
+  const expanded=win._latestMonthlyPlan;
+  assert.ok(expanded.months[0].newACV>10000);
+  assert.ok(expanded.months[48].newACV>expanded.months[0].newACV);
+  assert.ok(expanded.acquisitionEconomicsByYear.some(e=>e.profile!=='Rabbits'));
+  expanded.acquisitionEconomicsByYear.forEach((e,y)=>{
+    assert.equal(e.profile,animalForACV(expanded.months[y*12].newACV,'SEK'));
+    assert.equal(e.profilePaybackMonths,paybackBenchmarks[e.profile]);
+    close(expanded.annualCAC[y],Math.min(e.ltv/5,e.monthlyGrossProfit*e.profilePaybackMonths));
+  });
+  node('plUseExpACVCheck').checked=false;
+  app.onPLCheckbox();
+  assert.ok(win._latestMonthlyPlan.months.every(m=>m.newACV===10000));
+});
+
+test('animal payback caps follow edited entry ACV without resetting manual churn',()=>{
+  const {app,node,win}=createApp(12);
+  node('plChurnSlider').value='1';
+  node('plExpansionSlider').value='0';
+  app.onPLSlider();
+  app.selectStrategy('efficient');
+  let e=win._latestMonthlyPlan.acquisitionEconomicsByYear[0];
+  assert.equal(e.profile,'Rabbits');
+  close(e.recommendedCAC/e.monthlyGrossProfit,12);
+  node('planOpeningCustomers').value='500';
+  app.onPlanInputsChange();
+  e=win._latestMonthlyPlan.acquisitionEconomicsByYear[0];
+  assert.equal(e.profile,'Mice');
+  close(e.recommendedCAC/e.monthlyGrossProfit,7);
+  assert.equal(node('plChurnSlider').value,'1');
+  assert.match(node('stratProfileNote').textContent,/Mice acquisition profile/);
+  assert.equal(node('stratEffCAC').textContent,currencyFormats.SEK(e.recommendedCAC));
 });
 
 test('annual S&M, cash and the funnel use the same customer plan',()=>{
@@ -262,7 +312,7 @@ test('annual S&M, cash and the funnel use the same customer plan',()=>{
   assert.match(spending,/3 kr<\/div>/);
   assert.match(node('cashFlowPanel').innerHTML,/Forecast closing ARR <strong>510,000 kr<\/strong> ·\s*Target <strong>505,000 kr/);
   assert.match(node('waterfallContent').innerHTML,/>1 new<\/div>/);
-  assert.equal(node('benchLTV').textContent,'43,636 kr');
+  assert.equal(node('benchLTV').textContent,currencyFormats.SEK(annualGrossProfitLtv(1200/0.088,0.8,0.25)));
   app.onCustomCACChange('10000');
   assert.match(node('s3Payback').textContent,/15\.0 months/);
   assert.doesNotMatch(node('plTable').innerHTML,/NaN/);
@@ -391,7 +441,7 @@ test('metric sections open independently in totals view and persist through peri
   assert.match(html(),/>Magic Number<\/div>/);
   app.togglePlMonthsAndYears();
   assert.equal(width(node),27);
-  assert.equal((html().match(/class="pl-matrix-value"/g)??[]).length,14*26);
+  assert.equal((html().match(/class="pl-matrix-value"/g)??[]).length,17*26);
   assert.equal(win._latestMonthlyPlan,plan);
   setTarget({app,node},3000000);
   assert.match(html(),/id="plMetricsToggleunit" aria-expanded="true"/);
@@ -422,17 +472,19 @@ test('matrix unit and efficiency metrics use each visible period ledger and annu
   };
   const model=win._latestMonthlyPlan;
   const periods=[...model.monthlyBridge.slice(0,3),...model.quarters.slice(0,4),...model.years];
-  const ltv=period=>period.endACV*0.8/(1-0.75**4);
+  const entry=period=>period.newARR/period.newCustomers;
+  const ltv=period=>model.months.slice(period.startMonth-1,period.endMonth).reduce((sum,m)=>
+    sum+cohortLifetimeGrossProfit(m.newACV,0.8,{churnRate:0.25,churnPeriod:'quarter',acquisitionMonth:m.index%12})*m.newCustomers,0)/period.newCustomers;
   const cac=period=>period.smPaid/period.newCustomers;
   const money=value=>currencyFormats.SEK(Math.round(value));
   const percent=new Intl.NumberFormat(undefined,{style:'percent',maximumFractionDigits:2});
   assert.deepEqual(cells('Closing ACV'),periods.map(p=>money(p.endACV)));
   assert.deepEqual(cells('LTV'),periods.map(p=>money(ltv(p))));
   assert.deepEqual(cells('Max CAC'),periods.map(p=>money(ltv(p)/3)));
-  assert.deepEqual(cells('Recommended CAC'),periods.map(p=>money(ltv(p)/5)));
+  assert.deepEqual(cells('Recommended CAC'),periods.map(p=>money(Math.min(ltv(p)/5,entry(p)*0.8/12*12))));
   assert.deepEqual(cells('Planned CAC'),periods.map(p=>money(cac(p))));
   assert.deepEqual(cells('LTV:CAC'),periods.map(p=>(ltv(p)/cac(p)).toFixed(1)+'×'));
-  assert.deepEqual(cells('CAC Payback'),periods.map(p=>(cac(p)/(p.endACV*0.8/12)).toFixed(1)+' mo'));
+  assert.deepEqual(cells('CAC Payback'),periods.map(p=>(cac(p)/(entry(p)*0.8/12)).toFixed(1)+' mo'));
   assert.deepEqual(cells('Magic Number'),periods.map(p=>((p.endARR-p.startARR)*0.8/p.smPaid).toFixed(2)));
   assert.deepEqual(cells('S&M / GP'),periods.map(p=>percent.format(p.smPaid/p.grossProfit)));
   const before=cells('LTV');

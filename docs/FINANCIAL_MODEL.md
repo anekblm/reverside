@@ -62,6 +62,10 @@ Step 3 allows editing Start ARR, Target ARR, Opening Customers, Time Period
 and Gross Margin. The fields update the same assumptions as Steps 1 and 2.
 Entry ACV is Start ARR divided by Opening Customers, or an explicit Expected
 ACV in the pre-revenue scenario. The animal profile uses that entry ACV.
+Historical pricing keeps new customers at that ACV in every forecast year. The
+existing Expansion ACV checkbox instead uses entry ACV × (annual NRR / annual
+GRR) to the power of the forecast year, starting at one in Year 1. This option
+controls all years, while retained-customer expansion continues in either mode.
 
 New CARR is calculated from the target gap and the modeled ending
 contribution of new cohorts at the assumed ACV. Its independent monthly
@@ -220,13 +224,40 @@ selected CAC × allocated spending share. Category amounts use unrounded
 values until display. Blended planned CAC is total S&M divided by total
 new customers. The funnel rounds required volumes up to whole units.
 
-Unit Economics is independently expandable after recognized revenue and
-before Gross Profit. It uses the same visible month, quarter and year columns:
-closing ACV is annualized closing CARR divided by active customers; estimated
-gross-profit LTV is closing ACV × gross margin divided by equivalent annual
-churn. Max CAC and Recommended CAC are LTV / 3 and LTV / 5. Planned CAC
-is S&M paid divided by acquisitions in that column, and payback divides it
-by closing ACV × gross margin / 12. Zero churn has no finite LTV estimate.
+Unit Economics expands after recognized revenue and before Gross Profit, in the
+same visible columns. Closing ACV remains CARR / current customers. Entry ACV
+is the acquisition-customer-weighted contract price in the column. It drives
+acquisition LTV, CAC and payback; existing-customer expansion cannot inflate
+new-customer economics when historical pricing is selected.
+
+LTV is expected lifetime gross profit at entry ACV, without future expansion
+or discounting. `cohortLifetimeGrossProfit` follows B through the remainder of
+the acquisition year, then repeats A's complete annual retention schedule with
+an analytic geometric tail. It uses the actual churn period and rate, retention
+weights, new-customer retention On/Off, first-month acquisition phasing and
+retention revenue effect. It continues beyond PLAN's horizon. In Month mode,
+with full first-month revenue/effect and retention On, this is exactly entry
+monthly gross profit / monthly churn. Year and Quarter modes preserve the
+calendar timing of A instead of substituting equivalent annual attrition.
+
+Column LTV weights acquisition-month lifetimes by the modeled new customers.
+With no acquisitions in a column, it shows a hypothetical acquisition with
+equal weights across that column's months. Zero churn has no finite LTV
+estimate and requires explicit Custom CAC.
+
+The acquisition animal uses the same existing log-distance classifier and FX
+assumptions as Step 1, applied to the chosen entry ACV. It may therefore differ
+from the opening company's animal when Expansion ACV pricing is selected.
+Profiles never overwrite user-entered churn, expansion or allocation choices.
+Existing profile payback guidelines remain Mice 7, Rabbits 12, Deer 21,
+Elephants 27 and Whales 36 months; these are model assumptions, not newly
+validated market data.
+
+Max CAC = LTV / 3. Recommended CAC is the lower of LTV / 5 and entry monthly
+gross profit multiplied by that animal's payback guideline. Planned CAC is
+S&M paid / new customers in the column. Payback divides Planned CAC by entry
+monthly gross profit: a run-rate ratio, not a forecast of cash break-even.
+Profile, entry ACV, closing ACV and profile payback appear as separate rows.
 
 S&M Efficiency expands separately after Contribution. Magic Number is the
 change in annualized CARR × gross margin divided by the column's S&M paid;
@@ -235,9 +266,9 @@ recomputed from each column's underlying amounts rather than summed.
 Both sections remain accessible in the totals-only matrix. Their open
 states persist across period, CARR-display and scenario changes.
 
-PLAN's CAC strategies use those same annual closing economics, independently
+PLAN's CAC strategies use those same annual acquisition economics, independently
 of the illustrative target-state calculations in Step 2. Efficient growth
-uses each year's LTV / 5. Aggressive growth starts with the profile multiplier
+uses each year's Recommended CAC, including its profile payback cap. Aggressive growth starts with the acquisition profile multiplier
 on that recommendation, capped at that year's LTV / 3; its premium over
 Recommended CAC tapers linearly to zero in the last year of a multi-year plan.
 Custom CAC remains a fixed explicit input (an empty value follows Recommended
